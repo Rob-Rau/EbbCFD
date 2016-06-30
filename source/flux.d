@@ -1,3 +1,4 @@
+/+ Copyright (c) 2016 Robert F. Rau II +/
 import std.math : abs, fmax, sqrt;
 import std.meta : aliasSeqOf;
 

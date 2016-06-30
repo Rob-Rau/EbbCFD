@@ -1,3 +1,4 @@
+/+ Copyright (c) 2016 Robert F. Rau II +/
 import std.file;
 import std.stdio;
 
@@ -629,6 +630,78 @@ void printMesh(ref Mesh mesh)
 		write(cellType~"|");
 	}
 	writeln;
+}
+
+void printMesh(ref Mesh mesh, string file)
+{
+	import std.conv : to;
+	string output;
+	for(int j = cast(int)mesh.M-1; j >= 0; j--)
+	{
+		//write(j.to!string~"\t|");
+		output ~= j.to!string~"\t|";
+		for(int i = 0; i < mesh.N; i++)
+		{
+			string cellType = "";
+			switch(mesh[i,j].cellType)
+				with(CellType)
+			{
+				case Solid:
+					cellType = " S ";
+					break;
+				case Normal:
+					cellType = " N ";
+					break;
+				case GhostConst:
+					cellType = " GC";
+					break;
+				case GhostMirrorXL:
+					cellType = "GML";
+					break;
+				case GhostMirrorXR:
+					cellType = "GMR";
+					break;
+				case GhostMirrorYB:
+					cellType = "GMB";
+					break;
+				case GhostMirrorYT:
+					cellType = "GMT";
+					break;
+				case GhostNoGradXL:
+					cellType = "GNL";
+					break;
+				case GhostNoGradXR:
+					cellType = "GNR";
+					break;
+				case GhostNoGradYB:
+					cellType = "GNB";
+					break;
+				case GhostNoGradYT:
+					cellType = "GNT";
+					break;
+				default:
+					cellType = "   ";
+					break;
+			}
+			//write(cellType~"|");
+			output ~= cellType~"|";
+		}
+		//writeln;
+		output ~= '\n';
+	}
+
+	//write(" \t|");
+	output ~= " \t|";
+	for(int i = 0; i < mesh.N; i++)
+	{
+		import std.format : format;
+		string cellType = format("%3d", i);
+		//write(cellType~"|");
+		output ~= cellType~"|";
+	}
+	//writeln;
+	output ~= '\n';
+	std.file.write(file, output);
 }
 
 Vec buildQ(double rho, double u, double v, double p)

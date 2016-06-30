@@ -1,3 +1,4 @@
+/+ Copyright (c) 2016 Robert F. Rau II +/
 import std.math;
 
 import numd.linearalgebra.matrix;

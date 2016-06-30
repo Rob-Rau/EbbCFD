@@ -1,3 +1,4 @@
+/+ Copyright (c) 2016 Robert F. Rau II +/
 import std.json;
 import std.file;
 import std.math : fmax, fmin, sgn, sqrt, exp, log;

@@ -1,6 +1,6 @@
 {
 	"name": "ebbcfd",
-	"description": "A finite volume cfd solver",
+	"description": "A finite volume euler equation cfd solver",
 	"copyright": "Copyright © 2016, Robert F. Rau II",
 	"authors": ["Robert F. Rau II"],
 	"dependencies": {
@@ -10,7 +10,7 @@
 	"configurations": [
 		{
 			"excludedSourceFiles": [
-				"source/app.d",
+				"source/solver.d",
 				"source/plotter.d"
 			],
 			"name": "mesher",
@@ -29,7 +29,7 @@
 		{
 			"excludedSourceFiles": [
 				"source/mesher.d",
-				"source/app.d"
+				"source/solver.d"
 			],
 			"name": "plotter",
 			"targetName": "ebb-plot",
