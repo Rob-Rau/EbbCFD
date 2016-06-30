@@ -1,6 +1,7 @@
 module mesher;
 
 import std.array;
+import std.conv;
 import std.getopt;
 import std.math : abs;
 import std.stdio;
@@ -110,7 +111,7 @@ void addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, Ce
 		{
 			mesh[i, ybIdx-1].corner = true;
 			mesh[i, ybIdx-1].cornerType = mesh[i,ybIdx-1].cellType;
-			mesh[i,ybIdx-1].cellType = bottom; 
+			mesh[i, ybIdx-1].cellType = bottom; 
 		}
 	}
 
@@ -148,12 +149,40 @@ void addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, Ce
 	}
 }
 
+struct SU2Cell
+{
+	
+}
+
 void parseSu2Mesh(string meshFile)
 {
 	auto file = File(meshFile);
+	bool readingCells = false;
+	bool readingNodes = false;
+	uint numCells = 0;
+	uint cellIdx = 0;
+	uint numNodes = 0;
+	uint nodeIdx = 0;
+	uint numDims = 0;
+
 	foreach(line; file.byLine)
 	{
-		writeln(line.strip.chomp);
+		auto cleanLine = line.strip.chomp;
+		if(cleanLine.indexOf("NDIME") > -1)
+		{
+			numDims = cleanLine.split("=")[$-1].strip.to!uint;
+			writeln("Number of dimensions = "~numDims.to!string);
+		}
+		else if(cleanLine.indexOf("NELEM") > -1)
+		{
+			numCells = cleanLine.split("=")[$-1].strip.to!uint;
+			readingCells = true;
+			writeln("Number of cells = "~numCells.to!string);
+		}
+		else if(readingCells)
+		{
+
+		}
 	}
 }
 
@@ -276,6 +305,7 @@ void main(string[] args)
 		printMesh(mesh);
 		saveMesh(mesh, "box.mesh", 0.01, 0);
 		+/
+		/+
 		initMesh(mesh, 100, 100, 0.5, 0.5);
 		import std.math : sqrt;
 		
@@ -295,6 +325,28 @@ void main(string[] args)
 		mesh.updateGhosts();
 		printMesh(mesh);
 		saveMesh(mesh, "box2.mesh", 0.01, 0);
+		+/
+
+
+		initMesh(mesh, 635, 24, 0.5, 0.5);
+		import std.math : sqrt;
+		
+		// void addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, CellType bottom, CellType top, CellType right, CellType left)
+		// Vec buildQ(double rho, double u, double v, double p)
+		addBox(mesh, 0.0, 16.0, 500.0, 8.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+		addBox(mesh, 500.0, 24.0, 508.0, 0.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+
+		addBox(mesh, 508.0, 24.0, 565.0, 8.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+		addBox(mesh, 508.0, 8.0, 565.0, 0.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+
+		addBox(mesh, 2.0, 98.0, 45.0, 0.5, buildQ(1.2, 0, 0, 101325), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostMirrorXL, CellType.GhostNoGradXR);
+		addBox(mesh, 0.5, 99.0, 4.0, 0.5, buildQ(1.2, 0, 0, 101325), CellType.GhostNoGradYT, CellType.GhostConst, CellType.GhostConst, CellType.GhostConst);
+		addBox(mesh, 55.0, 98.0, 99.0, 0.5, buildQ(1.2, 0, 0, 101325), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostNoGradXL, CellType.GhostMirrorXR);
+		
+		mesh.updateGhosts();
+		printMesh(mesh);
+		saveMesh(mesh, "pressureSensorSytem.mesh", 0.01, 0);
+
 		/+
 		initMesh(mesh, 20, 20, 0.5, 0.5);
 		//addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, CellType bottom, CellType top, CellType right, CellType left)

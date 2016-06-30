@@ -41,7 +41,11 @@
 			"buildOptions": ["debugMode", "debugInfo"]
 		},
 		"ldc-release": {
-			"buildOptions": ["releaseMode", "inline", "debugInfo"],
+			"buildOptions": ["releaseMode", "inline"],
+			"dflags": ["-O5"]
+		},
+		"ldc-release-prof": {
+			"buildOptions": ["releaseMode", "inline", "debugInfoC", "profile"],
 			"dflags": ["-O5"]
 		}
 	}
