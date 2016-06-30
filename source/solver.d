@@ -207,7 +207,7 @@ void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config con
 			colorbar;
 			axis("equal");
 			hold!"on";
-			title(format("t = %4.4f", t));
+			title(format("t = %4.8f", t));
 		}
 		
 		if((iterations % config.saveIter) == 0)
