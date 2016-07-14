@@ -336,7 +336,7 @@ void main(string[] args)
 		saveMesh(mesh, "box2.mesh", 0.01, 0);
 		+/
 
-		initMesh(mesh, 1.0 + 0.640, 0.026, 0.00005, 0.00005);
+		initMesh(mesh, 1.0 + 0.640, 0.026, 0.0001, 0.0001);
 		import std.math : sqrt;
 		
 		// void addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, CellType bottom, CellType top, CellType right, CellType left)

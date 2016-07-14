@@ -400,8 +400,10 @@ struct Mesh
 void saveMesh(ref Mesh mesh, string filename, double dt, double t)
 {
 	import std.bitmanip : write;
-	
+	import std.conv : to;
+
 	size_t bufferSize = mesh.N*mesh.M*Cell.sizeof + 2*double.sizeof + 2*ulong.sizeof;
+	writeln("Requesting buffer of "~bufferSize.to!string~" bytes");
 	ubyte[] buffer = new ubyte[bufferSize];
 	size_t offset = 0;
 	buffer.write!ulong(mesh.N, &offset);
@@ -483,7 +485,20 @@ void saveMesh(ref Mesh mesh, string filename, double dt, double t)
 		}
 	}
 	
-	std.file.write(filename, cast(void[])buffer);
+	auto file = File(filename, "wb");
+	ulong writeOffset = 0;
+	while(writeOffset < buffer.length)
+	{
+		ulong chunkSize = 1024*1024*1024;
+		if(buffer.length - writeOffset < chunkSize)
+		{
+			chunkSize = buffer.length - writeOffset;
+		}
+		file.rawWrite(buffer[writeOffset..writeOffset+chunkSize]);
+		writeOffset += chunkSize;
+	}
+	file.close;
+	//std.file.write(filename, cast(void[])buffer);
 }
 
 Mesh loadMesh(string file, ref double dt, ref double t)
