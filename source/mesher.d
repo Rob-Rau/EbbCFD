@@ -155,6 +155,12 @@ struct SU2Cell
 	
 }
 
+enum GeomType
+{
+	Triangle,
+	Quad
+}
+
 void parseSu2Mesh(string meshFile)
 {
 	auto file = File(meshFile);
@@ -165,6 +171,8 @@ void parseSu2Mesh(string meshFile)
 	uint numNodes = 0;
 	uint nodeIdx = 0;
 	uint numDims = 0;
+
+	uint[] elements;
 
 	foreach(line; file.byLine)
 	{
@@ -328,21 +336,21 @@ void main(string[] args)
 		saveMesh(mesh, "box2.mesh", 0.01, 0);
 		+/
 
-		initMesh(mesh, 640, 26, 0.1, 0.1);
+		initMesh(mesh, 1.0 + 0.640, 0.026, 0.00005, 0.00005);
 		import std.math : sqrt;
 		
 		// void addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, CellType bottom, CellType top, CellType right, CellType left)
 		// Vec buildQ(double rho, double u, double v, double p)
 
-		addBox(mesh, 566.0, 22.25, 636.0, 19.75, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
-		addBox(mesh, 566.0, 6.25, 616.0, 3.75, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		addBox(mesh, 1.0 + 0.566, 0.02225, 1.0 + 0.636, 0.01975, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		addBox(mesh, 1.0 + 0.566, 0.00625, 1.0 + 0.616, 0.00375, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
 
-		addBox(mesh, 509.0, 25.0, 566.0, 17.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
-		addBox(mesh, 509.0, 9.0, 566.0, 1.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		addBox(mesh, 1.0 + 0.509, 0.025, 1.0 + 0.566, 0.017, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		addBox(mesh, 1.0 + 0.509, 0.009, 1.0 + 0.566, 0.001, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
 
-		addBox(mesh, 1.0, 17.0, 1.1, 9.0, buildQ(8.195, 0, 0, 689476), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostConst);
-		addBox(mesh, 1.1, 17.0, 501.0, 9.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
-		addBox(mesh, 501.0, 25.0, 509.0, 1.0, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		addBox(mesh, 0.001, 0.017, 1.0 + 0.0011, 0.009, buildQ(8.195, 0, 0, 689476), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		addBox(mesh, 1.0 + 0.0011, 0.017, 1.0 + 0.501, 0.009, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+		addBox(mesh, 1.0 + 0.501, 0.025, 1.0 + 0.509, 0.001, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
 		
 /+
 		addBox(mesh, 2.0, 98.0, 45.0, 0.5, buildQ(1.2, 0, 0, 101325), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostMirrorXL, CellType.GhostNoGradXR);
