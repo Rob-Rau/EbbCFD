@@ -335,7 +335,31 @@ void main(string[] args)
 		printMesh(mesh);
 		saveMesh(mesh, "box2.mesh", 0.01, 0);
 		+/
+		initMesh(mesh, 100, 100, 0.5, 0.5);
+		import std.math : sqrt;
+		
+		addBox(mesh, 45.0, 98.0, 55.0, 55.0, buildQ(1.4, sqrt(0.35), -sqrt(0.35), 1), CellType.GhostMirrorYT, CellType.GhostNoGradYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+		addBox(mesh, 3.0, 99.0, 99.5, 98.0, buildQ(1.4, sqrt(0.35), -sqrt(0.35), 1), CellType.GhostNoGradYT, CellType.GhostConst, CellType.GhostNoGradXL, CellType.GhostConst);
 
+		addBox(mesh, 44.0, 45.0, 56.0, 0.5, buildQ(1.4, sqrt(0.35), -sqrt(0.35), 1), CellType.GhostNoGradYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+		addBox(mesh, 2.0, 98.0, 45.0, 0.5, buildQ(1.4, sqrt(0.35), -sqrt(0.35), 1), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostMirrorXL, CellType.GhostNoGradXR);
+		addBox(mesh, 0.5, 99.0, 4.0, 0.5, buildQ(1.4, sqrt(0.35), -sqrt(0.35), 1), CellType.GhostNoGradYT, CellType.GhostConst, CellType.GhostConst, CellType.GhostConst);
+		addBox(mesh, 55.0, 98.0, 99.0, 0.5, buildQ(1.4, sqrt(0.35), -sqrt(0.35), 1), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostNoGradXL, CellType.GhostMirrorXR);
+		
+		mesh[89, 195].corner = false;
+		mesh[89, 195].cornerType = CellType.Normal;
+		mesh[111, 195].corner = false;
+		mesh[111, 195].cornerType = CellType.Normal;
+
+		for(int i = 1; i < mesh.M-1; i++)
+		{
+			mesh[mesh.N-1, i].cellType = CellType.GhostNoGradXL;
+		}
+		mesh.updateGhosts();
+		printMesh(mesh);
+		saveMesh(mesh, "box3.mesh", 0.01, 0);
+
+		/+
 		initMesh(mesh, 1.0 + 0.640, 0.026, 0.0001, 0.0001);
 		import std.math : sqrt;
 		
@@ -351,6 +375,7 @@ void main(string[] args)
 		addBox(mesh, 0.001, 0.017, 1.0 + 0.0011, 0.009, buildQ(8.195, 0, 0, 689476), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
 		addBox(mesh, 1.0 + 0.0011, 0.017, 1.0 + 0.501, 0.009, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
 		addBox(mesh, 1.0 + 0.501, 0.025, 1.0 + 0.509, 0.001, buildQ(1.2, 0, 0, 101325), CellType.GhostMirrorYT, CellType.GhostMirrorYB, CellType.GhostMirrorXL, CellType.GhostMirrorXR);
+		
 		
 /+
 		addBox(mesh, 2.0, 98.0, 45.0, 0.5, buildQ(1.2, 0, 0, 101325), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostMirrorXL, CellType.GhostNoGradXR);
@@ -372,7 +397,7 @@ void main(string[] args)
 		printMesh(mesh, "pressureSensorSytem.txt");
 		writeln("saving mesh");
 		saveMesh(mesh, "pressureSensorSytem.mesh", 0.01, 0);
-
+		+/
 		/+
 		initMesh(mesh, 20, 20, 0.5, 0.5);
 		//addBox(ref Mesh mesh, double xt, double yt, double xb, double yb, Vec q, CellType bottom, CellType top, CellType right, CellType left)
