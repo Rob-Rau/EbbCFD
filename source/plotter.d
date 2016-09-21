@@ -102,7 +102,7 @@ void main(string[] args)
 		
 		contourf(meshgrid.X, meshgrid.Y, p, 350, `LineStyle`, `none`);
 		colorbar;
-		caxis([0.9, 1.15]);
+		//caxis([0.9, 1.15]);
 		title(format("Pressure, t = %4.4f", t));
 		xlabel("x");
 		ylabel("y");
@@ -212,6 +212,7 @@ void main(string[] args)
 			contourf(meshgrid.X, meshgrid.Y, p, 350, `LineStyle`, `none`);
 			colorbar;
 			//caxis([0.9, 1.2]);
+			/+
 			if(plotP)
 			{
 				caxis([0.5, 6]);
@@ -220,7 +221,7 @@ void main(string[] args)
 			{
 				caxis([0, 3]);
 			}
-			
+			+/
 			axis("equal");
 			title(format("Pressure, t = %4.4f", t));
 			xlabel("x");

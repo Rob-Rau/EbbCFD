@@ -154,7 +154,7 @@ struct Mesh
 								if(i == 1)
 								{
 									//cells[curCell].q[i] = (-cells[cornerCell1].q[i] + cells[cornerCell2].q[i])/2.0;
-									cells[curCell].q[i] = (-cells[cornerCell2].q[i]/cells[cornerCell2].q[0])*cells[curCell].q[0];
+									cells[curCell].q[i] = (-cells[cornerCell2].qR[i]/cells[cornerCell2].qR[0])*cells[curCell].q[0];
 									//cells[curCell].q[i] = -cells[cornerCell2].q[i];
 								}
 								else if(i == 2)
@@ -317,6 +317,7 @@ struct Mesh
 						//cells[index].qR = cells[cornerCell2].q;
 						//cells[index].qR[1] = -cells[cornerCell2].q[1];
 					}
+					//cells[index].q[2] = -cells[indexB].qT[2];
 					cells[index].qB = cells[index].q;
 					//cells[index].qR = cells[index].q;
 				}
@@ -403,7 +404,7 @@ void saveMesh(ref Mesh mesh, string filename, double dt, double t)
 	import std.conv : to;
 
 	size_t bufferSize = mesh.N*mesh.M*Cell.sizeof + 2*double.sizeof + 2*ulong.sizeof;
-	writeln("Requesting buffer of "~bufferSize.to!string~" bytes");
+	//writeln("Requesting buffer of "~bufferSize.to!string~" bytes");
 	ubyte[] buffer = new ubyte[bufferSize];
 	size_t offset = 0;
 	buffer.write!ulong(mesh.N, &offset);

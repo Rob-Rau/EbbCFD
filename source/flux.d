@@ -195,27 +195,7 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 	alias Mat = Matrix!(dims, dims);
 	
 	Vec flux;
-	/+
-	// Left state variables
-	double rhoL = uL[0];
-	double vL = uL[1]/rhoL;
-	double pL = (gamma - 1)*(uL[2] - 0.5*rhoL*vL^^2.0);
-	double aL = sqrt(gamma*(pL/rhoL));
-	double hL = (uL[2] + pL)/rhoL;
-	
-	// Right state variables
-	double rhoR = uR[0];
-	double vR = uR[1]/rhoR;
-	double pR = (gamma - 1)*(uR[2] - 0.5*rhoR*vR^^2.0);
-	double aR = sqrt(gamma*(pR/rhoR));
-	double hR = (uR[2] + pR)/rhoR;
-	
-	// average values
-	double rho = sqrt(rhoL*rhoR);
-	double v = (sqrt(rhoL)*vL + sqrt(rhoR)*vR)/(sqrt(rhoL) + sqrt(rhoR));
-	double h = (sqrt(rhoL)*hL + sqrt(rhoR)*hR)/(sqrt(rhoL) + sqrt(rhoR));
-	double a = sqrt( (gamma - 1.0)*(h - 0.5*v^^2.0));
-	+/
+
 	// Left state variables
 	double rhoL = (qL[0]);
 	double uL = qL[1]/rhoL;
@@ -250,11 +230,7 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 		Vec Fr = physicalFlux!(fluxDir.yDir, dims)(pR, uR, vR, rhoR, qR[3]);
 		flux = 0.5*((Fl + Fr) - (abs(v)+a)*(qR - qL));
 	}
-	/+
-	Vec Fl = physicalFlux!dims(pL, vL, rhoL, uL[2]);
-	Vec Fr = physicalFlux!dims(pR, vR, rhoR, uR[2]);
-	+/
-	//flux = 0.5*((Fl + Fr) - (abs(v)+a)*(qR - qL));
+	
 	return flux;
 }
 
@@ -267,7 +243,7 @@ Vector!dims roeFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR,
 	alias Mat = Matrix!(dims, dims);
 	
 	Vec flux;
-	
+	/+
 	// Left state variables
 	double rhoL = (qL[0]);
 	double uL = qL[1]/rhoL;
@@ -290,16 +266,34 @@ Vector!dims roeFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR,
 	double v = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
 	double h = (sqrt((rhoL))*hL + sqrt((rhoR))*hR)/(sqrt((rhoL)) + sqrt((rhoR)));
 	double a = sqrt( (gamma - 1.0)*(h - 0.5*(v^^2.0 + u^^2.0)));
+	+/
+	// Left state variables
+	double rhoL = (qL[0]);
+	double uL = qL[1]/rhoL;
+	double vL = qL[2]/rhoL;
+	double pL = ((gamma - 1)*(qL[3] - 0.5*rhoL*(uL^^2.0 + vL^^2.0)));
+	double aL = sqrt(gamma*(pL/rhoL));
+	double hL = (qL[3] + pL)/rhoL;
+	
+	// Right state variables
+	double rhoR = (qR[0]);
+	double uR = qR[1]/rhoR;
+	double vR = qR[2]/rhoR;
+	double pR = ((gamma - 1)*(qR[3] - 0.5*rhoR*(uR^^2.0 + vR^^2.0)));
+	double aR = sqrt(gamma*(pR/rhoR));
+	double hR = (qR[3] + pR)/rhoR;
+
+	// average values
+	double rho = sqrt(rhoL*rhoR);
+	double u = (sqrt((rhoL))*uL + sqrt((rhoR))*uR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	double v = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	double h = (sqrt((rhoL))*hL + sqrt((rhoR))*hR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	double a = sqrt( (gamma - 1.0)*(h - 0.5*(v^^2.0 + u^^2.0)));
+
 	auto Rmat = R!(kx, ky)(u, v, a);
 	auto absLam = Lam!(kx, ky, abs)(u, v, a);
 	auto Lmat = L!(kx, ky)(u, v, a);
-/+
-	Mat R = Mat([1.0, 1.0, 1.0,
-				 v - a, v, v+a,
-				 h - v*a, 0.5*v^^2.0, h+v*a]);
-				 
-	Mat absLam = Mat([abs(v - a), 0.0, 0.0, 0.0, abs(v), 0.0, 0.0, 0.0, abs(v + a)]);
-+/
+
 	static if((kx == 1) && (ky == 0))
 	{
 		double Da = fmax(0, 4.0*((uR - aR) - (uL - aL)));
@@ -326,11 +320,17 @@ Vector!dims roeFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR,
 			absLam[10] = absLam[10]^^2.0/Da + 0.25*Da;
 		}
 	}
-/+
-	Mat L = (gamma - 1.0)/(2.0*a^^2.0)*Mat([0.5*v^^2.0 + (v*a)/(gamma - 1.0), -v-a/(gamma - 1.0), 1.0,
-									2.0*(h - v^^2.0), 2.0*v, -2.0,
-									0.5*v^^2.0 - (v*a)/(gamma - 1.0), -v+a/(gamma - 1.0), 1.0]);
-+/
+
+	/+
+	immutable double eps = 0.001;
+	for(int i = 0; i < 16; i+=5)
+	{
+		if(absLam[i] < eps)
+		{
+			absLam[i] = (eps^^2 + absLam[i]^^2)/(2.0*eps);
+		}
+	}
+	+/
 	static if(kx == 1)
 	{
 		Vec Fl = physicalFlux!(fluxDir.xDir, dims)(pL, uL, vL, rhoL, qL[3]);
@@ -341,7 +341,7 @@ Vector!dims roeFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR,
 		Vec Fl = physicalFlux!(fluxDir.yDir, dims)(pL, uL, vL, rhoL, qL[3]);
 		Vec Fr = physicalFlux!(fluxDir.yDir, dims)(pR, uR, vR, rhoR, qR[3]);
 	}
-	
+
 	flux = 0.5*(Fl + Fr) - 0.5*Rmat*absLam*Lmat*(qR - qL);
 
 	return flux;

@@ -37,10 +37,11 @@ void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config con
 	immutable double tEnd = config.tEnd;
 	
 	int iterations = 0;//round(tEnd/dt).to!int;
-	
+	int saveIterations = 0;
 	
 	double newdt = ((mesh[0,0].dx*mesh[0,0].dy)/(mesh.getSpeed2.reduce!max + mesh.getSoundSpeed.reduce!max));
 	writeln(newdt);
+
 	while(!approxEqual(t, tEnd))// && (t < tEnd))
 	{
 		mesh.updateGhosts();
@@ -52,6 +53,7 @@ void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config con
 			for(int j = 0; j < mesh.M; j++)
 			{
 				if(mesh[i, j].cellType == CellType.Normal)
+				//if(mesh[i, j].cellType != CellType.Solid)
 				{
 					Vec xSlopes;
 					Vec ySlopes;
@@ -189,30 +191,37 @@ void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config con
 		
 		import std.format : format;
 		import std.string : rightJustify;
-		if(iterations % config.plotIter == 0)
+		if(config.plotIter > 0)
 		{
-			auto meshgrid = buildMeshgrid(mesh);
-			
-			//auto p = getVelocity!0(mesh);
-			//auto p = getVelocity!1(mesh);
-			//auto p = getDensity(mesh);
-			auto p = getPressure(mesh);
-			//auto p = getMach(mesh);
-			contourf(meshgrid.X, meshgrid.Y, p, 50, `LineStyle`, `none`);
+			if(iterations % config.plotIter == 0)
+			{
+				auto meshgrid = buildMeshgrid(mesh);
+				
+				//auto p = getVelocity!0(mesh);
+				//auto p = getVelocity!1(mesh);
+				//auto p = getDensity(mesh);
+				auto p = getPressure(mesh);
+				//auto p = getMach(mesh);
+				contourf(meshgrid.X, meshgrid.Y, p, 50, `LineStyle`, `none`);
 
-			//caxis([0.85, 1.3]);
-			//caxis([0.0, 3.0]);
-			//caxis([0.9, 1.15]);
-			//caxis([1.0, 1.25]);
-			colorbar;
-			axis("equal");
-			hold!"on";
-			title(format("t = %4.8f", t));
+				//caxis([0.85, 1.3]);
+				//caxis([0.0, 3.0]);
+				//caxis([0.9, 1.15]);
+				//caxis([1.0, 1.25]);
+				colorbar;
+				axis("equal");
+				hold!"on";
+				title(format("t = %4.8f", t));
+			}
 		}
-		
-		if((iterations % config.saveIter) == 0)
+
+		if(config.saveIter > 0)
 		{
-			saveMesh(mesh, format("save_%s.mesh", iterations.to!string.rightJustify(5, '0')), dt, t);
+			if((iterations % config.saveIter) == 0)
+			{
+				saveMesh(mesh, format("save_%s.mesh", saveIterations.to!string.rightJustify(7, '0')), dt, t);
+				saveIterations++;
+			}
 		}
 	}
 }
@@ -237,12 +246,20 @@ struct Config
 	long plotIter;
 }
 
-Config loadConfig(string conf)
+Config loadConfig(string conf, string saveFile)
 {
 	JSONValue jConfig = parseJSON(conf);
 	Config config;
 
-	config.meshFile = jConfig["mesh"].str;
+	if(saveFile == "")
+	{
+		config.meshFile = jConfig["mesh"].str;
+	}
+	else
+	{
+		config.meshFile = saveFile;
+	}
+
 	config.limiter = jConfig["limiter"].str;
 	config.flux = jConfig["flux"].str;
 	config.dt = jConfig["dt"].floating;
@@ -251,11 +268,6 @@ Config loadConfig(string conf)
 	config.plotIter = jConfig["plotIter"].integer;
 	
 	return config;
-}
-
-static this()
-{
-	initRPP("127.0.0.1", 54000);
 }
 
 void startComputation(Config config)
@@ -298,11 +310,18 @@ void startComputation(Config config)
 void main(string[] args)
 {
 	import std.getopt;
-	string configFile;	
-	auto res = getopt(args, "c|config", "config file to read", &configFile);
+	string configFile;
+	string plotAddr = "127.0.0.1";
+	string saveFile = "";
+	ushort plotPort = 54000;
+
+	auto res = getopt(args, "c|config", "config file to read", &configFile, "pa|plotAddr", "IP address to plot to", &plotAddr, 
+							"pp|plotPort", "Port to plot to", &plotPort, "s|save", "Save file to start from", &saveFile);
+
+	initRPP(plotAddr, plotPort);
 
 	auto configStr = readText(configFile);
-	auto config = loadConfig(configStr);
+	auto config = loadConfig(configStr, saveFile);
 
 	startComputation(config);
 }
