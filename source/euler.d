@@ -87,7 +87,24 @@ Mat Lam(int kx, int ky, alias func = noop)(double u, double v, double a)
 
 immutable double gamma = 1.4;
 
+double getVelocity(int dim)(ref Cell cell)
+	if((dim == 0) || (dim == 1))
+{
+	double vel;
+	static if(dim == 0)
+	{
+		vel = cell.q[1]/cell.q[0];
+	}
+	else static if(dim == 1)
+	{
+		vel = cell.q[2]/cell.q[0];
+	}
+
+	return vel;
+}
+
 double[][] getVelocity(int dim)(ref Mesh mesh)
+	if((dim == 0) || (dim == 1))
 {
 	double[][] vel = new double[][](mesh.M, mesh.N);
 	//double[][] vel = new double[][](mesh.N, mesh.M);
@@ -119,6 +136,11 @@ double[][] getDensity(ref Mesh mesh)
 		}
 	}
 	return rho;
+}
+
+double getPressure(ref Cell cell)
+{
+	return (gamma - 1)*(cell.q[3] - 0.5*cell.q[0]*((cell.q[1]/cell.q[0])^^2.0 + (cell.q[2]/cell.q[0])^^2.0));
 }
 
 double[][] getPressure(ref Mesh mesh)
@@ -210,6 +232,13 @@ double[] getSpeed2(ref Mesh mesh)
 	return speed;
 }
 
+double getSoundSpeed(ref Cell cell)
+{
+	double p = getPressure(cell);
+	double rho = cell.q[0];
+	return sqrt(gamma*p/rho);
+}
+
 double[] getSoundSpeed(ref Mesh mesh)
 {
 	double[] a = new double[mesh.M*mesh.N];
@@ -227,6 +256,11 @@ double[] getSoundSpeed(ref Mesh mesh)
 		}
 	}
 	return a;
+}
+
+double getEnergy(ref Cell cell)
+{
+	return cell.q[3];
 }
 
 double[][] getEnergy(ref Mesh mesh)

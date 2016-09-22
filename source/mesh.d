@@ -22,7 +22,11 @@ enum CellType
 	GhostMirrorXL,
 	GhostMirrorXR,
 	GhostMirrorYT,
-	GhostMirrorYB
+	GhostMirrorYB,
+	GhostConstPressureXL,
+	GhostConstPressureXR,
+	GhostConstPressureYT,
+	GhostConstPressureYB
 }
 
 struct Cell
@@ -357,6 +361,130 @@ struct Mesh
 						fixupCorner(index, cells[indexB].qT);
 					}
 				}
+				else if(cells[index].cellType == CellType.GhostConstPressureXL)
+				{
+					immutable auto pBoundary = getPressure(cells[index]);
+					immutable auto pPlus = getPressure(cells[indexL]);
+					immutable auto rhoPlus = cells[indexL].q[0];
+					immutable auto sPlus = pPlus/(rhoPlus^^gamma);
+
+					immutable auto rhoBoundary = (pBoundary/sPlus)^^(1/gamma);
+
+					immutable auto cBoundary = getSoundSpeed(cells[index]);
+					immutable auto cPlus = getSoundSpeed(cells[indexL]);
+
+					// normal velocity
+					immutable auto uPlus = getVelocity!0(cells[indexL]);
+					// tangential velocity
+					immutable auto vPlus = getVelocity!1(cells[indexL]);
+
+					immutable auto jPlus = uPlus + (2*cPlus)/(gamma - 1);
+
+					immutable auto uBoundary = jPlus - (2*cBoundary)/(gamma - 1);
+					immutable auto vBoundary = vPlus;
+
+					cells[index].q[0] = rhoBoundary;
+					cells[index].q[1] = uBoundary*rhoBoundary;
+					cells[index].q[2] = vBoundary*rhoBoundary;
+					cells[index].q[3] = pBoundary/(gamma - 1) + 0.5*rhoBoundary*(vBoundary^^2 + uBoundary^^2);
+
+					cells[index].qL = cells[index].q;
+
+					//writeln(pBoundary);
+				}
+				else if(cells[index].cellType == CellType.GhostConstPressureXR)
+				{
+					immutable auto pBoundary = getPressure(cells[index]);
+					immutable auto pPlus = getPressure(cells[indexR]);
+					immutable auto rhoPlus = cells[indexR].q[0];
+					immutable auto sPlus = pPlus/(rhoPlus^^gamma);
+
+					immutable auto rhoBoundary = (pBoundary/sPlus)^^(1/gamma);
+
+					immutable auto cBoundary = getSoundSpeed(cells[index]);
+					immutable auto cPlus = getSoundSpeed(cells[indexR]);
+
+					// normal velocity
+					immutable auto uPlus = getVelocity!0(cells[indexR]);
+					// tangential velocity
+					immutable auto vPlus = getVelocity!1(cells[indexR]);
+
+					immutable auto jPlus = uPlus + (2*cPlus)/(gamma - 1);
+
+					immutable auto uBoundary = jPlus - (2*cBoundary)/(gamma - 1);
+					immutable auto vBoundary = vPlus;
+
+					cells[index].q[0] = rhoBoundary;
+					cells[index].q[1] = uBoundary*rhoBoundary;
+					cells[index].q[2] = vBoundary*rhoBoundary;
+					cells[index].q[3] = pBoundary/(gamma - 1) + 0.5*rhoBoundary*(vBoundary^^2 + uBoundary^^2);
+
+					cells[index].qR = cells[index].q;
+
+					//writeln(pBoundary);
+				}
+				else if(cells[index].cellType == CellType.GhostConstPressureYT)
+				{
+					immutable auto pBoundary = getPressure(cells[index]);
+					immutable auto pPlus = getPressure(cells[indexT]);
+					immutable auto rhoPlus = cells[indexT].q[0];
+					immutable auto sPlus = pPlus/(rhoPlus^^gamma);
+
+					immutable auto rhoBoundary = (pBoundary/sPlus)^^(1/gamma);
+
+					immutable auto cBoundary = getSoundSpeed(cells[index]);
+					immutable auto cPlus = getSoundSpeed(cells[indexT]);
+
+					// normal velocity
+					immutable auto uPlus = getVelocity!1(cells[indexT]);
+					// tangential velocity
+					immutable auto vPlus = getVelocity!0(cells[indexT]);
+
+					immutable auto jPlus = uPlus + (2*cPlus)/(gamma - 1);
+
+					immutable auto uBoundary = jPlus - (2*cBoundary)/(gamma - 1);
+					immutable auto vBoundary = vPlus;
+
+					cells[index].q[0] = rhoBoundary;
+					cells[index].q[2] = uBoundary*rhoBoundary;
+					cells[index].q[1] = vBoundary*rhoBoundary;
+					cells[index].q[3] = pBoundary/(gamma - 1) + 0.5*rhoBoundary*(vBoundary^^2 + uBoundary^^2);
+
+					cells[index].qT = cells[index].q;
+
+					//writeln(pBoundary);
+				}
+				else if(cells[index].cellType == CellType.GhostConstPressureYB)
+				{
+					immutable auto pBoundary = getPressure(cells[index]);
+					immutable auto pPlus = getPressure(cells[indexB]);
+					immutable auto rhoPlus = cells[indexB].q[0];
+					immutable auto sPlus = pPlus/(rhoPlus^^gamma);
+
+					immutable auto rhoBoundary = (pBoundary/sPlus)^^(1/gamma);
+
+					immutable auto cBoundary = getSoundSpeed(cells[index]);
+					immutable auto cPlus = getSoundSpeed(cells[indexB]);
+
+					// normal velocity
+					immutable auto uPlus = getVelocity!1(cells[indexB]);
+					// tangential velocity
+					immutable auto vPlus = getVelocity!0(cells[indexB]);
+
+					immutable auto jPlus = uPlus + (2*cPlus)/(gamma - 1);
+
+					immutable auto uBoundary = jPlus - (2*cBoundary)/(gamma - 1);
+					immutable auto vBoundary = vPlus;
+
+					cells[index].q[0] = rhoBoundary;
+					cells[index].q[2] = uBoundary*rhoBoundary;
+					cells[index].q[1] = vBoundary*rhoBoundary;
+					cells[index].q[3] = pBoundary/(gamma - 1) + 0.5*rhoBoundary*(vBoundary^^2 + uBoundary^^2);
+
+					cells[index].qB = cells[index].q;
+
+					//writeln(pBoundary);
+				}
 				/+
 				if(cells[indexL].cellType == CellType.GhostMirrorYT)
 				{
@@ -505,6 +633,7 @@ void saveMesh(ref Mesh mesh, string filename, double dt, double t)
 Mesh loadMesh(string file, ref double dt, ref double t)
 {
 	import std.bitmanip : read;
+	import std.conv : to;
 	ubyte[] buffer;
 	size_t offset = 0;
 	buffer = cast(ubyte[])std.file.read(file);
@@ -628,6 +757,18 @@ void printMesh(ref Mesh mesh)
 					break;
 				case GhostNoGradYT:
 					cellType = "GNT";
+					break;
+				case GhostConstPressureXL:
+					cellType = "GPL";
+					break;
+				case GhostConstPressureXR:
+					cellType = "GPR";
+					break;
+				case GhostConstPressureYB:
+					cellType = "GPB";
+					break;
+				case GhostConstPressureYT:
+					cellType = "GPT";
 					break;
 				default:
 					cellType = "   ";

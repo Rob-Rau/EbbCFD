@@ -131,7 +131,7 @@ void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config con
 						mesh[i, j].yFlux = F!(dims, 0, 1)(mesh[i,j-1].qT, mesh[i, j].qB, dt, mesh[i, j].dy);
 					}
 				}
-				else if((mesh[i, j].cellType == CellType.GhostMirrorXL) || (mesh[i, j].cellType == CellType.GhostNoGradXL))
+				else if((mesh[i, j].cellType == CellType.GhostMirrorXL) || (mesh[i, j].cellType == CellType.GhostNoGradXL) || (mesh[i, j].cellType == CellType.GhostConstPressureXL))
 				{
 					mesh[i, j].xFlux = F!(dims, 1, 0)(mesh[i-1,j].qR, mesh[i, j].qL, dt, mesh[i, j].dx);
 				}
@@ -143,7 +143,8 @@ void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config con
 						mesh[i, j].xFlux = F!(dims, 1, 0)(mesh[i-1,j].qR, mesh[i, j].qL, dt, mesh[i, j].dx);
 					}
 				}
-				else if(((mesh[i, j].cellType == CellType.GhostMirrorYB) || (mesh[i, j].cellType == CellType.GhostNoGradYB)) && !mesh[i, j].corner)
+				else if(((mesh[i, j].cellType == CellType.GhostMirrorYB) || (mesh[i, j].cellType == CellType.GhostNoGradYB) ||
+						 (mesh[i, j].cellType == CellType.GhostConstPressureYB)) && !mesh[i, j].corner)
 				{
 					if(mesh[i, j].cellType == CellType.GhostMirrorYB)
 					{

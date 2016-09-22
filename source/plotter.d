@@ -187,10 +187,11 @@ void main(string[] args)
 	
 	if(movie)
 	{
-		mkdir("./output");
 		auto dir = array(dirEntries("./", SpanMode.shallow));
-		dir.sort!"a.timeLastModified < b.timeLastModified";
+		mkdir("./output");
+		dir.sort!"a.name < b.name";
 		
+		string titleStr = "";
 		import std.string : rightJustify;
 		import std.conv : to;
 		foreach(int i, dirFile; dir)
@@ -201,17 +202,25 @@ void main(string[] args)
 			if(plotP)
 			{
 				p = getPressure(mesh);
+				titleStr = "Pressure";
 			}
 			else if(plotM)
 			{
 				p = getMach(mesh);
+				titleStr = "Mach Number";
+			}
+			else if(plotSpeed)
+			{
+				p = getSpeed(mesh);
+				titleStr = "Flow Speed";
 			}
 		
 			//figure;
 			
 			contourf(meshgrid.X, meshgrid.Y, p, 350, `LineStyle`, `none`);
 			colorbar;
-			//caxis([0.9, 1.2]);
+			//caxis([1000, 5500]);
+			caxis([0, 1]);
 			/+
 			if(plotP)
 			{
@@ -223,7 +232,7 @@ void main(string[] args)
 			}
 			+/
 			axis("equal");
-			title(format("Pressure, t = %4.4f", t));
+			title(format("%s, t = %4.4f", titleStr, t));
 			xlabel("x");
 			ylabel("y");
 			string strFrame = i.to!string.rightJustify(4, '0');

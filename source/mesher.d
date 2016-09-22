@@ -335,13 +335,13 @@ void main(string[] args)
 		printMesh(mesh);
 		saveMesh(mesh, "box2.mesh", 0.01, 0);
 		+/
-		initMesh(mesh, 100, 100, 0.25, 0.25);
-		//initMesh(mesh, 100, 100, 0.5, 0.5);
+		//initMesh(mesh, 100, 100, 0.25, 0.25);
+		initMesh(mesh, 100, 100, 0.5, 0.5);
 		import std.math : sqrt, PI, cos, sin;
 		
 		double Re = 50_000_000.0;
 		//double Re = 10_000_000.0;
-		double M = 0.8;
+		double M = 0.5;
 		double aoa = -(45 * PI/180);
 		double mu = 1.8e-5;
 		double L = sqrt(10.0^^2.0 + 10.0^^2.0);
@@ -353,23 +353,23 @@ void main(string[] args)
 		double u = U*cos(aoa);
 		double v = U*sin(aoa);
 
-		addBox(mesh, 45.0, 98.0, 55.0, 55.0, buildQ(rho, u, v, p), CellType.GhostMirrorYT, CellType.GhostNoGradYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
-		addBox(mesh, 3.0, 99.0, 99.5, 98.0, buildQ(rho, u, v, p), CellType.GhostNoGradYT, CellType.GhostConst, CellType.GhostNoGradXL, CellType.GhostConst);
+		addBox(mesh, 45.0, 98.0, 55.0, 55.0, buildQ(rho, u, v, p), CellType.GhostMirrorYT, CellType.GhostNoGradYB, CellType.GhostConstPressureXL, CellType.GhostNoGradXR);
+		addBox(mesh, 3.0, 99.0, 99.5, 98.0, buildQ(rho, u, v, p), CellType.GhostNoGradYT, CellType.GhostConst, CellType.GhostConstPressureXL, CellType.GhostConst);
 
-		addBox(mesh, 44.0, 45.0, 56.0, 0.5, buildQ(rho, u, v, p), CellType.GhostNoGradYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
-		addBox(mesh, 2.0, 98.0, 45.0, 0.5, buildQ(rho, u, v, p), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostMirrorXL, CellType.GhostNoGradXR);
-		addBox(mesh, 0.5, 99.0, 4.0, 0.5, buildQ(rho, u, v, p), CellType.GhostNoGradYT, CellType.GhostConst, CellType.GhostConst, CellType.GhostConst);
-		addBox(mesh, 55.0, 98.0, 99.75, 0.5, buildQ(rho, u, v, p), CellType.GhostNoGradYT, CellType.GhostNoGradYB, CellType.GhostNoGradXL, CellType.GhostMirrorXR);
+		addBox(mesh, 44.0, 45.0, 56.0, 0.5, buildQ(rho, u, v, p), CellType.GhostConstPressureYT, CellType.GhostMirrorYB, CellType.GhostNoGradXL, CellType.GhostNoGradXR);
+		addBox(mesh, 2.0, 98.0, 45.0, 0.5, buildQ(rho, u, v, p), CellType.GhostConstPressureYT, CellType.GhostNoGradYB, CellType.GhostMirrorXL, CellType.GhostNoGradXR);
+		addBox(mesh, 0.5, 99.0, 4.0, 0.5, buildQ(rho, u, v, p), CellType.GhostConstPressureYT, CellType.GhostConst, CellType.GhostConst, CellType.GhostConst);
+		addBox(mesh, 55.0, 98.0, 99.75, 0.5, buildQ(rho, u, v, p), CellType.GhostConstPressureYT, CellType.GhostConstPressureYB, CellType.GhostConstPressureXL, CellType.GhostMirrorXR);
 		
-		/*
+		
 		mesh[89, 195].corner = false;
 		mesh[89, 195].cornerType = CellType.Normal;
 		mesh[111, 195].corner = false;
 		mesh[111, 195].cornerType = CellType.Normal;
-		*/
+		
 		for(int i = 1; i < mesh.M-1; i++)
 		{
-			mesh[mesh.N-1, i].cellType = CellType.GhostNoGradXL;
+			mesh[mesh.N-1, i].cellType = CellType.GhostConstPressureXL;
 		}
 		mesh.updateGhosts();
 		printMesh(mesh);
