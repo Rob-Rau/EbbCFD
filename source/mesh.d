@@ -1,11 +1,13 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
+module ebb.mesh;
+
 import std.file;
 import std.stdio;
 
 import numd.linearalgebra.matrix;
 import numd.utility;
 
-import euler;
+import ebb.euler;
 
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
@@ -523,6 +525,40 @@ struct Mesh
 		size_t index = M*i + j;
 		
 		return cells[index];
+	}
+
+	Vector!2 computeBodyForces()
+	{
+		auto bodyForces = Vector!2(0, 0);
+
+		for(uint i = 0; i < N; i++)
+			with(CellType)
+		{
+			for(uint j = 0; j < M; j++)
+			{
+				if(this[i,j].cellType == GhostMirrorXL)
+				{
+					auto p = getPressure(this[i-1,j]);
+					bodyForces += p*this[i,j].dy*Vector!2(-1, 0);
+				}
+				else if(this[i,j].cellType == GhostMirrorXR)
+				{
+					auto p = getPressure(this[i+1,j]);
+					bodyForces += p*this[i,j].dy*Vector!2(1, 0);
+				}
+				else if(this[i,j].cellType == GhostMirrorYT)
+				{
+					auto p = getPressure(this[i,j+1]);
+					bodyForces += p*this[i,j].dx*Vector!2(0, 1);
+				}
+				else if(this[i,j].cellType == GhostMirrorYB)
+				{
+					auto p = getPressure(this[i,j-1]);
+					bodyForces += p*this[i,j].dx*Vector!2(0, -1);
+				}
+			}
+		}
+		return bodyForces;
 	}
 }
 

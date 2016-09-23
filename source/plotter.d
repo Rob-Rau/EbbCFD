@@ -1,5 +1,5 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
-module plotter;
+module ebb.plotter;
 
 import std.getopt;
 import std.stdio;
@@ -8,8 +8,8 @@ import rpp.client.rpc;
 
 import numd.utility;
 
-import mesh;
-import euler;
+import ebb.mesh;
+import ebb.euler;
 
 static this()
 {
@@ -21,7 +21,8 @@ void main(string[] args)
 	string file, outputFile;
 	bool plotU = false, plotV = false, plotP = false, plotRho = false, plotE = false, plotM = false, plotSpeed = false, movie = false;
 	
-	auto res = getopt(args, std.getopt.config.caseSensitive, "file|f", "file to plot", &file, "u|u", "plot u velocity component", &plotU, "v|v", "plot v velocity component", &plotV,
+	auto res = getopt(args, std.getopt.config.caseSensitive, std.getopt.config.bundling,
+							"file|f", "file to plot", &file, "u|u", "plot u velocity component", &plotU, "v|v", "plot v velocity component", &plotV,
 							"p|p", "plot pressure", &plotP, "d|d", "plot density", &plotRho, "e|e", "plot energy", &plotE,
 							"M|M", "plot Mach number", &plotM, "s|s", "plot flow speed", &plotSpeed,
 							"m|m", "generate output images for movie", &movie, "o|o", "output file name", &outputFile);
@@ -39,7 +40,7 @@ void main(string[] args)
 	import std.array : array;
 	import std.algorithm : sort;
 	
-	if(file == "")
+	if(file == "" && !movie)
 	{
 		writeln("no input file, exiting");
 		return;
@@ -220,7 +221,7 @@ void main(string[] args)
 			contourf(meshgrid.X, meshgrid.Y, p, 350, `LineStyle`, `none`);
 			colorbar;
 			//caxis([1000, 5500]);
-			caxis([0, 1]);
+			caxis([0, 0.5]);
 			/+
 			if(plotP)
 			{

@@ -1,9 +1,11 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
+module ebb.euler;
+
 import std.math;
 
 import numd.linearalgebra.matrix;
 
-import mesh;
+import ebb.mesh;
 
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);

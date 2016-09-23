@@ -1,4 +1,6 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
+module ebb.solver;
+
 import std.json;
 import std.file;
 import std.math : fmax, fmin, sgn, sqrt, exp, log;
@@ -9,10 +11,10 @@ import rpp.client.rpc;
 import numd.utility;
 import numd.linearalgebra.matrix;
 
-import limiters;
-import euler;
-import flux;
-import mesh;
+import ebb.limiters;
+import ebb.euler;
+import ebb.flux;
+import ebb.mesh;
 
 double[] abs(double[] data)
 {

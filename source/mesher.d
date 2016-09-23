@@ -1,5 +1,5 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
-module mesher;
+module ebb.mesher;
 
 import std.array;
 import std.conv;
@@ -8,7 +8,7 @@ import std.math : abs;
 import std.stdio;
 import std.string;
 
-import mesh;
+import ebb.mesh;
 
 void initMesh(ref Mesh mesh, double width, double height, double dx, double dy)
 {
@@ -341,7 +341,7 @@ void main(string[] args)
 		
 		double Re = 50_000_000.0;
 		//double Re = 10_000_000.0;
-		double M = 0.5;
+		double M = 0.25;
 		double aoa = -(45 * PI/180);
 		double mu = 1.8e-5;
 		double L = sqrt(10.0^^2.0 + 10.0^^2.0);

@@ -1,4 +1,6 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
+module ebb.limiters;
+
 import std.math : abs, fmax, fmin, sgn, sqrt;
 import std.meta : aliasSeqOf;
 

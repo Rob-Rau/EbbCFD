@@ -1,9 +1,12 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
+module ebb.flux;
+
 import std.math : abs, fmax, sqrt;
 import std.meta : aliasSeqOf;
 
 import numd.linearalgebra.matrix;
-import euler;
+
+import ebb.euler;
 
 alias fluxList = aliasSeqOf!(["rusanovFlux", "roeFlux"]);
 

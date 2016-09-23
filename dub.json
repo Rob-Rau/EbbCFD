@@ -11,7 +11,8 @@
 		{
 			"excludedSourceFiles": [
 				"source/solver.d",
-				"source/plotter.d"
+				"source/plotter.d",
+				"source/post.d"
 			],
 			"name": "mesher",
 			"targetName": "ebb-mesh",
@@ -20,7 +21,8 @@
 		{
 			"excludedSourceFiles": [
 				"source/mesher.d",
-				"source/plotter.d"
+				"source/plotter.d",
+				"source/post.d"
 			],
 			"name": "solver",
 			"targetName": "ebb-solve",
@@ -29,10 +31,21 @@
 		{
 			"excludedSourceFiles": [
 				"source/mesher.d",
-				"source/solver.d"
+				"source/solver.d",
+				"source/post.d"
 			],
 			"name": "plotter",
 			"targetName": "ebb-plot",
+			"targetType": "executable"
+		},
+		{
+			"excludedSourceFiles": [
+				"source/mesher.d",
+				"source/solver.d",
+				"source/plotter.d"
+			],
+			"name": "post",
+			"targetName": "ebb-post",
 			"targetType": "executable"
 		}
 	],
