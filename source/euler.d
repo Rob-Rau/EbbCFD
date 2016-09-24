@@ -89,42 +89,43 @@ Mat Lam(int kx, int ky, alias func = noop)(double u, double v, double a)
 
 immutable double gamma = 1.4;
 
-double getVelocity(int dim)(ref Cell cell)
+template getVelocity(int dim)
 	if((dim == 0) || (dim == 1))
 {
-	double vel;
-	static if(dim == 0)
+	double getVelocity(ref Cell cell)
 	{
-		vel = cell.q[1]/cell.q[0];
-	}
-	else static if(dim == 1)
-	{
-		vel = cell.q[2]/cell.q[0];
-	}
-
-	return vel;
-}
-
-double[][] getVelocity(int dim)(ref Mesh mesh)
-	if((dim == 0) || (dim == 1))
-{
-	double[][] vel = new double[][](mesh.M, mesh.N);
-	//double[][] vel = new double[][](mesh.N, mesh.M);
-	for(int i = 0; i < mesh.N; i++)
-	{
-		for(int j = 0; j < mesh.M; j++)
+		double vel;
+		static if(dim == 0)
 		{
-			static if(dim == 0)
+			vel = cell.q[1]/cell.q[0];
+		}
+		else static if(dim == 1)
+		{
+			vel = cell.q[2]/cell.q[0];
+		}
+
+		return vel;
+	}
+
+	double[][] getVelocity(ref Mesh mesh)
+	{
+		double[][] vel = new double[][](mesh.M, mesh.N);
+		for(int i = 0; i < mesh.N; i++)
+		{
+			for(int j = 0; j < mesh.M; j++)
 			{
-				vel[j][i] = mesh[i,j].q[1]/mesh[i,j].q[0];
-			}
-			else static if(dim == 1)
-			{
-				vel[j][i] = mesh[i,j].q[2]/mesh[i,j].q[0];
+				static if(dim == 0)
+				{
+					vel[j][i] = mesh[i,j].q[1]/mesh[i,j].q[0];
+				}
+				else static if(dim == 1)
+				{
+					vel[j][i] = mesh[i,j].q[2]/mesh[i,j].q[0];
+				}
 			}
 		}
+		return vel;
 	}
-	return vel;
 }
 
 double[][] getDensity(ref Mesh mesh)
