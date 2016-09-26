@@ -1,7 +1,9 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.mesh;
 
+import std.conv;
 import std.file;
+import std.math;
 import std.stdio;
 
 import numd.linearalgebra.matrix;
@@ -559,6 +561,185 @@ struct Mesh
 			}
 		}
 		return bodyForces;
+	}
+}
+
+enum BoundaryType
+{
+	Const,
+	ConstPressure,
+	InviscidWall
+}
+
+struct Edge
+{
+	uint[2] nodeIdx;
+	double len;
+
+/+
+	Vector!2 normal;
+	Vector!2 tangent;
++/
+	Matrix!(2, 2) rotMat;
+	// neighboring cells index
+	uint[2] cellIdx;
+
+	// Edge values for 2nd order
+	Vector!4[2] q;
+	
+	// Flux on this edge
+	Vector!4 flux;
+
+	// This is a boundary edg1e
+	bool isBoundary;
+	string boundaryTag;
+	BoundaryType boundaryType;
+}
+
+struct UCell2
+{
+	// Cell everaged values
+	Vector!4 q;
+
+	uint[6] edges;
+	double[6] fluxMutliplier;
+	uint nEdges;
+	double area;
+	double d;
+	double perim;
+	Vector!2 centroid;
+}
+
+double determinant(Matrix!(2, 2) mat)
+{
+	return mat[0]*mat[3] - mat[1]*mat[2];
+}
+
+struct UMesh2
+{
+	// Raw mesh data
+	double[][] nodes;
+	uint[][] elements;
+	uint[][] bNodes;
+	string[] bTags;
+	size_t[] bGroupStart;
+	uint[][] bGroups;
+
+	// Computed mesh data
+	UCell2[] cells;
+	Edge[] edges;
+
+	this(uint nCells)
+	{
+		cells = new UCell2[nCells];
+	}
+
+	ref UCell2 opIndex(size_t i)
+	{
+		return cells[i];
+	}
+
+	private bool isBoundaryEdge(ref Edge edge, ref uint bGroup)
+	{
+		for(uint i = 0; i < bNodes.length; i++)
+		{
+			if(((bNodes[i][0] == edge.nodeIdx[0]) && (bNodes[i][1] == edge.nodeIdx[1])) ||
+			   ((bNodes[i][1] == edge.nodeIdx[0]) && (bNodes[i][0] == edge.nodeIdx[1])))
+			{
+				for(uint j = 0; j < bGroupStart.length-1; j++)
+				{
+					if((i >= bGroupStart[j]) && (i < bGroupStart[j+1]))
+					{
+						bGroup = j;
+					}
+				}
+				if(i >= bGroupStart[$-1])
+				{
+					bGroup = bGroupStart.length.to!uint - 1;
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private bool isExistingEdge(ref Edge edge, ref UMesh2 mesh, ref uint idx)
+	{
+		for(uint k = 0; k < mesh.edges.length; k++)
+		{
+			if(((mesh.edges[k].nodeIdx[0] == edge.nodeIdx[0]) && (mesh.edges[k].nodeIdx[1] == edge.nodeIdx[1])) ||
+			   ((mesh.edges[k].nodeIdx[1] == edge.nodeIdx[0]) && (mesh.edges[k].nodeIdx[0] == edge.nodeIdx[1])))
+			{
+				idx = k;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/++
+		Compute cell and edge interconnections
+	+/
+	void buildMesh()
+	{
+		bGroups = new uint[][](bTags.length);
+		for(uint i = 0; i < elements.length; i++)
+		{
+			for(uint j = 0; j < cells[i].nEdges; j++)
+			{
+				Edge edge;
+				uint edgeidx;
+				edge.nodeIdx = [elements[i][j]-1, elements[i][(j + 1)%cells[i].nEdges]-1];
+				uint[] ni = edge.nodeIdx;
+
+				uint bGroup;
+				edge.isBoundary = isBoundaryEdge(edge, bGroup);
+				if(!edge.isBoundary)
+				{
+					uint k = 0;
+					if(isExistingEdge(edge, this, k))
+					{
+						edges[k].cellIdx[1] = i;
+						edgeidx = k;
+						cells[i].fluxMutliplier[j] = -1.0;
+					}
+					else
+					{
+						edge.cellIdx[0] = i;
+						edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
+						Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[1]][0] - nodes[ni[0]][0]);
+						Vector!2 tangent = Vector!2(-normal[1], normal[0]);
+						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
+						cells[i].fluxMutliplier[j] = 1.0;
+						edges ~= edge;
+						edgeidx = edges.length.to!uint - 1;
+					}
+				}
+				else
+				{
+					edge.cellIdx[0] = i;
+					edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
+					Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[1]][0] - nodes[ni[0]][0]);
+					Vector!2 tangent = Vector!2(-normal[1], normal[0]);
+					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
+					edge.boundaryTag = bTags[bGroup];
+					bGroups[bGroup] ~= j;
+					edges ~= edge;
+					edgeidx = edges.length.to!uint - 1;
+				}
+
+				cells[i].edges[j] = edgeidx;
+				cells[i].perim += edges[edgeidx].len;
+				cells[i].area += Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]).determinant;
+				cells[i].centroid[0] += (nodes[ni[0]][0] + nodes[ni[1]][0])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
+				cells[i].centroid[1] += (nodes[ni[0]][1] + nodes[ni[1]][1])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
+			}
+
+			cells[i].area *= 0.5;
+			cells[i].d = (2*cells[i].area)/cells[i].perim;
+			cells[i].centroid[0] *= 1/(6*cells[i].area);
+			cells[i].centroid[1] *= 1/(6*cells[i].area);
+		}
 	}
 }
 

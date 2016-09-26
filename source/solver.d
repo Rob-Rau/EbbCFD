@@ -26,7 +26,52 @@ double[] abs(double[] data)
 	return data;
 }
 
-void finiteVolumeSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config config, double t)
+alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
+
+// Unstructured finite volume solver
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t)
+{
+	for(uint i = 0; i < mesh.edges.length; i++)
+	{
+		if(mesh.edges[i].isBoundary)
+		{
+
+		}
+		else
+		{
+			mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+			mesh.edges[i].q[1] = mesh.cells[mesh.edges[i].cellIdx[1]].q;
+
+			auto qL = mesh.edges[i].q[0];
+			auto qR = mesh.edges[i].q[1];
+
+			Vector!2 velL = mesh.edges[i].rotMat*Vector!2(qL[1], qL[2]);
+			Vector!2 velR = mesh.edges[i].rotMat*Vector!2(qR[1], qR[2]);
+
+			qL[1] = velL[0];
+			qL[2] = velL[1];
+
+			qR[1] = velR[0];
+			qR[2] = velR[1];
+
+			mesh.edges[i].flux = F!(dims, 1, 0)(qR, qL, dt, 0);
+		}
+	}
+
+	for(uint i = 0; i < mesh.cell.length; i++)
+	{
+		auto R = Vector!4(0);
+		// integrate fluxes over cell edges
+		for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+		{
+			R += mesh.cells[i].fluxMultiplier[j]*mesh.edges[mesh.cells[i].edges[j]].len*mesh.edges[mesh.cells[i].edges[j]].flux;
+		}
+		mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
+	}
+}
+
+// Structured finite volume solver
+void sfvmSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config config, double t)
 {
 	import std.algorithm : min, max, reduce;
 	import std.conv : to;
@@ -276,6 +321,8 @@ Config loadConfig(string conf, string saveFile)
 void startComputation(Config config)
 {
 	Mesh mesh;
+	UMesh2 umesh;
+
 	double dt = config.dt;
 	double tEnd = config.tEnd;
 	double t = 0;
@@ -297,15 +344,17 @@ void startComputation(Config config)
 							writeln("Running 2D finite volume solver");
 							writeln("-limiter: "~lim);
 							writeln("-flux: "~fl);
-							finiteVolumeSolver!(mixin(lim), mixin(fl), 4)(mesh, config, t);
+							sfvmSolver!(mixin(lim), mixin(fl), 4)(mesh, config, t);
 							break;
 					}
 					default:
+						writeln("Invalid flux function");
 						break;
 				}
 				break;
 		}
 		default:
+			writeln("Invalid limiter function");
 			break;
 	}
 }
