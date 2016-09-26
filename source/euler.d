@@ -17,65 +17,64 @@ T noop(T)(T x)
 
 Mat L(int kx, int ky)(Vec q)
 {
-	immutable double ρ = q[0];
-	immutable double u = q[1]/ρ;
-	immutable double v = q[2]/ρ;
+	immutable double rho = q[0];
+	immutable double u = q[1]/rho;
+	immutable double v = q[2]/rho;
 	immutable double E = q[$-1];
-	immutable double p = ((gamma - 1)*(E - 0.5*ρ*(u^^2.0 + v^^2.0)));
-	immutable double a = sqrt(gamma*(p/ρ));
+	immutable double p = ((gamma - 1)*(E - 0.5*rho*(u^^2.0 + v^^2.0)));
+	immutable double a = sqrt(gamma*(p/rho));
 	return L!(kx, ky)(u, v, a);
 }
 
 Mat L(int kx, int ky)(double u, double v, double a)
 {	
-	immutable double Φ2 = 0.5*(gamma - 1)*(u^^2.0 + v^^2.0);
-	immutable double β = 1.0/(2.0*a^^2.0);
+	immutable double phi2 = 0.5*(gamma - 1)*(u^^2.0 + v^^2.0);
+	immutable double beta = 1.0/(2.0*a^^2.0);
 	immutable double kxt = kx/sqrt(kx^^2.0 + ky^^2.0);
 	immutable double kyt = ky/sqrt(kx^^2.0 + ky^^2.0);
-	immutable double θ = kxt*v + kyt*v;
+	immutable double theta = kxt*v + kyt*v;
 
-	Mat mat = Mat([1 - Φ2/a^^2.0, (gamma - 1)*u/a^^2.0, (gamma - 1)*v/a^^2.0, -(gamma - 1)/a^^2.0, 
+	Mat mat = Mat([1 - phi2/a^^2.0, (gamma - 1)*u/a^^2.0, (gamma - 1)*v/a^^2.0, -(gamma - 1)/a^^2.0, 
 					-(kyt*u - kxt*v), kyt, -kxt, 0,
-					β*(Φ2 - a*θ), β*(kxt*a - (gamma - 1)*u), β*(kyt*a - (gamma - 1)*v), β*(gamma - 1),
-					β*(Φ2 + a*θ), -β*(kxt*a + (gamma - 1)*u), -β*(kyt*a + (gamma - 1)*v), β*(gamma - 1)]);
+					beta*(phi2 - a*theta), beta*(kxt*a - (gamma - 1)*u), beta*(kyt*a - (gamma - 1)*v), beta*(gamma - 1),
+					beta*(phi2 + a*theta), -beta*(kxt*a + (gamma - 1)*u), -beta*(kyt*a + (gamma - 1)*v), beta*(gamma - 1)]);
 	return mat;
 }
 
 Mat R(int kx, int ky)(Vec q)
 {
-	immutable double ρ = q[0];
-	immutable double u = q[1]/ρ;
-	immutable double v = q[2]/ρ;
+	immutable double rho = q[0];
+	immutable double u = q[1]/rho;
+	immutable double v = q[2]/rho;
 	immutable double E = q[$-1];
-	immutable double p = ((gamma - 1)*(E - 0.5*ρ*(u^^2.0 + v^^2.0)));
-	immutable double a = sqrt(gamma*(p/ρ));
+	immutable double p = ((gamma - 1)*(E - 0.5*rho*(u^^2.0 + v^^2.0)));
+	immutable double a = sqrt(gamma*(p/rho));
 	
 	return R!(kx, ky)(u, v, a);
 }
 
 Mat R(int kx, int ky)(double u, double v, double a)
 {
-	immutable double Φ2 = 0.5*(gamma - 1)*(u^^2.0 + v^^2.0);
-	immutable double β = 1.0/(2.0*a^^2.0);
+	immutable double phi2 = 0.5*(gamma - 1)*(u^^2.0 + v^^2.0);
 	immutable double kxt = kx/sqrt(kx^^2.0 + ky^^2.0);
 	immutable double kyt = ky/sqrt(kx^^2.0 + ky^^2.0);
-	immutable double θ = kxt*v + kyt*v;
+	immutable double theta = kxt*v + kyt*v;
 
 	Mat mat = Mat([1, 0, 1, 1,
 					u, kyt, u + kxt*a, u - kxt*a,
 					v, -kxt, v + kyt*a, v - kyt*a,
-					Φ2/(gamma - 1), kyt*u - kxt*v, (Φ2 + a^^2.0)/(gamma - 1) + a*θ, (Φ2 + a^^2.0)/(gamma - 1) - a*θ]);
+					phi2/(gamma - 1), kyt*u - kxt*v, (phi2 + a^^2.0)/(gamma - 1) + a*theta, (phi2 + a^^2.0)/(gamma - 1) - a*theta]);
 	return mat;
 }
 
 Mat Lam(int kx, int ky, alias func = noop)(Vec q)
 {
-	immutable double ρ = q[0];
-	immutable double u = q[1]/ρ;
-	immutable double v = q[2]/ρ;
+	immutable double rho = q[0];
+	immutable double u = q[1]/rho;
+	immutable double v = q[2]/rho;
 	immutable double E = q[$-1];
-	immutable double p = ((gamma - 1)*(E - 0.5*ρ*(u^^2.0 + v^^2.0)));
-	immutable double a = sqrt(gamma*(p/ρ));
+	immutable double p = ((gamma - 1)*(E - 0.5*rho*(u^^2.0 + v^^2.0)));
+	immutable double a = sqrt(gamma*(p/rho));
 	
 	return Lam!(kx, ky, func)(u, v, a);
 }

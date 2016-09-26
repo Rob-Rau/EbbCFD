@@ -576,10 +576,6 @@ struct Edge
 	uint[2] nodeIdx;
 	double len;
 
-/+
-	Vector!2 normal;
-	Vector!2 tangent;
-+/
 	Matrix!(2, 2) rotMat;
 	// neighboring cells index
 	uint[2] cellIdx;
