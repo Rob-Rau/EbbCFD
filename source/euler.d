@@ -140,6 +140,11 @@ double[][] getDensity(ref Mesh mesh)
 	return rho;
 }
 
+double getPressure(ref Vector!4 q)
+{
+	return (gamma - 1)*(q[3] - 0.5*q[0]*((q[1]/q[0])^^2.0 + (q[2]/q[0])^^2.0));
+}
+
 double getPressure(ref Cell cell)
 {
 	return (gamma - 1)*(cell.q[3] - 0.5*cell.q[0]*((cell.q[1]/cell.q[0])^^2.0 + (cell.q[2]/cell.q[0])^^2.0));

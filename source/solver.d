@@ -1,9 +1,11 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.solver;
 
+import std.algorithm : min, max, reduce;
+import std.conv;
 import std.json;
 import std.file;
-import std.math : fmax, fmin, sgn, sqrt, exp, log;
+import std.math;
 import std.stdio;
 
 import rpp.client.rpc;
@@ -29,54 +31,157 @@ double[] abs(double[] data)
 alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t)
+void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t)
 {
-	for(uint i = 0; i < mesh.edges.length; i++)
+	double dt = config.dt;
+	uint iterations = 0;
+
+	// Setup initial conditions
+	for(uint i = 0; i < mesh.cells.length; i++)
 	{
-		if(mesh.edges[i].isBoundary)
-		{
+		double M = config.ic[0];
+		double aoa = config.ic[1] * (PI/180);
+		double p = config.ic[2];
+		double rho = config.ic[3];
+		double a = sqrt(gamma*(p/rho));
+		double U = M*a;
+		double u = U*cos(aoa);
+		double v = U*sin(aoa);
 
+		mesh.cells[i].q = buildQ(rho, u, v, p);
+	}
+
+	for(uint i = 0; i < mesh.bGroups.length; i++)
+	{
+		uint findBcIndex(string tag)
+		{
+			for(uint j = 0; j < config.bTags.length; j++)
+			{
+				if(config.bTags[j] == tag)
+				{
+					return j;
+				}
+			}
+			assert(false, "Could not find match boundary condition tag");
 		}
-		else
+
+		uint bcIdx = findBcIndex(mesh.bTags[i]);
+
+		for(uint j = 0; j < mesh.bGroups[i].length; j++)
 		{
-			mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
-			mesh.edges[i].q[1] = mesh.cells[mesh.edges[i].cellIdx[1]].q;
+			assert(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
+			assert(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.bTags[bcIdx], "Incorrect boundary tag");
 
-			auto qL = mesh.edges[i].q[0];
-			auto qR = mesh.edges[i].q[1];
+			double M = config.bc[bcIdx][0];
+			double aoa = config.bc[bcIdx][1] * (PI/180);
+			double p = config.bc[bcIdx][2];
+			double rho = config.bc[bcIdx][3];
+			double a = sqrt(gamma*(p/rho));
+			double U = M*a;
+			double u = U*cos(aoa);
+			double v = U*sin(aoa);
+			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.bTypes[bcIdx];
 
-			Vector!2 velL = mesh.edges[i].rotMat*Vector!2(qL[1], qL[2]);
-			Vector!2 velR = mesh.edges[i].rotMat*Vector!2(qR[1], qR[2]);
-
-			qL[1] = velL[0];
-			qL[2] = velL[1];
-
-			qR[1] = velR[0];
-			qR[2] = velR[1];
-
-			mesh.edges[i].flux = F!(dims, 1, 0)(qR, qL, dt, 0);
+			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
+			{
+				mesh.edges[mesh.bGroups[i][j]].q[1] = buildQ(rho, u, v, p);
+			}
 		}
 	}
 
-	for(uint i = 0; i < mesh.cell.length; i++)
+	while(!approxEqual(t, config.tEnd))
 	{
-		auto R = Vector!4(0);
-		// integrate fluxes over cell edges
-		for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+		//writeln;
+		//writeln;
+		for(uint i = 0; i < mesh.edges.length; i++)
 		{
-			R += mesh.cells[i].fluxMultiplier[j]*mesh.edges[mesh.cells[i].edges[j]].len*mesh.edges[mesh.cells[i].edges[j]].flux;
+			if(mesh.edges[i].isBoundary)
+			{
+				switch(mesh.edges[i].boundaryType)
+					with(BoundaryType)
+				{
+					case FullState:
+						mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+
+						auto qL = mesh.edges[i].q[0];
+						auto qR = mesh.edges[i].q[1];
+
+						Vector!2 velL = mesh.edges[i].rotMat*Vector!2(qL[1], qL[2]);
+						Vector!2 velR = mesh.edges[i].rotMat*Vector!2(qR[1], qR[2]);
+
+						qL[1] = velL[0];
+						qL[2] = velL[1];
+
+						qR[1] = velR[0];
+						qR[2] = velR[1];
+
+						mesh.edges[i].flux = F!(dims, 1, 0)(qR, qL, dt, 0);
+						mesh.edges[i].flux.writeln;
+						break;
+					case InviscidWall:
+						mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						Vector!2 velL = (1/mesh.edges[i].q[0][0])*mesh.edges[i].rotMat*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
+						double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*(velL[1]^^2.0));
+						mesh.edges[i].flux = Vector!4(0, p, 0, 0);
+						//writeln("p = ", p);
+						break;
+					default:
+						assert(false, "Unsupported boundary type");
+				}
+			}
+			else
+			{
+				mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+				mesh.edges[i].q[1] = mesh.cells[mesh.edges[i].cellIdx[1]].q;
+
+				auto qL = mesh.edges[i].q[0];
+				auto qR = mesh.edges[i].q[1];
+
+				Vector!2 velL = mesh.edges[i].rotMat*Vector!2(qL[1], qL[2]);
+				Vector!2 velR = mesh.edges[i].rotMat*Vector!2(qR[1], qR[2]);
+
+				qL[1] = velL[0];
+				qL[2] = velL[1];
+
+				qR[1] = velR[0];
+				qR[2] = velR[1];
+
+				mesh.edges[i].flux = F!(dims, 1, 0)(qR, qL, dt, 0);
+				//mesh.edges[i].flux.writeln;
+			}
 		}
-		mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
+
+		for(uint i = 0; i < mesh.cells.length; i++)
+		{
+			auto R = Vector!4(0);
+			// integrate fluxes over cell edges
+			for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+			{
+				R += mesh.cells[i].fluxMultiplier[j]*mesh.edges[mesh.cells[i].edges[j]].len*mesh.edges[mesh.cells[i].edges[j]].flux;
+			}
+			//R.writeln;
+			//mesh.cells[i].area.writeln;
+			mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
+			//mesh.cells[i].q.writeln;
+		}
+
+		auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
+		auto f = mesh.computeBoundaryForces("Airfoil");
+		auto ld = rotMat*f;
+
+		if(iterations % config.plotIter == 0)
+		{
+			import core.stdc.stdio;
+			printf("lift force = %f\t t = %f\n", ld[0], t);
+		}
+		t += dt;
+		iterations++;
 	}
 }
 
 // Structured finite volume solver
 void sfvmSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config config, double t)
 {
-	import std.algorithm : min, max, reduce;
-	import std.conv : to;
-	import std.math : approxEqual, round;
-		
 	alias Vec = Vector!dims;
 	alias Mat = Matrix!(dims, dims);
 	
@@ -280,7 +385,37 @@ void sfvmSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config config, dou
 	"dt": 0.01,
 	"tEnd": 750.0,
 	"limiter": "minmodS",
-	"flux": "rusanovFlux"
+	"flux": "rusanovFlux",
+	"plotIter": 50,
+	"saveIter": 50,
+	"initialConditions": [0.85, 0, 1, 1.4], (M, aoa, p, rho)
+	"boudaryConditions": [
+		{
+			"tag": "Bottom",
+			"type": "const",
+			"q": [0.85, 0, 1, 1.4]
+		},
+		{
+			"tag": "Top",
+			"type": "const",
+			"q": [0.85, 0, 1, 1.4]
+		},
+		{
+			"tag": "Left",
+			"type": "const",
+			"q": [0.85, 0, 1, 1.4]
+		},
+		{
+			"tag": "Right",
+			"type": "const",
+			"q": [0.85, 0, 1, 1.4]
+		},
+		{
+			"tag": "Airfoil",
+			"type": "wall",
+			"q": [0.85, 0, 1, 1.4]
+		}
+	]
 }
 +/
 struct Config
@@ -292,6 +427,11 @@ struct Config
 	string flux;
 	long saveIter;
 	long plotIter;
+	string solver;
+	double[4] ic;
+	string[] bTags;
+	BoundaryType[] bTypes;
+	double[][] bc;
 }
 
 Config loadConfig(string conf, string saveFile)
@@ -314,7 +454,54 @@ Config loadConfig(string conf, string saveFile)
 	config.tEnd = jConfig["tEnd"].floating;
 	config.saveIter = jConfig["saveIter"].integer;
 	config.plotIter = jConfig["plotIter"].integer;
-	
+	config.solver = jConfig["solver"].str;
+
+	if(config.solver == "ufvmSolver")
+	{
+		double getDouble(T)(T val)
+		{
+			if(val.type == JSON_TYPE.INTEGER)
+			{
+				return val.integer.to!double;
+			}
+			else if(val.type == JSON_TYPE.FLOAT)
+			{
+				return val.floating;
+			}
+			else
+			{
+				assert(false, "invalid type");
+			}
+		}
+
+		auto ics = jConfig["initialConditions"].array;
+		config.ic[0] = getDouble(ics[0]);
+		config.ic[1] = getDouble(ics[1]);
+		config.ic[2] = getDouble(ics[2]);
+		config.ic[3] = getDouble(ics[3]);
+
+		auto bcs = jConfig["boudaryConditions"].array;
+		for(uint i = 0; i < bcs.length; i++)
+		{
+			config.bTags ~= bcs[i]["tag"].str;
+			string bType = bcs[i]["type"].str;
+			if(bType == "fullState")
+			{
+				config.bTypes ~= BoundaryType.FullState;
+			}
+			else if(bType == "inviscidWall")
+			{
+				config.bTypes ~= BoundaryType.InviscidWall;
+			}
+			else if(bType == "constP")
+			{
+				config.bTypes ~= BoundaryType.ConstPressure;
+			}
+
+			auto state = bcs[i]["q"].array;
+			config.bc ~= [getDouble(state[0]), getDouble(state[1]), getDouble(state[2]), getDouble(state[3])];
+		}
+	}
 	return config;
 }
 
@@ -327,9 +514,15 @@ void startComputation(Config config)
 	double tEnd = config.tEnd;
 	double t = 0;
 
-	mesh = loadMesh(config.meshFile, dt, t);
-
-	mesh.updateGhosts();
+	if(config.solver == "sfvmSolver")
+	{
+		mesh = loadMesh(config.meshFile, dt, t);
+		mesh.updateGhosts();
+	}
+	else if(config.solver == "ufvmSolver")
+	{
+		umesh = parseXflowMesh(config.meshFile);
+	}
 
 	switch(config.limiter)
 	{
@@ -344,7 +537,16 @@ void startComputation(Config config)
 							writeln("Running 2D finite volume solver");
 							writeln("-limiter: "~lim);
 							writeln("-flux: "~fl);
-							sfvmSolver!(mixin(lim), mixin(fl), 4)(mesh, config, t);
+							if(config.solver == "sfvmSolver")
+							{
+								writeln("-solver: sfvmSolver");
+								sfvmSolver!(mixin(lim), mixin(fl), 4)(mesh, config, t);
+							}
+							else if(config.solver == "ufvmSolver")
+							{
+								writeln("-solver: ufvmSolver");
+								ufvmSolver!(mixin(lim), mixin(fl), 4)(umesh, config, t);
+							}
 							break;
 					}
 					default:

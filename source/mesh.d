@@ -1,10 +1,14 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.mesh;
 
+import std.algorithm;
+import std.array;
 import std.conv;
+import std.exception;
 import std.file;
 import std.math;
 import std.stdio;
+import std.string;
 
 import numd.linearalgebra.matrix;
 import numd.utility;
@@ -566,7 +570,7 @@ struct Mesh
 
 enum BoundaryType
 {
-	Const,
+	FullState,
 	ConstPressure,
 	InviscidWall
 }
@@ -598,11 +602,11 @@ struct UCell2
 	Vector!4 q;
 
 	uint[6] edges;
-	double[6] fluxMutliplier;
+	double[6] fluxMultiplier;
 	uint nEdges;
-	double area;
-	double d;
-	double perim;
+	double area = 0;
+	double d = 0;
+	double perim = 0;
 	Vector!2 centroid;
 }
 
@@ -681,6 +685,14 @@ struct UMesh2
 		bGroups = new uint[][](bTags.length);
 		for(uint i = 0; i < elements.length; i++)
 		{
+			cells[i].q = Vector!4(0);
+			cells[i].edges[] = 0;
+			cells[i].fluxMultiplier[] = 1.0;
+			cells[i].area = 0.0;
+			cells[i].d = 0.0;
+			cells[i].perim = 0;
+			cells[i].centroid = Vector!2(0);
+
 			for(uint j = 0; j < cells[i].nEdges; j++)
 			{
 				Edge edge;
@@ -697,7 +709,7 @@ struct UMesh2
 					{
 						edges[k].cellIdx[1] = i;
 						edgeidx = k;
-						cells[i].fluxMutliplier[j] = -1.0;
+						cells[i].fluxMultiplier[j] = -1.0;
 					}
 					else
 					{
@@ -706,7 +718,7 @@ struct UMesh2
 						Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[1]][0] - nodes[ni[0]][0]);
 						Vector!2 tangent = Vector!2(-normal[1], normal[0]);
 						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
-						cells[i].fluxMutliplier[j] = 1.0;
+						cells[i].fluxMultiplier[j] = 1.0;
 						edges ~= edge;
 						edgeidx = edges.length.to!uint - 1;
 					}
@@ -719,24 +731,181 @@ struct UMesh2
 					Vector!2 tangent = Vector!2(-normal[1], normal[0]);
 					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 					edge.boundaryTag = bTags[bGroup];
-					bGroups[bGroup] ~= j;
+					bGroups[bGroup] ~= edges.length.to!uint;
+					cells[i].fluxMultiplier[j] = 1.0;
 					edges ~= edge;
 					edgeidx = edges.length.to!uint - 1;
 				}
 
 				cells[i].edges[j] = edgeidx;
 				cells[i].perim += edges[edgeidx].len;
-				cells[i].area += Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]).determinant;
+				auto mat = Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]);
+				//mat.writeln;
+				cells[i].area += mat.determinant;
+				//cells[i].area.writeln;
 				cells[i].centroid[0] += (nodes[ni[0]][0] + nodes[ni[1]][0])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 				cells[i].centroid[1] += (nodes[ni[0]][1] + nodes[ni[1]][1])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 			}
 
 			cells[i].area *= 0.5;
+			//cells[i].area.writeln;
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
 			cells[i].centroid[0] *= 1/(6*cells[i].area);
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
 		}
 	}
+
+	@nogc Vector!2 computeBoundaryForces(string bTag)
+	{
+		auto f = Vector!2(0);
+
+		auto bgIdx = bTags.countUntil(bTag);
+		if(bgIdx > -1)
+		{
+			for(uint i = 0; i < bGroups[bgIdx].length; i++)
+			{
+				edges[bGroups[bgIdx][i]].q[0] = cells[edges[bGroups[bgIdx][i]].cellIdx[0]].q;
+				Vector!2 velL = (1/edges[bGroups[bgIdx][i]].q[0][0])*edges[bGroups[bgIdx][i]].rotMat*Vector!2(edges[bGroups[bgIdx][i]].q[0][1], edges[bGroups[bgIdx][i]].q[0][2]);
+				double p = (gamma - 1)*(edges[bGroups[bgIdx][i]].q[0][3] - 0.5*edges[bGroups[bgIdx][i]].q[0][0]*(velL[1]^^2.0));
+				auto normal = Vector!2(edges[bGroups[bgIdx][i]].rotMat[0], edges[bGroups[bgIdx][i]].rotMat[2]);
+				auto len = edges[bGroups[bgIdx][i]].len;
+				f += p*len*normal;
+				//edges[bGroups[bgIdx][i]].flux = Vector!4(0, p, 0, 0);
+			}
+		}
+
+		return f;
+	}
+}
+
+char[][] readCleanLine(ref File file)
+{
+	return file.readln.strip.chomp.detab.split(' ').filter!(a => a != "").array;
+}
+
+UMesh2 parseXflowMesh(string meshFile)
+{
+	UMesh2 mesh;
+	auto file = File(meshFile);
+
+	auto headerLine = file.readCleanLine;
+	immutable uint nNodes = headerLine[0].to!uint;
+	immutable uint nElems = headerLine[1].to!uint;
+	immutable uint nDims = headerLine[2].to!uint;
+
+	enforce(nDims == 2, new Exception(nDims.to!string~" dimensional meshes not supported"));
+
+	writeln("Importing XFlow mesh "~meshFile);
+	writeln("    nNodes = ", nNodes);
+	writeln("    nElems = ", nElems);
+	writeln("    nDims = ", nDims);
+
+	for(uint i = 0; i < nNodes; i++)
+	{
+		mesh.nodes ~= file.readCleanLine.to!(double[]);
+	}
+
+	immutable uint nBoundaryGroups = file.readCleanLine[0].to!uint;
+	writeln("    nBoundaryGroups = ", nBoundaryGroups);
+
+	uint[][] bNodes;
+	size_t[] bGroupStart;
+	string[] bTags;
+	for(uint i = 0; i < nBoundaryGroups; i++)
+	{
+		auto boundaryHeader = file.readCleanLine;
+		immutable uint bFaces = boundaryHeader[0].to!uint;
+		immutable uint nodesPerFace = boundaryHeader[1].to!uint;
+		string faceTag;
+		if(boundaryHeader.length == 3)
+		{
+			faceTag = boundaryHeader[2].to!string;
+			bTags ~= faceTag;
+		}
+
+		writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
+
+		bGroupStart ~= bNodes.length;
+		for(uint j = 0; j < bFaces; j++)
+		{
+			auto bn = file.readCleanLine.to!(uint[]);
+			bNodes ~= [bn[0] - 1, bn[$-1] - 1];
+		}
+	}
+
+	uint[][] elements;
+	uint foundElements;
+	uint faces;
+	uint eGroup;
+	while(foundElements < nElems)
+	{
+		char[][] elementLine = file.readCleanLine;
+		uint q = elementLine[1].to!uint;
+		uint subElements = elementLine[0].to!uint;
+
+		enforce((q < 4) && (q != 0), new Exception("Unsuported q"));
+
+		if(elementLine[2].canFind("Tri"))
+		{
+			faces = 3;
+		}
+		else if(elementLine[2].canFind("Quad"))
+		{
+			faces = 4;
+		}
+		else
+		{
+			throw new Exception("Unsuported cell type");
+		}
+
+		writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
+
+		for(uint i = 0; i < subElements; i++)
+		{
+			auto els = file.readCleanLine.to!(uint[]);
+
+			if(q == 1)
+			{
+				elements ~= els;
+			}
+			else if(q == 2)
+			{
+				if(faces == 3)
+				{
+					elements ~= [els[0], els[2], els[5]];
+				}
+				else
+				{
+					elements ~= [els[0], els[2], els[8], els[6]];
+				}
+			}
+			else
+			{
+				if(faces == 3)
+				{
+					elements ~= [els[0], els[3], els[9]];
+				}
+				else
+				{
+					elements ~= [els[0], els[3], els[15], els[12]];
+				}
+			}
+		}
+		foundElements += subElements;
+	}
+	
+	mesh.cells = new UCell2[nElems];
+	for(uint i = 0; i < nElems; i++)
+	{
+		mesh.cells[i].nEdges = faces;
+	}
+	mesh.elements = elements;
+	mesh.bNodes = bNodes;
+	mesh.bGroupStart = bGroupStart;
+	mesh.bTags = bTags;
+	mesh.buildMesh;
+
+	return mesh;
 }
 
 void saveMesh(ref Mesh mesh, string filename, double dt, double t)
@@ -1074,7 +1243,7 @@ void printMesh(ref Mesh mesh, string file)
 	std.file.write(file, output);
 }
 
-Vec buildQ(double rho, double u, double v, double p)
+@nogc Vec buildQ(double rho, double u, double v, double p)
 {
 	return Vec([rho, rho*u, rho*v, p/(gamma - 1) + 0.5*rho*(u^^2.0 + v^^2.0)]);
 }
