@@ -1,7 +1,7 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.solver;
 
-import std.algorithm : min, max, reduce;
+import std.algorithm : canFind, min, max, reduce;
 import std.conv;
 import std.json;
 import std.file;
@@ -115,15 +115,22 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						qR[1] = velR[0];
 						qR[2] = velR[1];
 
-						mesh.edges[i].flux = F!(dims, 1, 0)(qR, qL, dt, 0);
-						mesh.edges[i].flux.writeln;
+						mesh.edges[i].flux = F!(dims, 1, 0)(qL, qR, dt, 0);
+						//mesh.edges[i].flux.writeln;
+						if(mesh.edges[i].flux[0].to!string.canFind("nan"))
+						{
+							assert(false, "Got nan on FullState boundary");
+						}
 						break;
 					case InviscidWall:
 						mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
 						Vector!2 velL = (1/mesh.edges[i].q[0][0])*mesh.edges[i].rotMat*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
 						double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*(velL[1]^^2.0));
 						mesh.edges[i].flux = Vector!4(0, p, 0, 0);
-						//writeln("p = ", p);
+						if(mesh.edges[i].flux[1].to!string.canFind("nan"))
+						{
+							assert(false, "Got nan on wall boundary");
+						}
 						break;
 					default:
 						assert(false, "Unsupported boundary type");
@@ -146,7 +153,19 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 				qR[1] = velR[0];
 				qR[2] = velR[1];
 
-				mesh.edges[i].flux = F!(dims, 1, 0)(qR, qL, dt, 0);
+				mesh.edges[i].flux = F!(dims, 1, 0)(qL, qR, dt, 0);
+				if(mesh.edges[i].flux[1].to!string.canFind("nan"))
+				{
+					writeln("pL = ", getPressure(mesh.edges[i].q[0]));
+					writeln("pR = ", getPressure(mesh.edges[i].q[1]));
+					writeln("Flux = ", mesh.edges[i].flux);
+					writeln("qL = ", mesh.edges[i].q[0]);
+					writeln("qR = ", mesh.edges[i].q[1]);
+					writeln("cell L = ", mesh.edges[i].cellIdx[0]);
+					writeln("cell R = ", mesh.edges[i].cellIdx[1]);
+					writeln("normal = ", mesh.edges[i].normal);
+					assert(false, "Got nan on interior edge");
+				}
 				//mesh.edges[i].flux.writeln;
 			}
 		}

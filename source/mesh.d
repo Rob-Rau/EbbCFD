@@ -580,6 +580,9 @@ struct Edge
 	uint[2] nodeIdx;
 	double len;
 
+	Vector!2 normal;
+	Vector!2 tangent;
+
 	Matrix!(2, 2) rotMat;
 	// neighboring cells index
 	uint[2] cellIdx;
@@ -715,8 +718,10 @@ struct UMesh2
 					{
 						edge.cellIdx[0] = i;
 						edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
-						Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[1]][0] - nodes[ni[0]][0]);
+						Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
 						Vector!2 tangent = Vector!2(-normal[1], normal[0]);
+						edge.normal = normal;
+						edge.tangent = tangent;
 						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 						cells[i].fluxMultiplier[j] = 1.0;
 						edges ~= edge;
@@ -727,8 +732,10 @@ struct UMesh2
 				{
 					edge.cellIdx[0] = i;
 					edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
-					Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[1]][0] - nodes[ni[0]][0]);
+					Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
 					Vector!2 tangent = Vector!2(-normal[1], normal[0]);
+					edge.normal = normal;
+					edge.tangent = tangent;
 					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 					edge.boundaryTag = bTags[bGroup];
 					bGroups[bGroup] ~= edges.length.to!uint;
@@ -891,7 +898,9 @@ UMesh2 parseXflowMesh(string meshFile)
 				}
 			}
 		}
+
 		foundElements += subElements;
+		eGroup++;
 	}
 	
 	mesh.cells = new UCell2[nElems];
