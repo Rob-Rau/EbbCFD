@@ -597,6 +597,7 @@ struct Edge
 	bool isBoundary;
 	string boundaryTag;
 	BoundaryType boundaryType;
+	Vector!2 bNormal;
 }
 
 struct UCell2
@@ -642,7 +643,7 @@ struct UMesh2
 		return cells[i];
 	}
 
-	private bool isBoundaryEdge(ref Edge edge, ref uint bGroup)
+	private bool isBoundaryEdge(ref Edge edge, ref uint bGroup, ref uint bNodeIdx)
 	{
 		for(uint i = 0; i < bNodes.length; i++)
 		{
@@ -660,6 +661,7 @@ struct UMesh2
 				{
 					bGroup = bGroupStart.length.to!uint - 1;
 				}
+				bNodeIdx = i;
 				return true;
 			}
 		}
@@ -704,7 +706,8 @@ struct UMesh2
 				uint[] ni = edge.nodeIdx;
 
 				uint bGroup;
-				edge.isBoundary = isBoundaryEdge(edge, bGroup);
+				uint bNodeIdx;
+				edge.isBoundary = isBoundaryEdge(edge, bGroup, bNodeIdx);
 				if(!edge.isBoundary)
 				{
 					uint k = 0;
@@ -738,6 +741,8 @@ struct UMesh2
 					edge.tangent = tangent;
 					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 					edge.boundaryTag = bTags[bGroup];
+					edge.bNormal = (1/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
+
 					bGroups[bGroup] ~= edges.length.to!uint;
 					cells[i].fluxMultiplier[j] = 1.0;
 					edges ~= edge;
@@ -772,14 +777,134 @@ struct UMesh2
 			for(uint i = 0; i < bGroups[bgIdx].length; i++)
 			{
 				double p = getPressure(cells[edges[bGroups[bgIdx][i]].cellIdx[0]].q);
-				auto normal = Vector!2(edges[bGroups[bgIdx][i]].rotMat[0], edges[bGroups[bgIdx][i]].rotMat[2]);
+				//auto normal = Vector!2(edges[bGroups[bgIdx][i]].rotMat[0], edges[bGroups[bgIdx][i]].rotMat[2]);
 				auto len = edges[bGroups[bgIdx][i]].len;
-				f += p*len*normal;
+				f += p*len*edges[bGroups[bgIdx][i]].bNormal;
 			}
 		}
 
 		return f;
 	}
+}
+
+import core.stdc.stdio;
+
+@nogc void saveMatlabSolution(ref UMesh2 mesh, char* filename)
+{
+	import std.experimental.allocator.mallocator : Mallocator;
+	import std.bitmanip : write;
+
+	ulong nodesSize = cast(ulong)(2*mesh.nodes.length*double.sizeof);
+	ulong e2nSize = cast(ulong)(3*mesh.elements.length*double.sizeof);
+	ulong slnSize = cast(ulong)(4*mesh.cells.length*double.sizeof);
+	ulong ieSize = 0;
+	ulong beSize = 0;
+	for(uint i = 0; i < mesh.edges.length; i++)
+	{
+		if(!mesh.edges[i].isBoundary)
+		{
+			ieSize += 4;
+		}
+		else
+		{
+			beSize += 4;
+		}
+	}
+	
+	ieSize *= double.sizeof;
+	beSize *= double.sizeof;
+
+	ulong bNameSize = 0;
+	for(uint i = 0; i < mesh.bTags.length; i++)
+	{
+		bNameSize += (uint.sizeof + mesh.bTags[i].length);  
+	}
+
+	immutable ulong nodeHeaderSize = ulong.sizeof;
+	immutable ulong e2nHeaderSize = ulong.sizeof;
+	immutable ulong ieHeaderSize = ulong.sizeof;
+	immutable ulong beHeaderSize = ulong.sizeof;
+	immutable ulong tagHeaderSize = ulong.sizeof;
+	immutable ulong slnHeaderSize = ulong.sizeof;
+
+	ulong totSize = nodeHeaderSize + e2nHeaderSize + ieHeaderSize + beHeaderSize + tagHeaderSize + slnHeaderSize;
+	totSize += nodesSize + e2nSize + ieSize + beSize + bNameSize + slnSize;
+	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
+
+	size_t offset = 0;
+
+	buffer.write!ulong((nodesSize/(2*double.sizeof)), &offset);
+	for(uint i = 0; i < mesh.nodes.length; i++)
+	{
+		buffer.write!(double)(mesh.nodes[i][0], &offset);
+		buffer.write!(double)(mesh.nodes[i][1], &offset);
+	}
+
+	buffer.write!ulong((e2nSize/(3*double.sizeof)), &offset);
+	for(uint i = 0; i < mesh.elements.length; i++)
+	{
+		buffer.write!(double)(mesh.elements[i][0], &offset);
+		buffer.write!(double)(mesh.elements[i][1], &offset);
+		buffer.write!(double)(mesh.elements[i][2], &offset);
+	}
+
+	buffer.write!ulong((ieSize/(4*double.sizeof)), &offset);
+	for(uint i = 0; i < mesh.edges.length; i++)
+	{
+		if(!mesh.edges[i].isBoundary)
+		{
+			buffer.write!(double)(mesh.edges[i].nodeIdx[0] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].nodeIdx[1] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].cellIdx[0] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].cellIdx[1] + 1, &offset);
+		}
+	}
+
+	buffer.write!ulong((beSize/(4*double.sizeof)), &offset);
+	for(uint i = 0; i < mesh.edges.length; i++)
+	{
+		if(mesh.edges[i].isBoundary)
+		{
+			buffer.write!(double)(mesh.edges[i].nodeIdx[0] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].nodeIdx[1] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].cellIdx[0] + 1, &offset);
+			auto bgIdx = mesh.bTags.countUntil(mesh.edges[i].boundaryTag) + 1;
+			buffer.write!(double)(bgIdx, &offset);
+		}
+	}
+
+	buffer.write!ulong(mesh.bTags.length, &offset);
+	for(uint i = 0; i < mesh.bTags.length; i++)
+	{
+		buffer.write!uint(cast(uint)mesh.bTags[i].length, &offset);
+		for(uint j = 0; j < mesh.bTags[i].length; j++)
+		{
+			buffer.write!char(mesh.bTags[i][j], &offset);
+		}
+	}
+
+	buffer.write!ulong(mesh.cells.length, &offset);
+	for(uint i = 0; i < mesh.cells.length; i++)
+	{
+		buffer.write!double(mesh.cells[i].q[0], &offset);
+		buffer.write!double(mesh.cells[i].q[1], &offset);
+		buffer.write!double(mesh.cells[i].q[2], &offset);
+		buffer.write!double(mesh.cells[i].q[3], &offset);
+	}
+
+	auto file = fopen(filename, "wb");
+	ulong writeOffset = 0;
+	while(writeOffset < buffer.length)
+	{
+		ulong chunkSize = 1024*1024*1024;
+		if(buffer.length - writeOffset < chunkSize)
+		{
+			chunkSize = buffer.length - writeOffset;
+		}
+		fwrite(buffer[writeOffset..writeOffset+chunkSize].ptr, ubyte.sizeof, chunkSize, file);
+		writeOffset += chunkSize;
+	}
+	fclose(file);
 }
 
 char[][] readCleanLine(ref File file)

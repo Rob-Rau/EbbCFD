@@ -32,6 +32,7 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
+//void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
 {
 	double dt = config.dt;
 	uint iterations = 0;
@@ -106,11 +107,12 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 		}
 	}
 
+	uint saveItr = 0;
 	// Start the solving!!
 	while(!approxEqual(t, config.tEnd))
 	{
 		//dt = ((mesh[0,0].dx*mesh[0,0].dy)/(mesh.getSpeed2.reduce!max + mesh.getSoundSpeed.reduce!max));
-		printf("dt = %f\n", dt);
+		//printf("dt = %f\n", dt);
 		for(uint i = 0; i < mesh.edges.length; i++)
 		{
 			if(mesh.edges[i].isBoundary)
@@ -185,6 +187,7 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 			}
 		}
 
+		double Rmax = 0;
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
 			auto R = Vector!4(0);
@@ -194,6 +197,13 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 				R += mesh.cells[i].fluxMultiplier[j]*mesh.edges[mesh.cells[i].edges[j]].len*mesh.edges[mesh.cells[i].edges[j]].flux;
 			}
 
+			for(uint j = 0; j < dims; j++)
+			{
+				if(std.math.abs(R[j]) > Rmax)
+				{
+					Rmax = std.math.abs(R[j]);
+				}
+			}
 			mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
 		}
 
@@ -205,8 +215,18 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 		{
 			import core.stdc.stdio;
 			printf("lift force = %f\t t = %f\n", ld[0], t);
+			printf("Rmax = %10.20f\t t = %f\n", Rmax, t);
 		}
 		
+		if(iterations % config.saveIter == 0)
+		{
+			import core.stdc.stdio : snprintf;
+			char[512] filename;
+			filename[] = 0;
+			snprintf(filename.ptr, 512, "save_%d.msln", saveItr);
+			saveMatlabSolution(mesh, filename.ptr);
+			saveItr++;
+		}
 		t += dt;
 		iterations++;
 	}
