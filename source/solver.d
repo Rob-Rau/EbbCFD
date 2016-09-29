@@ -31,7 +31,7 @@ double[] abs(double[] data)
 alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 
 // Unstructured finite volume solver
-void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
 {
 	double dt = config.dt;
 	uint iterations = 0;
@@ -51,6 +51,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 		mesh.cells[i].q = buildQ(rho, u, v, p);
 	}
 
+	// Setup bc's
 	for(uint i = 0; i < mesh.bGroups.length; i++)
 	{
 		uint findBcIndex(string tag)
@@ -62,24 +63,40 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 					return j;
 				}
 			}
-			assert(false, "Could not find match boundary condition tag");
+			ex.msg = "Could not find match boundary condition tag";
+			ex.file = __FILE__;
+			ex.line = __LINE__;
+			throw ex;
 		}
 
 		uint bcIdx = findBcIndex(mesh.bTags[i]);
 
 		for(uint j = 0; j < mesh.bGroups[i].length; j++)
 		{
-			assert(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
-			assert(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.bTags[bcIdx], "Incorrect boundary tag");
+			if(!mesh.edges[mesh.bGroups[i][j]].isBoundary)
+			{
+				ex.msg = "Edge not boundary edge but should be";
+				ex.file = __FILE__;
+				ex.line = __LINE__;
+				throw ex;
+			}
 
-			double M = config.bc[bcIdx][0];
-			double aoa = config.bc[bcIdx][1] * (PI/180);
-			double p = config.bc[bcIdx][2];
-			double rho = config.bc[bcIdx][3];
-			double a = sqrt(gamma*(p/rho));
-			double U = M*a;
-			double u = U*cos(aoa);
-			double v = U*sin(aoa);
+			if(mesh.edges[mesh.bGroups[i][j]].boundaryTag != config.bTags[bcIdx])
+			{
+				ex.msg = "Incorrect boundary tag";
+				ex.file = __FILE__;
+				ex.line = __LINE__;
+				throw ex;
+			}
+
+			immutable double M = config.bc[bcIdx][0];
+			immutable double aoa = config.bc[bcIdx][1] * (PI/180);
+			immutable double p = config.bc[bcIdx][2];
+			immutable double rho = config.bc[bcIdx][3];
+			immutable double a = sqrt(gamma*(p/rho));
+			immutable double U = M*a;
+			immutable double u = U*cos(aoa);
+			immutable double v = U*sin(aoa);
 			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.bTypes[bcIdx];
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
@@ -89,10 +106,11 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 		}
 	}
 
+	// Start the solving!!
 	while(!approxEqual(t, config.tEnd))
 	{
-		//writeln;
-		//writeln;
+		//dt = ((mesh[0,0].dx*mesh[0,0].dy)/(mesh.getSpeed2.reduce!max + mesh.getSoundSpeed.reduce!max));
+		printf("dt = %f\n", dt);
 		for(uint i = 0; i < mesh.edges.length; i++)
 		{
 			if(mesh.edges[i].isBoundary)
@@ -106,34 +124,35 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						auto qL = mesh.edges[i].q[0];
 						auto qR = mesh.edges[i].q[1];
 
-						Vector!2 velL = mesh.edges[i].rotMat*Vector!2(qL[1], qL[2]);
-						Vector!2 velR = mesh.edges[i].rotMat*Vector!2(qR[1], qR[2]);
-
-						qL[1] = velL[0];
-						qL[2] = velL[1];
-
-						qR[1] = velR[0];
-						qR[2] = velR[1];
-
-						mesh.edges[i].flux = F!(dims, 1, 0)(qL, qR, dt, 0);
-						//mesh.edges[i].flux.writeln;
-						if(mesh.edges[i].flux[0].to!string.canFind("nan"))
+						mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal);
+						if(mesh.edges[i].flux[0].isNaN)
 						{
-							assert(false, "Got nan on FullState boundary");
+							ex.msg = "Got nan on FullState boundary";
+							ex.file = __FILE__;
+							ex.line = __LINE__;
+							throw ex;
 						}
 						break;
 					case InviscidWall:
 						mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
-						Vector!2 velL = (1/mesh.edges[i].q[0][0])*mesh.edges[i].rotMat*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
-						double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*(velL[1]^^2.0));
-						mesh.edges[i].flux = Vector!4(0, p, 0, 0);
-						if(mesh.edges[i].flux[1].to!string.canFind("nan"))
+						Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
+						auto vel = (velP - (velP.dot(mesh.edges[i].normal))*mesh.edges[i].normal).magnitude;
+						double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel);
+						mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
+
+						if(mesh.edges[i].flux[1].isNaN)
 						{
-							assert(false, "Got nan on wall boundary");
+							ex.msg = "Got nan on wall boundary";
+							ex.file = __FILE__;
+							ex.line = __LINE__;
+							throw ex;
 						}
 						break;
 					default:
-						assert(false, "Unsupported boundary type");
+						ex.msg = "Unsupported boundary type";
+						ex.file = __FILE__;
+						ex.line = __LINE__;
+						throw ex;
 				}
 			}
 			else
@@ -144,18 +163,11 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];
 
-				Vector!2 velL = mesh.edges[i].rotMat*Vector!2(qL[1], qL[2]);
-				Vector!2 velR = mesh.edges[i].rotMat*Vector!2(qR[1], qR[2]);
+				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal);
 
-				qL[1] = velL[0];
-				qL[2] = velL[1];
-
-				qR[1] = velR[0];
-				qR[2] = velR[1];
-
-				mesh.edges[i].flux = F!(dims, 1, 0)(qL, qR, dt, 0);
-				if(mesh.edges[i].flux[1].to!string.canFind("nan"))
+				if(mesh.edges[i].flux[1].isNaN)
 				{
+					/+
 					writeln("pL = ", getPressure(mesh.edges[i].q[0]));
 					writeln("pR = ", getPressure(mesh.edges[i].q[1]));
 					writeln("Flux = ", mesh.edges[i].flux);
@@ -164,9 +176,12 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 					writeln("cell L = ", mesh.edges[i].cellIdx[0]);
 					writeln("cell R = ", mesh.edges[i].cellIdx[1]);
 					writeln("normal = ", mesh.edges[i].normal);
-					assert(false, "Got nan on interior edge");
+					+/
+					ex.msg = "Got nan on interior edge";
+					ex.file = __FILE__;
+					ex.line = __LINE__;
+					throw ex;
 				}
-				//mesh.edges[i].flux.writeln;
 			}
 		}
 
@@ -178,10 +193,8 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 			{
 				R += mesh.cells[i].fluxMultiplier[j]*mesh.edges[mesh.cells[i].edges[j]].len*mesh.edges[mesh.cells[i].edges[j]].flux;
 			}
-			//R.writeln;
-			//mesh.cells[i].area.writeln;
+
 			mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
-			//mesh.cells[i].q.writeln;
 		}
 
 		auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
@@ -193,11 +206,12 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 			import core.stdc.stdio;
 			printf("lift force = %f\t t = %f\n", ld[0], t);
 		}
+		
 		t += dt;
 		iterations++;
 	}
 }
-
+/+
 // Structured finite volume solver
 void sfvmSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config config, double t)
 {
@@ -397,7 +411,7 @@ void sfvmSolver(alias S, alias F, size_t dims)(ref Mesh mesh, Config config, dou
 		}
 	}
 }
-
++/
 /+
 {
 	"mesh": "../box.mesh",
@@ -458,6 +472,22 @@ Config loadConfig(string conf, string saveFile)
 	JSONValue jConfig = parseJSON(conf);
 	Config config;
 
+	double getDouble(T)(T val)
+	{
+		if(val.type == JSON_TYPE.INTEGER)
+		{
+			return val.integer.to!double;
+		}
+		else if(val.type == JSON_TYPE.FLOAT)
+		{
+			return val.floating;
+		}
+		else
+		{
+			assert(false, "invalid type");
+		}
+	}
+
 	if(saveFile == "")
 	{
 		config.meshFile = jConfig["mesh"].str;
@@ -470,29 +500,13 @@ Config loadConfig(string conf, string saveFile)
 	config.limiter = jConfig["limiter"].str;
 	config.flux = jConfig["flux"].str;
 	config.dt = jConfig["dt"].floating;
-	config.tEnd = jConfig["tEnd"].floating;
+	config.tEnd = getDouble(jConfig["tEnd"]);
 	config.saveIter = jConfig["saveIter"].integer;
 	config.plotIter = jConfig["plotIter"].integer;
 	config.solver = jConfig["solver"].str;
 
 	if(config.solver == "ufvmSolver")
 	{
-		double getDouble(T)(T val)
-		{
-			if(val.type == JSON_TYPE.INTEGER)
-			{
-				return val.integer.to!double;
-			}
-			else if(val.type == JSON_TYPE.FLOAT)
-			{
-				return val.floating;
-			}
-			else
-			{
-				assert(false, "invalid type");
-			}
-		}
-
 		auto ics = jConfig["initialConditions"].array;
 		config.ic[0] = getDouble(ics[0]);
 		config.ic[1] = getDouble(ics[1]);
@@ -503,7 +517,7 @@ Config loadConfig(string conf, string saveFile)
 		for(uint i = 0; i < bcs.length; i++)
 		{
 			config.bTags ~= bcs[i]["tag"].str;
-			string bType = bcs[i]["type"].str;
+			immutable string bType = bcs[i]["type"].str;
 			if(bType == "fullState")
 			{
 				config.bTypes ~= BoundaryType.FullState;
@@ -526,57 +540,66 @@ Config loadConfig(string conf, string saveFile)
 
 void startComputation(Config config)
 {
-	Mesh mesh;
-	UMesh2 umesh;
-
-	double dt = config.dt;
-	double tEnd = config.tEnd;
-	double t = 0;
-
-	if(config.solver == "sfvmSolver")
+	try
 	{
-		mesh = loadMesh(config.meshFile, dt, t);
-		mesh.updateGhosts();
-	}
-	else if(config.solver == "ufvmSolver")
-	{
-		umesh = parseXflowMesh(config.meshFile);
-	}
+		Mesh mesh;
+		UMesh2 umesh;
 
-	switch(config.limiter)
-	{
-		foreach(lim; limiterList)
+		double dt = config.dt;
+		double t = 0;
+
+		auto ex = new Exception("No error");
+
+		if(config.solver == "sfvmSolver")
 		{
-			case lim:
-				switch(config.flux)
-				{
-					foreach(fl; fluxList)
+			mesh = loadMesh(config.meshFile, dt, t);
+			mesh.updateGhosts();
+		}
+		else if(config.solver == "ufvmSolver")
+		{
+			umesh = parseXflowMesh(config.meshFile);
+		}
+
+		switch(config.limiter)
+		{
+			foreach(lim; limiterList)
+			{
+				case lim:
+					switch(config.flux)
 					{
-						case fl:
-							writeln("Running 2D finite volume solver");
-							writeln("-limiter: "~lim);
-							writeln("-flux: "~fl);
-							if(config.solver == "sfvmSolver")
-							{
-								writeln("-solver: sfvmSolver");
-								sfvmSolver!(mixin(lim), mixin(fl), 4)(mesh, config, t);
-							}
-							else if(config.solver == "ufvmSolver")
-							{
-								writeln("-solver: ufvmSolver");
-								ufvmSolver!(mixin(lim), mixin(fl), 4)(umesh, config, t);
-							}
+						foreach(fl; fluxList)
+						{
+							case fl:
+								writeln("Running 2D finite volume solver");
+								writeln("-limiter: "~lim);
+								writeln("-flux: "~fl);
+								if(config.solver == "sfvmSolver")
+								{
+									writeln("-solver: sfvmSolver");
+									//sfvmSolver!(mixin(lim), mixin(fl), 4)(mesh, config, t);
+								}
+								else if(config.solver == "ufvmSolver")
+								{
+									writeln("-solver: ufvmSolver");
+									ufvmSolver!(mixin(lim), mixin(fl), 4)(umesh, config, t, ex);
+								}
+								break;
+						}
+						default:
+							writeln("Invalid flux function");
 							break;
 					}
-					default:
-						writeln("Invalid flux function");
-						break;
-				}
+					break;
+			}
+			default:
+				writeln("Invalid limiter function");
 				break;
 		}
-		default:
-			writeln("Invalid limiter function");
-			break;
+	}
+	catch(Exception ex)
+	{
+		writeln("Solver encountered an error: ", ex.msg);
+		writeln("exiting");
 	}
 }
 

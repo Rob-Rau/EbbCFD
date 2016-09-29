@@ -8,7 +8,8 @@ import numd.linearalgebra.matrix;
 
 import ebb.euler;
 
-alias fluxList = aliasSeqOf!(["rusanovFlux", "roeFlux"]);
+//alias fluxList = aliasSeqOf!(["rusanovFlux", "roeFlux"]);
+alias fluxList = aliasSeqOf!(["roeFlux"]);
 
 enum fluxDir
 {
@@ -16,8 +17,12 @@ enum fluxDir
 	yDir
 }
 
-Vector!dims physicalFlux(fluxDir dir, size_t dims)(double p, double u, double v, double rho, double e)
+@nogc Vector!dims physicalFlux(size_t dims)(double p, double u, double v, double rho, double e, Vector!2 n)
 {
+	Vector!dims f = Vector!dims([rho*u, p + rho*u^^2.0, rho*u*v, u*(p + e)]);
+	Vector!dims h = Vector!dims([rho*v, rho*u*v, p + rho*v^^2.0, v*(p + e)]);
+	return f*n[0] + h*n[1];
+	/+
 	static if(dir == fluxDir.xDir)
 	{
 		return Vector!dims([rho*u, p + rho*u^^2.0, rho*u*v, u*(p + e)]);
@@ -26,6 +31,7 @@ Vector!dims physicalFlux(fluxDir dir, size_t dims)(double p, double u, double v,
 	{
 		return Vector!dims([rho*v, rho*u*v, p + rho*v^^2.0, v*(p + e)]);
 	}
+	+/
 }
 /+
 Vector!dims physicalFlux(size_t dims)(Vector!dims u)
@@ -192,6 +198,7 @@ Vector!dims godunovFlux(size_t dims)(Vector!dims uL, Vector!dims uR, double dt, 
 	return flux;
 }
 
+// Vector!dims rusanovFlux(size_t dims)(Vector!dims qL, Vector!dims qR, Vector!(dims - 2) n)
 Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR, double dt, double dx)
 {
 	alias Vec = Vector!dims;
@@ -240,17 +247,19 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 /++
 	Uses my matrix operations
 +/
-Vector!dims roeFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR, double dt, double dx)
+@nogc Vector!dims roeFlux(size_t dims)(Vector!dims qL, Vector!dims qR, Vector!(dims - 2) n)
 {
 	alias Vec = Vector!dims;
 	alias Mat = Matrix!(dims, dims);
 	
 	Vec flux;
-	/+
+
 	// Left state variables
 	double rhoL = (qL[0]);
 	double uL = qL[1]/rhoL;
 	double vL = qL[2]/rhoL;
+	auto rhoVelL = rhoL*Vector!2(uL, vL);
+
 	double pL = ((gamma - 1)*(qL[3] - 0.5*rhoL*(uL^^2.0 + vL^^2.0)));
 	double aL = sqrt(gamma*(pL/rhoL));
 	double hL = (qL[3] + pL)/rhoL;
@@ -259,93 +268,61 @@ Vector!dims roeFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR,
 	double rhoR = (qR[0]);
 	double uR = qR[1]/rhoR;
 	double vR = qR[2]/rhoR;
+	auto rhoVelR = rhoR*Vector!2(uR, vR);
 	double pR = ((gamma - 1)*(qR[3] - 0.5*rhoR*(uR^^2.0 + vR^^2.0)));
 	double aR = sqrt(gamma*(pR/rhoR));
 	double hR = (qR[3] + pR)/rhoR;
 
 	// average values
 	double rho = sqrt(rhoL*rhoR);
-	double u = (sqrt((rhoL))*uL + sqrt((rhoR))*uR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	double v = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	auto vel = Vector!2(0);
+	vel[0] = (sqrt((rhoL))*uL + sqrt((rhoR))*uR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	vel[1] = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	double u = vel.dot(n);
+
 	double h = (sqrt((rhoL))*hL + sqrt((rhoR))*hR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	double a = sqrt( (gamma - 1.0)*(h - 0.5*(v^^2.0 + u^^2.0)));
-	+/
-	// Left state variables
-	double rhoL = (qL[0]);
-	double uL = qL[1]/rhoL;
-	double vL = qL[2]/rhoL;
-	double pL = ((gamma - 1)*(qL[3] - 0.5*rhoL*(uL^^2.0 + vL^^2.0)));
-	double aL = sqrt(gamma*(pL/rhoL));
-	double hL = (qL[3] + pL)/rhoL;
-	
-	// Right state variables
-	double rhoR = (qR[0]);
-	double uR = qR[1]/rhoR;
-	double vR = qR[2]/rhoR;
-	double pR = ((gamma - 1)*(qR[3] - 0.5*rhoR*(uR^^2.0 + vR^^2.0)));
-	double aR = sqrt(gamma*(pR/rhoR));
-	double hR = (qR[3] + pR)/rhoR;
+	double a = sqrt( (gamma - 1.0)*(h - 0.5*(vel.magnitude^^2.0)));
 
-	// average values
-	double rho = sqrt(rhoL*rhoR);
-	double u = (sqrt((rhoL))*uL + sqrt((rhoR))*uR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	double v = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	double h = (sqrt((rhoL))*hL + sqrt((rhoR))*hR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	double a = sqrt( (gamma - 1.0)*(h - 0.5*(v^^2.0 + u^^2.0)));
+	auto dRhoV = rhoVelR - rhoVelL;
+	auto dRho = rhoR - rhoL;
+	auto dRhoE = qR[3] - qL[3];
 
-	auto Rmat = R!(kx, ky)(u, v, a);
-	auto absLam = Lam!(kx, ky, abs)(u, v, a);
-	auto Lmat = L!(kx, ky)(u, v, a);
+	double lam1 = abs(u + a);
+	double lam2 = abs(u - a);
+	double lam3 = abs(u);
+	double lam4 = abs(u);
 
-	static if((kx == 1) && (ky == 0))
+	immutable double eps = 0.01*a;
+	if(lam1 < eps)
 	{
-		double Da = fmax(0, 4.0*((uR - aR) - (uL - aL)));
-		if(absLam[$-1] < 0.5*Da)
-		{
-			absLam[$-1] = absLam[$-1]^^2.0/Da + 0.25*Da;
-		}
-		Da = fmax(0, 4.0*((uR + aR) - (uL + aL)));
-		if(absLam[10] < 0.5*Da)
-		{
-			absLam[10] = absLam[10]^^2.0/Da + 0.25*Da;
-		}
+		lam1 = (eps^^2 + lam1^^2)/(2.0*eps);
 	}
-	else static if((kx == 0) && (ky == 1))
+	if(lam2 < eps)
 	{
-		double Da = fmax(0, 4.0*((vR - aR) - (vL - aL)));
-		if(absLam[$-1] < 0.5*Da)
-		{
-			absLam[$-1] = absLam[$-1]^^2.0/Da + 0.25*Da;
-		}
-		Da = fmax(0, 4.0*((vR + aR) - (vL + aL)));
-		if(absLam[10] < 0.5*Da)
-		{
-			absLam[10] = absLam[10]^^2.0/Da + 0.25*Da;
-		}
+		lam2 = (eps^^2 + lam2^^2)/(2.0*eps);
+	}
+	if(lam3 < eps)
+	{
+		lam3 = (eps^^2 + lam3^^2)/(2.0*eps);
+	}
+	if(lam4 < eps)
+	{
+		lam4 = (eps^^2 + lam4^^2)/(2.0*eps);
 	}
 
-	/+
-	immutable double eps = 0.001;
-	for(int i = 0; i < 16; i+=5)
-	{
-		if(absLam[i] < eps)
-		{
-			absLam[i] = (eps^^2 + absLam[i]^^2)/(2.0*eps);
-		}
-	}
-	+/
-	static if(kx == 1)
-	{
-		Vec Fl = physicalFlux!(fluxDir.xDir, dims)(pL, uL, vL, rhoL, qL[3]);
-		Vec Fr = physicalFlux!(fluxDir.xDir, dims)(pR, uR, vR, rhoR, qR[3]);
-	}
-	else static if(ky == 1)
-	{
-		Vec Fl = physicalFlux!(fluxDir.yDir, dims)(pL, uL, vL, rhoL, qL[3]);
-		Vec Fr = physicalFlux!(fluxDir.yDir, dims)(pR, uR, vR, rhoR, qR[3]);
-	}
+	double s1 = 0.5*(lam1 + lam2);
+	double s2 = 0.5*(lam1 - lam2);
 
-	flux = 0.5*(Fl + Fr) - 0.5*Rmat*absLam*Lmat*(qR - qL);
+	double q = sqrt(vel[0]^^2 + vel[1]^^2);
+	double G1 = (gamma - 1)*((q^^2/2)*dRho - vel.dot(dRhoV) + dRhoE);
+	double G2 = -u*dRho + dRhoV.dot(n);
 
+	double C1 = (G1/a^^2)*(s1 - lam3) + G2/a*s2;
+	double C2 = (G1/a)*s2 + (s1 - lam3)*G2;
+
+	auto fL = physicalFlux!dims(pL, uL, vL, rhoL, qL[3], n);
+	auto fR = physicalFlux!dims(pR, uR, vR, rhoR, qR[3], n);
+
+	flux = 0.5*(fL + fR) - 0.5*Vector!4(lam3*dRho + C1, lam3*(dRhoV[0]) + C1*vel[0] + C2*n[0], lam3*(dRhoV[1]) + C1*vel[1] + C2*n[1], lam3*dRhoE + C1*h + C2*u);
 	return flux;
 }

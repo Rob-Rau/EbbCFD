@@ -771,13 +771,10 @@ struct UMesh2
 		{
 			for(uint i = 0; i < bGroups[bgIdx].length; i++)
 			{
-				edges[bGroups[bgIdx][i]].q[0] = cells[edges[bGroups[bgIdx][i]].cellIdx[0]].q;
-				Vector!2 velL = (1/edges[bGroups[bgIdx][i]].q[0][0])*edges[bGroups[bgIdx][i]].rotMat*Vector!2(edges[bGroups[bgIdx][i]].q[0][1], edges[bGroups[bgIdx][i]].q[0][2]);
-				double p = (gamma - 1)*(edges[bGroups[bgIdx][i]].q[0][3] - 0.5*edges[bGroups[bgIdx][i]].q[0][0]*(velL[1]^^2.0));
+				double p = getPressure(cells[edges[bGroups[bgIdx][i]].cellIdx[0]].q);
 				auto normal = Vector!2(edges[bGroups[bgIdx][i]].rotMat[0], edges[bGroups[bgIdx][i]].rotMat[2]);
 				auto len = edges[bGroups[bgIdx][i]].len;
 				f += p*len*normal;
-				//edges[bGroups[bgIdx][i]].flux = Vector!4(0, p, 0, 0);
 			}
 		}
 
