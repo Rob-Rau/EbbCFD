@@ -777,7 +777,6 @@ struct UMesh2
 			for(uint i = 0; i < bGroups[bgIdx].length; i++)
 			{
 				double p = getPressure(cells[edges[bGroups[bgIdx][i]].cellIdx[0]].q);
-				//auto normal = Vector!2(edges[bGroups[bgIdx][i]].rotMat[0], edges[bGroups[bgIdx][i]].rotMat[2]);
 				auto len = edges[bGroups[bgIdx][i]].len;
 				f += p*len*edges[bGroups[bgIdx][i]].bNormal;
 			}

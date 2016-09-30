@@ -214,7 +214,7 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 		if(iterations % config.plotIter == 0)
 		{
 			import core.stdc.stdio;
-			printf("lift force = %f\t t = %f\n", ld[0], t);
+			printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
 			printf("Rmax = %10.20f\t t = %f\n", Rmax, t);
 		}
 		
