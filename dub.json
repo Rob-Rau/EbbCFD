@@ -57,6 +57,11 @@
 			"buildOptions": ["releaseMode", "inline"],
 			"dflags": ["-O5"]
 		},
+		"flux-release": {
+			"buildOptions": ["releaseMode", "inline"],
+			"dflags": ["-O5"],
+			"lflags": ["-L/usr/lib64", "-L~/ldc2-1.0.0-linux-x86_64/lib"]
+		},
 		"ldc-release-prof": {
 			"buildOptions": ["releaseMode", "inline", "debugInfoC", "profile"],
 			"dflags": ["-O5"]
