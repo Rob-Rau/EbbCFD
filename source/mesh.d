@@ -607,6 +607,8 @@ struct UCell2
 
 	uint[6] edges;
 	double[6] fluxMultiplier;
+	uint[6] neighborCells;
+	uint nNeighborCells;
 	uint nEdges;
 	double area = 0;
 	double d = 0;
@@ -697,7 +699,7 @@ struct UMesh2
 			cells[i].d = 0.0;
 			cells[i].perim = 0;
 			cells[i].centroid = Vector!2(0);
-
+			cells[i].nNeighborCells = 0;
 			for(uint j = 0; j < cells[i].nEdges; j++)
 			{
 				Edge edge;
@@ -764,6 +766,26 @@ struct UMesh2
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
 			cells[i].centroid[0] *= 1/(6*cells[i].area);
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
+		}
+
+		for(uint i = 0; i < cells.length; i++)
+		{
+			for(uint j = 0; j < cells[i].nEdges; j++)
+			{
+				auto edge = edges[cells[i].edges[j]];
+				if(!edge.isBoundary)
+				{
+					if(edge.cellIdx[0] == i)
+					{
+						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[1];
+					}
+					else
+					{
+						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
+					}
+					cells[i].nNeighborCells++;
+				}
+			}
 		}
 	}
 
