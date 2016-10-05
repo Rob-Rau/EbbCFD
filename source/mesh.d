@@ -582,6 +582,7 @@ struct Edge
 
 	Vector!2 normal;
 	Vector!2 tangent;
+	Vector!2 mid;
 
 	Matrix!(2, 2) rotMat;
 	// neighboring cells index
@@ -608,6 +609,8 @@ struct UCell2
 	uint[6] edges;
 	double[6] fluxMultiplier;
 	uint[6] neighborCells;
+	Matrix!(2, 6) gradMat;
+	Vector!2[4] gradient;
 	uint nNeighborCells;
 	uint nEdges;
 	double area = 0;
@@ -684,6 +687,26 @@ struct UMesh2
 		return false;
 	}
 
+	@nogc buildGradients()
+	{
+		for(uint i = 0; i < cells.length; i++)
+		{
+			Vector!6[4] du;
+			for(uint j = 0; j < cells[i].nNeighborCells; j++)
+			{
+				uint idx = cells[i].neighborCells[j];
+				for(uint k = 0; k < 4; k++)
+				{
+					du[k][j] = cells[idx].q[k] - cells[i].q[k];
+				}
+			}
+
+			for(uint j = 0; j < 4; j++)
+			{
+				cells[i].gradient[j] = cells[i].gradMat*du[j];
+			}
+		}
+	}
 	/++
 		Compute cell and edge interconnections
 	+/
@@ -728,6 +751,9 @@ struct UMesh2
 						edge.normal = normal;
 						edge.tangent = tangent;
 						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
+						double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
+						double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
+						edge.mid = Vector!2(x, y);
 						cells[i].fluxMultiplier[j] = 1.0;
 						edges ~= edge;
 						edgeidx = edges.length.to!uint - 1;
@@ -744,7 +770,9 @@ struct UMesh2
 					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 					edge.boundaryTag = bTags[bGroup];
 					edge.bNormal = (1/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
-
+					double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
+					double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
+					edge.mid = Vector!2(x, y);
 					bGroups[bGroup] ~= edges.length.to!uint;
 					cells[i].fluxMultiplier[j] = 1.0;
 					edges ~= edge;
@@ -770,6 +798,10 @@ struct UMesh2
 
 		for(uint i = 0; i < cells.length; i++)
 		{
+			cells[i].gradMat = Matrix!(2, 6)(0);
+			auto tmpMat = Matrix!(6, 2)(0);
+			// Run through the edges and find indecies
+			// of cell neighbors
 			for(uint j = 0; j < cells[i].nEdges; j++)
 			{
 				auto edge = edges[cells[i].edges[j]];
@@ -783,9 +815,27 @@ struct UMesh2
 					{
 						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
 					}
+					uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
+					tmpMat[j, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
+					tmpMat[j, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
+
 					cells[i].nNeighborCells++;
 				}
 			}
+
+			// This cell has a boundary edge and we need to find another
+			// cell close by (sharing a node with) to reconstruct the
+			// cell gradient
+			// TODO: This
+			/+
+			if(cells[i].nNeighborCells != cells[i].nEdges)
+			{
+				
+			}
+			+/
+			auto a = tmpMat.transpose;
+			auto b = a*tmpMat;
+			cells[i].gradMat = b.Inverse*tmpMat.transpose;
 		}
 	}
 

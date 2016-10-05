@@ -113,6 +113,8 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 	{
 		//dt = ((mesh[0,0].dx*mesh[0,0].dy)/(mesh.getSpeed2.reduce!max + mesh.getSoundSpeed.reduce!max));
 		//printf("dt = %f\n", dt);
+		mesh.buildGradients;
+		
 		for(uint i = 0; i < mesh.edges.length; i++)
 		{
 			if(mesh.edges[i].isBoundary)
