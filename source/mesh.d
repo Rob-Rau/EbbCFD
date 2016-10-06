@@ -611,6 +611,10 @@ struct UCell2
 	uint[6] neighborCells;
 	Matrix!(2, 6) gradMat;
 	Vector!2[4] gradient;
+	
+	Vector!4 minQ;
+	Vector!4 maxQ;
+
 	uint nNeighborCells;
 	uint nEdges;
 	double area = 0;
@@ -687,26 +691,6 @@ struct UMesh2
 		return false;
 	}
 
-	@nogc buildGradients()
-	{
-		for(uint i = 0; i < cells.length; i++)
-		{
-			Vector!6[4] du;
-			for(uint j = 0; j < cells[i].nNeighborCells; j++)
-			{
-				uint idx = cells[i].neighborCells[j];
-				for(uint k = 0; k < 4; k++)
-				{
-					du[k][j] = cells[idx].q[k] - cells[i].q[k];
-				}
-			}
-
-			for(uint j = 0; j < 4; j++)
-			{
-				cells[i].gradient[j] = cells[i].gradMat*du[j];
-			}
-		}
-	}
 	/++
 		Compute cell and edge interconnections
 	+/
@@ -816,8 +800,8 @@ struct UMesh2
 						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
 					}
 					uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
-					tmpMat[j, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
-					tmpMat[j, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
+					tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
+					tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
 
 					cells[i].nNeighborCells++;
 				}
@@ -827,12 +811,104 @@ struct UMesh2
 			// cell close by (sharing a node with) to reconstruct the
 			// cell gradient
 			// TODO: This
-			/+
-			if(cells[i].nNeighborCells != cells[i].nEdges)
+			if(cells[i].nEdges == 3)
 			{
-				
+				if(cells[i].nNeighborCells != cells[i].nEdges)
+				{
+					Edge edge;
+					// find non-boundary edge
+					for(uint j = 0; j < cells[i].nEdges; j++)
+					{
+						if(!edges[cells[i].edges[j]].isBoundary)
+						{
+							edge = edges[cells[i].edges[j]];
+							break;
+						}
+					}
+
+					// find shared node
+					uint node = 0;
+					for(uint j = 0; j < cells[i].nEdges; j++)
+					{
+						if(edges[cells[i].edges[j]].isBoundary)
+						{
+							if((edge.nodeIdx[0] != edges[cells[i].edges[j]].nodeIdx[0]) &&
+								(edge.nodeIdx[0] != edges[cells[i].edges[j]].nodeIdx[1]))
+							{
+								node = edge.nodeIdx[0];
+							}
+							else
+							{
+								node = edge.nodeIdx[1];
+							}
+							break;
+						}
+					}
+					
+					// find edges with shared node
+					uint nIdx = 0;
+					double r = double.infinity;
+					foreach(uint j, ref e; edges)
+					{
+						if(!e.isBoundary)
+						{
+							// does it share the node
+							if((e.nodeIdx[0] == node) || (e.nodeIdx[1] == node))
+							{
+								// is not not our edge
+								if((e.cellIdx[0] != i) || (e.cellIdx[1] != i))
+								{
+									if(cells[i].neighborCells[].countUntil(e.cellIdx[0]) == -1)
+									{
+										// not a neighboring cell
+										auto vec = Vector!2(cells[e.cellIdx[0]].centroid[0] - cells[i].centroid[0], cells[e.cellIdx[0]].centroid[1] - cells[i].centroid[1]);
+										auto vec1 = Vector!2(tmpMat[0,0], tmpMat[0,1]);
+										auto vec2 = Vector!2(tmpMat[1,0], tmpMat[1,1]);
+
+										// find magnitude of angles of this vec and other grad vecs
+										double angle1 = abs(acos(vec.dot(vec1)/(vec.magnitude*vec1.magnitude)));
+										double angle2 = abs(acos(vec.dot(vec2)/(vec.magnitude*vec2.magnitude)));
+
+										// 
+										double newR = abs(angle1 - angle2);
+										if(newR < r)
+										{
+											r = newR;
+											nIdx = e.cellIdx[0];
+										}
+									}
+
+									if(cells[i].neighborCells[].countUntil(e.cellIdx[1]) == -1)
+									{
+										// not a neighboring cell
+										auto vec = Vector!2(cells[e.cellIdx[1]].centroid[0] - cells[i].centroid[0], cells[e.cellIdx[1]].centroid[1] - cells[i].centroid[1]);
+										auto vec1 = Vector!2(tmpMat[0,0], tmpMat[0,1]);
+										auto vec2 = Vector!2(tmpMat[1,0], tmpMat[1,1]);
+
+										// find magnitude of angles of this vec and other grad vecs
+										double angle1 = abs(acos(vec.dot(vec1)/(vec.magnitude*vec1.magnitude)));
+										double angle2 = abs(acos(vec.dot(vec2)/(vec.magnitude*vec2.magnitude)));
+
+										// 
+										double newR = abs(angle1 - angle2);
+										if(newR < r)
+										{
+											r = newR;
+											nIdx = e.cellIdx[1];
+										}
+									}
+								}
+							}
+						}
+					}
+
+					cells[i].neighborCells[cells[i].nNeighborCells] = nIdx;
+					tmpMat[cells[i].nNeighborCells, 0] = cells[nIdx].centroid[0] - cells[i].centroid[0];
+					tmpMat[cells[i].nNeighborCells, 1] = cells[nIdx].centroid[1] - cells[i].centroid[1];
+					cells[i].nNeighborCells++;
+				}
 			}
-			+/
+			
 			auto a = tmpMat.transpose;
 			auto b = a*tmpMat;
 			cells[i].gradMat = b.Inverse*tmpMat.transpose;
@@ -858,8 +934,95 @@ struct UMesh2
 	}
 }
 
-import core.stdc.stdio;
+void loadMatlabSolution(ref UMesh2 mesh, string filename)
+{
+	//UMesh2 mesh;
+	import std.algorithm : canFind;
+	import std.bitmanip : read;
+	import std.conv : to;
 
+	//writeln("Reading file ", filename);
+	auto slnFile = File(filename);
+
+	auto fileSize = slnFile.size;
+
+	auto buffer = slnFile.rawRead(new ubyte[fileSize]);
+	auto nNodes = buffer.read!ulong;
+	if(nNodes != mesh.nodes.length)
+	{
+		throw new Exception("Mesh file has different number of nodes than solution file.");
+	}
+
+	//writeln("nNodes = ", nNodes);
+
+	for(uint i = 0; i < nNodes; i++)
+	{
+		buffer.read!(double);
+		buffer.read!(double);
+	}
+
+	auto nEls = buffer.read!ulong;
+	if(nEls != mesh.cells.length)
+	{
+		throw new Exception("Mesh file has different number of cells than solution file.");
+	}
+	//writeln("nEdges = ", nEls);
+	for(uint i = 0; i < nEls; i++)
+	{
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+	}
+
+	auto nIe = buffer.read!ulong;
+	//writeln("nIe = ", nIe);
+	for(uint i = 0; i < nIe; i++)
+	{
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+	}
+
+	auto nBe = buffer.read!ulong;
+	//writeln("nBe = ", nBe);
+	for(uint i = 0; i < nBe; i++)
+	{
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+	}
+
+	auto nTags = buffer.read!ulong;
+	//writeln("nTags = ", nTags);
+	for(uint i = 0; i < nTags; i++)
+	{
+		auto strLen = buffer.read!uint;
+		for(uint j = 0; j < strLen; j++)
+		{
+			auto str = buffer.read!char;
+		}
+	}
+
+	auto nCells = buffer.read!ulong;
+	//writeln("nCells = ", nCells);
+	if(nEls != mesh.cells.length)
+	{
+		throw new Exception("Mesh file has different number of cells than solution file.");
+	}
+
+	for(uint i = 0; i < nCells; i++)
+	{
+		mesh.cells[i].q[0] = buffer.read!(double);
+		mesh.cells[i].q[1] = buffer.read!(double);
+		mesh.cells[i].q[2] = buffer.read!(double);
+		mesh.cells[i].q[3] = buffer.read!(double);
+	}
+
+}
+
+import core.stdc.stdio;
 @nogc void saveMatlabSolution(ref UMesh2 mesh, char* filename)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
@@ -994,19 +1157,19 @@ UMesh2 parseXflowMesh(string meshFile)
 	immutable uint nDims = headerLine[2].to!uint;
 
 	enforce(nDims == 2, new Exception(nDims.to!string~" dimensional meshes not supported"));
-
+/+
 	writeln("Importing XFlow mesh "~meshFile);
 	writeln("    nNodes = ", nNodes);
 	writeln("    nElems = ", nElems);
 	writeln("    nDims = ", nDims);
-
++/
 	for(uint i = 0; i < nNodes; i++)
 	{
 		mesh.nodes ~= file.readCleanLine.to!(double[]);
 	}
 
 	immutable uint nBoundaryGroups = file.readCleanLine[0].to!uint;
-	writeln("    nBoundaryGroups = ", nBoundaryGroups);
+	//writeln("    nBoundaryGroups = ", nBoundaryGroups);
 
 	uint[][] bNodes;
 	size_t[] bGroupStart;
@@ -1023,7 +1186,7 @@ UMesh2 parseXflowMesh(string meshFile)
 			bTags ~= faceTag;
 		}
 
-		writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
+		//writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
 
 		bGroupStart ~= bNodes.length;
 		for(uint j = 0; j < bFaces; j++)
@@ -1058,7 +1221,7 @@ UMesh2 parseXflowMesh(string meshFile)
 			throw new Exception("Unsuported cell type");
 		}
 
-		writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
+		//writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
 
 		for(uint i = 0; i < subElements; i++)
 		{

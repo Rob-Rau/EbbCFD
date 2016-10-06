@@ -31,8 +31,8 @@ double[] abs(double[] data)
 alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
-//void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
+//@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
+void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
 {
 	double dt = config.dt;
 	uint iterations = 0;
@@ -50,6 +50,7 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 		double v = U*sin(aoa);
 
 		mesh.cells[i].q = buildQ(rho, u, v, p);
+		//mesh.cells[i].q.writeln;
 	}
 
 	// Setup bc's
@@ -107,14 +108,46 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 		}
 	}
 
+	auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
 	uint saveItr = 0;
 	// Start the solving!!
 	while(!approxEqual(t, config.tEnd))
 	{
 		//dt = ((mesh[0,0].dx*mesh[0,0].dy)/(mesh.getSpeed2.reduce!max + mesh.getSoundSpeed.reduce!max));
 		//printf("dt = %f\n", dt);
-		mesh.buildGradients;
+		//mesh.buildGradients;
 		
+		//Vec qHalfx = mesh[i, j].q - 0.5*(dt/mesh[i, j].dx)*(Rmat*LamMat*Lmat)*xSlopes;
+		// Build gradients
+		for(uint i = 0; i < mesh.cells.length; i++)
+		{
+			Vector!6[4] du;
+			for(uint j = 0; j < 4; j++)
+			{
+				du[j] = Vector!6(0); 
+			}
+			mesh.cells[i].minQ = mesh.cells[i].q;
+			mesh.cells[i].maxQ = mesh.cells[i].q;
+			for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
+			{
+				uint idx = mesh.cells[i].neighborCells[j];
+				
+				for(uint k = 0; k < 4; k++)
+				{
+					mesh.cells[i].minQ[k] = fmin(mesh.cells[i].minQ[k], mesh.cells[idx].q[k]);
+					mesh.cells[i].maxQ[k] = fmax(mesh.cells[i].maxQ[k], mesh.cells[idx].q[k]);
+
+					du[k][j] = mesh.cells[idx].q[k] - mesh.cells[i].q[k];
+				}
+			}
+
+			for(uint j = 0; j < 4; j++)
+			{
+				mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
+				//mesh.cells[i].gradient[j].writeln;
+			}
+		}
+
 		for(uint i = 0; i < mesh.edges.length; i++)
 		{
 			if(mesh.edges[i].isBoundary)
@@ -123,7 +156,18 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 					with(BoundaryType)
 				{
 					case FullState:
-						mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						//mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						auto qM = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+						auto mid = mesh.edges[i].mid;
+						auto dx = mid[0] - centroid[0];
+						auto dy = mid[1] - centroid[1];
+
+						for(uint j = 0; j < dims; j++)
+						{
+							mesh.edges[i].q[0][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
+						}
 
 						auto qL = mesh.edges[i].q[0];
 						auto qR = mesh.edges[i].q[1];
@@ -138,10 +182,27 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 						}
 						break;
 					case InviscidWall:
-						mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						//mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						auto qM = mesh.cells[mesh.edges[i].cellIdx[0]].q;
+						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+						auto mid = mesh.edges[i].mid;
+						auto dx = mid[0] - centroid[0];
+						auto dy = mid[1] - centroid[1];
+
+						for(uint j = 0; j < dims; j++)
+						{
+							mesh.edges[i].q[0][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
+						}
+
 						Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
 						auto vel = (velP - (velP.dot(mesh.edges[i].normal))*mesh.edges[i].normal).magnitude;
 						double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel);
+						if(p < 0)
+						{
+							//p = 0.000001;
+							printf("pressure less than 0 at wall\n");
+						}
 						mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
 
 						if(mesh.edges[i].flux[1].isNaN)
@@ -161,8 +222,38 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 			}
 			else
 			{
+				/+
 				mesh.edges[i].q[0] = mesh.cells[mesh.edges[i].cellIdx[0]].q;
 				mesh.edges[i].q[1] = mesh.cells[mesh.edges[i].cellIdx[1]].q;
+				+/
+				for(uint k = 0; k < 2; k++)
+				{
+					auto qM = mesh.cells[mesh.edges[i].cellIdx[k]].q;
+					auto minQ = mesh.cells[mesh.edges[i].cellIdx[k]].minQ;
+					auto maxQ = mesh.cells[mesh.edges[i].cellIdx[k]].maxQ;
+
+					//qM.writeln;
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
+					//grad.writeln;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
+					auto mid = mesh.edges[i].mid;
+					auto dx = mid[0] - centroid[0];
+					auto dy = mid[1] - centroid[1];
+
+					for(uint j = 0; j < dims; j++)
+					{
+						mesh.edges[i].q[k][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
+/+
+						if(mesh.edges[i].q[k][j] < minQ[j])
+						{
+							mesh.edges[i].q[k][j] = minQ[j];
+						}
+						else if(mesh.edges[i].q[k][j] > maxQ[j])
+						{
+							mesh.edges[i].q[k][j] = maxQ[j];
+						}
+					+/}
+				}
 
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];
@@ -171,7 +262,7 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 
 				if(mesh.edges[i].flux[1].isNaN)
 				{
-					/+
+					
 					writeln("pL = ", getPressure(mesh.edges[i].q[0]));
 					writeln("pR = ", getPressure(mesh.edges[i].q[1]));
 					writeln("Flux = ", mesh.edges[i].flux);
@@ -180,7 +271,7 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 					writeln("cell L = ", mesh.edges[i].cellIdx[0]);
 					writeln("cell R = ", mesh.edges[i].cellIdx[1]);
 					writeln("normal = ", mesh.edges[i].normal);
-					+/
+					writeln("iteration = ", iterations);
 					ex.msg = "Got nan on interior edge";
 					ex.file = __FILE__;
 					ex.line = __LINE__;
@@ -209,7 +300,6 @@ alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 			mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
 		}
 
-		auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
 		auto f = mesh.computeBoundaryForces("Airfoil");
 		auto ld = rotMat*f;
 
