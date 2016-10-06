@@ -163,10 +163,21 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						auto mid = mesh.edges[i].mid;
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
-
+						auto minQ = mesh.cells[mesh.edges[i].cellIdx[0]].minQ;
+						auto maxQ = mesh.cells[mesh.edges[i].cellIdx[0]].maxQ;
+						
 						for(uint j = 0; j < dims; j++)
 						{
 							mesh.edges[i].q[0][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
+
+							if(mesh.edges[i].q[0][j] < minQ[j])
+							{
+								mesh.edges[i].q[0][j] = minQ[j];
+							}
+							else if(mesh.edges[i].q[0][j] > maxQ[j])
+							{
+								mesh.edges[i].q[0][j] = maxQ[j];
+							}
 						}
 
 						auto qL = mesh.edges[i].q[0];
@@ -190,9 +201,21 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
 
+						auto minQ = mesh.cells[mesh.edges[i].cellIdx[0]].minQ;
+						auto maxQ = mesh.cells[mesh.edges[i].cellIdx[0]].maxQ;
+
 						for(uint j = 0; j < dims; j++)
 						{
 							mesh.edges[i].q[0][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
+
+							if(mesh.edges[i].q[0][j] < minQ[j])
+							{
+								mesh.edges[i].q[0][j] = minQ[j];
+							}
+							else if(mesh.edges[i].q[0][j] > maxQ[j])
+							{
+								mesh.edges[i].q[0][j] = maxQ[j];
+							}
 						}
 
 						Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
@@ -243,7 +266,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 					for(uint j = 0; j < dims; j++)
 					{
 						mesh.edges[i].q[k][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
-/+
+
 						if(mesh.edges[i].q[k][j] < minQ[j])
 						{
 							mesh.edges[i].q[k][j] = minQ[j];
@@ -252,7 +275,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						{
 							mesh.edges[i].q[k][j] = maxQ[j];
 						}
-					+/}
+					}
 				}
 
 				auto qL = mesh.edges[i].q[0];
