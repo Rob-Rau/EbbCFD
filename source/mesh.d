@@ -579,7 +579,7 @@ struct Edge
 {
 	uint[2] nodeIdx;
 	double len;
-
+	double sMax;
 	Vector!2 normal;
 	Vector!2 tangent;
 	Vector!2 mid;

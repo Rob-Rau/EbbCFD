@@ -1,6 +1,7 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.flux;
 
+import std.algorithm;
 import std.math : abs, fmax, sqrt;
 import std.meta : aliasSeqOf;
 
@@ -247,7 +248,7 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 /++
 	Uses my matrix operations
 +/
-@nogc Vector!dims roeFlux(size_t dims)(Vector!dims qL, Vector!dims qR, Vector!(dims - 2) n)
+@nogc Vector!dims roeFlux(size_t dims)(Vector!dims qL, Vector!dims qR, Vector!(dims - 2) n, ref double sMax)
 {
 	alias Vec = Vector!dims;
 	alias Mat = Matrix!(dims, dims);
@@ -309,6 +310,8 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 	{
 		lam4 = (eps^^2 + lam4^^2)/(2.0*eps);
 	}
+
+	sMax = max(abs(lam1), abs(lam2), abs(lam3), abs(lam4));
 
 	double s1 = 0.5*(lam1 + lam2);
 	double s2 = 0.5*(lam1 - lam2);

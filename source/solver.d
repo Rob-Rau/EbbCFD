@@ -31,8 +31,8 @@ double[] abs(double[] data)
 alias solverList = aliasSeqOf!(["ufvmSolver", "sfvmSolver"]);
 
 // Unstructured finite volume solver
-//@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
-void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
+//void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, double t, Exception ex)
 {
 	double dt = config.dt;
 	uint iterations = 0;
@@ -111,6 +111,15 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 	auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
 	uint saveItr = 0;
 	// Start the solving!!
+	
+	import std.experimental.allocator.mallocator : Mallocator;
+	double[] lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+	double[] thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+	double[] tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+	lastRho[] = 0;
+	thisRho[] = 0;
+	tmp[] = 0;
+
 	while(!approxEqual(t, config.tEnd))
 	{
 		//dt = ((mesh[0,0].dx*mesh[0,0].dy)/(mesh.getSpeed2.reduce!max + mesh.getSoundSpeed.reduce!max));
@@ -169,7 +178,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						for(uint j = 0; j < dims; j++)
 						{
 							mesh.edges[i].q[0][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
-
+/+
 							if(mesh.edges[i].q[0][j] < minQ[j])
 							{
 								mesh.edges[i].q[0][j] = minQ[j];
@@ -177,13 +186,13 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 							else if(mesh.edges[i].q[0][j] > maxQ[j])
 							{
 								mesh.edges[i].q[0][j] = maxQ[j];
-							}
+							}+/
 						}
 
 						auto qL = mesh.edges[i].q[0];
 						auto qR = mesh.edges[i].q[1];
 
-						mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal);
+						mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 						if(mesh.edges[i].flux[0].isNaN)
 						{
 							ex.msg = "Got nan on FullState boundary";
@@ -207,7 +216,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						for(uint j = 0; j < dims; j++)
 						{
 							mesh.edges[i].q[0][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
-
+/+
 							if(mesh.edges[i].q[0][j] < minQ[j])
 							{
 								mesh.edges[i].q[0][j] = minQ[j];
@@ -215,7 +224,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 							else if(mesh.edges[i].q[0][j] > maxQ[j])
 							{
 								mesh.edges[i].q[0][j] = maxQ[j];
-							}
+							}+/
 						}
 
 						Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
@@ -266,7 +275,7 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 					for(uint j = 0; j < dims; j++)
 					{
 						mesh.edges[i].q[k][j] = qM[j] + (grad[j][0]*dx + grad[j][1]*dy);
-
+/+
 						if(mesh.edges[i].q[k][j] < minQ[j])
 						{
 							mesh.edges[i].q[k][j] = minQ[j];
@@ -275,26 +284,27 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 						{
 							mesh.edges[i].q[k][j] = maxQ[j];
 						}
+						+/
 					}
 				}
 
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];
 
-				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal);
+				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 
 				if(mesh.edges[i].flux[1].isNaN)
 				{
 					
-					writeln("pL = ", getPressure(mesh.edges[i].q[0]));
-					writeln("pR = ", getPressure(mesh.edges[i].q[1]));
-					writeln("Flux = ", mesh.edges[i].flux);
-					writeln("qL = ", mesh.edges[i].q[0]);
-					writeln("qR = ", mesh.edges[i].q[1]);
-					writeln("cell L = ", mesh.edges[i].cellIdx[0]);
-					writeln("cell R = ", mesh.edges[i].cellIdx[1]);
-					writeln("normal = ", mesh.edges[i].normal);
-					writeln("iteration = ", iterations);
+					printf("pL = %f\n", getPressure(mesh.edges[i].q[0]));
+					printf("pR = %f\n", getPressure(mesh.edges[i].q[1]));
+					printf("Flux = %f\n", mesh.edges[i].flux);
+					printf("qL = %f\n", mesh.edges[i].q[0]);
+					printf("qR = %f\n", mesh.edges[i].q[1]);
+					printf("cell L = %f\n", mesh.edges[i].cellIdx[0]);
+					printf("cell R = %f\n", mesh.edges[i].cellIdx[1]);
+					printf("normal = %f\n", mesh.edges[i].normal);
+					printf("iteration = %f\n", iterations);
 					ex.msg = "Got nan on interior edge";
 					ex.file = __FILE__;
 					ex.line = __LINE__;
@@ -321,8 +331,16 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 				}
 			}
 			mesh.cells[i].q = mesh.cells[i].q - (dt/mesh.cells[i].area)*R;
+			thisRho[i] = mesh.cells[i].q[0];
 		}
 
+		//tmp[] = (thisRho[] - lastRho[])^^2;
+		tmp[] = (thisRho[] - lastRho[]);
+
+		import std.algorithm : sum;
+		double resid = sqrt(mesh.cells.length*tmp.sum)/thisRho.sum;
+
+		lastRho[] = thisRho[];
 		auto f = mesh.computeBoundaryForces("Airfoil");
 		auto ld = rotMat*f;
 
@@ -330,7 +348,8 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 		{
 			import core.stdc.stdio;
 			printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-			printf("Rmax = %10.20f\t t = %f\n", Rmax, t);
+			//printf("Rmax = %10.20f\t t = %f\n", Rmax, t);
+			printf("R = %10.10f\tRmax = %10.20f\t t = %f\n", resid, Rmax, t);
 		}
 		
 		if(iterations % config.saveIter == 0)
@@ -345,6 +364,10 @@ void ufvmSolver(alias S, alias F, size_t dims)(ref UMesh2 mesh, Config config, d
 		t += dt;
 		iterations++;
 	}
+
+	Mallocator.instance.deallocate(lastRho);
+	Mallocator.instance.deallocate(thisRho);
+	Mallocator.instance.deallocate(tmp);
 }
 /+
 // Structured finite volume solver
