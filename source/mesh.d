@@ -604,14 +604,14 @@ struct Edge
 struct UCell2
 {
 	// Cell everaged values
-	Vector!4 q;
+	//Vector!4 q;
 
 	uint[6] edges;
 	double[6] fluxMultiplier;
 	uint[6] neighborCells;
 	Matrix!(2, 6) gradMat;
 	Vector!2[4] gradient;
-	
+	Vector!4 lim;
 	Vector!4 minQ;
 	Vector!4 maxQ;
 
@@ -640,6 +640,7 @@ struct UMesh2
 
 	// Computed mesh data
 	UCell2[] cells;
+	Vector!4[] q;
 	Edge[] edges;
 
 	this(uint nCells)
@@ -699,7 +700,7 @@ struct UMesh2
 		bGroups = new uint[][](bTags.length);
 		for(uint i = 0; i < elements.length; i++)
 		{
-			cells[i].q = Vector!4(0);
+			q[i] = Vector!4(0);
 			cells[i].edges[] = 0;
 			cells[i].fluxMultiplier[] = 1.0;
 			cells[i].area = 0.0;
@@ -707,6 +708,8 @@ struct UMesh2
 			cells[i].perim = 0;
 			cells[i].centroid = Vector!2(0);
 			cells[i].nNeighborCells = 0;
+			cells[i].lim = Vector!4(1.0);
+
 			for(uint j = 0; j < cells[i].nEdges; j++)
 			{
 				Edge edge;
@@ -729,9 +732,11 @@ struct UMesh2
 					else
 					{
 						edge.cellIdx[0] = i;
-						edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
-						Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
+						edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2.0 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2.0);
+						Vector!2 normal = Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
+						normal = normal.normalize();
 						Vector!2 tangent = Vector!2(-normal[1], normal[0]);
+						tangent = tangent.normalize();
 						edge.normal = normal;
 						edge.tangent = tangent;
 						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
@@ -747,7 +752,7 @@ struct UMesh2
 				{
 					edge.cellIdx[0] = i;
 					edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
-					Vector!2 normal = (1/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
+					Vector!2 normal = (1.0/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
 					Vector!2 tangent = Vector!2(-normal[1], normal[0]);
 					edge.normal = normal;
 					edge.tangent = tangent;
@@ -924,7 +929,7 @@ struct UMesh2
 		{
 			for(uint i = 0; i < bGroups[bgIdx].length; i++)
 			{
-				double p = getPressure(cells[edges[bGroups[bgIdx][i]].cellIdx[0]].q);
+				double p = getPressure(q[edges[bGroups[bgIdx][i]].cellIdx[0]]);
 				auto len = edges[bGroups[bgIdx][i]].len;
 				f += p*len*edges[bGroups[bgIdx][i]].bNormal;
 			}
@@ -1014,10 +1019,10 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 	for(uint i = 0; i < nCells; i++)
 	{
-		mesh.cells[i].q[0] = buffer.read!(double);
-		mesh.cells[i].q[1] = buffer.read!(double);
-		mesh.cells[i].q[2] = buffer.read!(double);
-		mesh.cells[i].q[3] = buffer.read!(double);
+		mesh.q[i][0] = buffer.read!(double);
+		mesh.q[i][1] = buffer.read!(double);
+		mesh.q[i][2] = buffer.read!(double);
+		mesh.q[i][3] = buffer.read!(double);
 	}
 
 }
@@ -1120,10 +1125,10 @@ import core.stdc.stdio;
 	buffer.write!ulong(mesh.cells.length, &offset);
 	for(uint i = 0; i < mesh.cells.length; i++)
 	{
-		buffer.write!double(mesh.cells[i].q[0], &offset);
-		buffer.write!double(mesh.cells[i].q[1], &offset);
-		buffer.write!double(mesh.cells[i].q[2], &offset);
-		buffer.write!double(mesh.cells[i].q[3], &offset);
+		buffer.write!double(mesh.q[i][0], &offset);
+		buffer.write!double(mesh.q[i][1], &offset);
+		buffer.write!double(mesh.q[i][2], &offset);
+		buffer.write!double(mesh.q[i][3], &offset);
 	}
 
 	auto file = fopen(filename, "wb");
@@ -1260,6 +1265,8 @@ UMesh2 parseXflowMesh(string meshFile)
 	}
 	
 	mesh.cells = new UCell2[nElems];
+	mesh.q = new Vector!4[nElems];
+	
 	for(uint i = 0; i < nElems; i++)
 	{
 		mesh.cells[i].nEdges = faces;
