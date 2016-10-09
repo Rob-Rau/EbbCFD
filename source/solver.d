@@ -130,12 +130,12 @@ struct Euler
 
 struct RK4
 {
-	static bool initialized = false;
-	static Vector!4[] tmp;
-	static Vector!4[] k1;
-	static Vector!4[] k2;
-	static Vector!4[] k3;
-	static Vector!4[] k4;
+	private static bool initialized = false;
+	private static Vector!4[] tmp;
+	private static Vector!4[] k1;
+	private static Vector!4[] k2;
+	private static Vector!4[] k3;
+	private static Vector!4[] k4;
 
 	@nogc static void init(ref UMesh2 mesh)
 	{
@@ -202,10 +202,10 @@ struct RK4
 
 struct RK2
 {
-	static bool initialized = false;
-	static Vector!4[] tmp;
-	static Vector!4[] k1;
-	static Vector!4[] k2;
+	private static bool initialized = false;
+	private static Vector!4[] tmp;
+	private static Vector!4[] k1;
+	private static Vector!4[] k2;
 
 	@nogc static void init(ref UMesh2 mesh)
 	{
@@ -291,6 +291,7 @@ struct RK2
 	scope(exit) Mallocator.instance.deallocate(thisE);
 	scope(exit) Mallocator.instance.deallocate(tmp);
 
+	// let the integrator do any neccessary initialization
 	integrator.init(mesh);
 
 	// Setup IC's and BC's
@@ -373,8 +374,9 @@ struct RK2
 			import core.stdc.stdio : snprintf;
 			char[512] filename;
 			filename[] = 0;
-			snprintf(filename.ptr, 512, "save_%d.msln", saveItr);
-			saveMatlabSolution(mesh, filename.ptr);
+			snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
+			//saveMatlabSolution(mesh, filename.ptr);
+			saveSolution(mesh, filename.ptr);
 			saveItr++;
 		}
 
