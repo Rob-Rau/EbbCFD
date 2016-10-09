@@ -389,29 +389,59 @@ struct UMesh2
 	}
 }
 
-struct SlnHeader
+import core.stdc.stdio;
+
+struct MeshHeader
 {
-	const uint slnMagic = 0xEA98E1F5;
-	uint slnVersion;
-	uint dataPoints;
+	const uint meshMagic = 0xB1371AC7;
+	uint meshVersion;
+	uint dims;
+	uint nNodes;
+	uint nElems;
+	uint nBGroups;
 }
 
-@nogc void saveSolution(ref UMesh2 mesh, string filename)
+/+
+@nogc void saveMesh(ref UMesh2 mesh, char* filename)
+{
+	MeshHeader header = {meshVersion: 1, dims: 2, nNodes: cast(uint)mesh.nodes.length, nElems: cast(uint)mesh.elements.length, nBGroups: cast(uint)mesh.bTags.length};
+
+	ulong totSize = MeshHeader.sizeof;
+	totSize += header.nNodes*header.dims*double.sizeof;
+	for(uint i = 0; i < mesh.elements.length; i++)
+	{
+		totSize += 
+	}
+}
++/
+
+struct SlnHeader
+{
+	static const uint slnMagic = 0xEA98E1F5;
+	uint slnVersion;
+	uint dataPoints;
+	double t;
+	double dt;
+}
+
+@nogc void saveSolution(ref UMesh2 mesh, char* filename, double t, double dt)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: mesh.cells.length};
+	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.cells.length, t: t, dt: dt};
 
-	uint totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof;
+	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
 	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
 	scope(exit) Mallocator.instance.deallocate(buffer);
 
-	uint offset = 0;
+	size_t offset = 0;
 	buffer.write!uint(header.slnMagic, &offset);
 	buffer.write!uint(header.slnVersion, &offset);
 	buffer.write!uint(header.dataPoints, &offset);
+	buffer.write!double(header.t, &offset);
+	buffer.write!double(header.dt, &offset);
 
 	for(uint i = 0; i < mesh.cells.length; i++)
 	{
@@ -446,6 +476,81 @@ struct SlnHeader
 		writeOffset += chunkSize;
 	}
 	fclose(file);
+}
+
+@nogc bool loadSolution(ref UMesh2 mesh, ref double t, ref double dt, string filename)
+{
+	import std.algorithm : canFind;
+	import std.bitmanip : peek;
+	import std.experimental.allocator.mallocator : Mallocator;
+	import std.digest.crc : CRC32;
+
+	auto file = fopen(filename.ptr, "rb");
+	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(8);
+	scope(exit) Mallocator.instance.deallocate(buffer);
+
+	CRC32 crc;
+	crc.start();
+
+	fread(buffer.ptr, 1, 4, file);
+	crc.put(buffer[0..4]);
+	uint slnMagic = buffer.peek!uint;
+
+	if(slnMagic != SlnHeader.slnMagic)
+	{
+		return false;
+	}
+
+	fread(buffer.ptr, 1, 4, file);
+	crc.put(buffer[0..4]);
+	uint slnVersion = buffer.peek!uint;
+	fread(buffer.ptr, 1, 4, file);
+	crc.put(buffer[0..4]);
+	uint dataPoints = buffer.peek!uint;
+
+	if(dataPoints != mesh.q.length)
+	{
+		return false;
+	}
+
+	fread(buffer.ptr, 1, 8, file);
+	crc.put(buffer[]);
+	t = buffer.peek!double;
+	fread(buffer.ptr, 1, 8, file);
+	crc.put(buffer[]);
+	dt = buffer.peek!double;
+
+	for(uint i = 0; i < mesh.q.length; i++)
+	{
+		fread(buffer.ptr, 1, 8, file);
+		crc.put(buffer[]);
+		mesh.q[i][0] = buffer.peek!double;
+		fread(buffer.ptr, 1, 8, file);
+		crc.put(buffer[]);
+		mesh.q[i][1] = buffer.peek!double;
+		fread(buffer.ptr, 1, 8, file);
+		crc.put(buffer[]);
+		mesh.q[i][2] = buffer.peek!double;
+		fread(buffer.ptr, 1, 8, file);
+		crc.put(buffer[]);
+		mesh.q[i][3] = buffer.peek!double;
+	}
+	//ubyte[4] readCrc32;
+	fread(buffer.ptr, 1, 4, file);
+	auto crc32 = crc.finish();
+	bool crcGood = true;
+	/+
+	for(uint i = 0; i < 4; i++)
+	{
+		crcGood &= crc32[i] == buffer[i]; 
+	}
+	
+	printf("%x %x %x %x\n", crc32[0], crc32[1], crc32[2], crc32[3]);
+	printf("%x %x %x %x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
+	+/
+	fclose(file);
+
+	return crcGood;
 }
 
 void loadMatlabSolution(ref UMesh2 mesh, string filename)
@@ -536,15 +641,13 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 }
 
-import core.stdc.stdio;
-@nogc void saveMatlabSolution(ref UMesh2 mesh, char* filename)
+@nogc void saveMatlabMesh(ref UMesh2 mesh, immutable (char)* filename)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
 	ulong nodesSize = cast(ulong)(2*mesh.nodes.length*double.sizeof);
 	ulong e2nSize = cast(ulong)(3*mesh.elements.length*double.sizeof);
-	ulong slnSize = cast(ulong)(4*mesh.cells.length*double.sizeof);
 	ulong ieSize = 0;
 	ulong beSize = 0;
 	for(uint i = 0; i < mesh.edges.length; i++)
@@ -573,10 +676,9 @@ import core.stdc.stdio;
 	immutable ulong ieHeaderSize = ulong.sizeof;
 	immutable ulong beHeaderSize = ulong.sizeof;
 	immutable ulong tagHeaderSize = ulong.sizeof;
-	immutable ulong slnHeaderSize = ulong.sizeof;
 
-	ulong totSize = nodeHeaderSize + e2nHeaderSize + ieHeaderSize + beHeaderSize + tagHeaderSize + slnHeaderSize;
-	totSize += nodesSize + e2nSize + ieSize + beSize + bNameSize + slnSize;
+	ulong totSize = nodeHeaderSize + e2nHeaderSize + ieHeaderSize + beHeaderSize + tagHeaderSize;
+	totSize += nodesSize + e2nSize + ieSize + beSize + bNameSize;
 	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
 	scope(exit) Mallocator.instance.deallocate(buffer);
 
@@ -632,15 +734,6 @@ import core.stdc.stdio;
 		}
 	}
 
-	buffer.write!ulong(mesh.cells.length, &offset);
-	for(uint i = 0; i < mesh.cells.length; i++)
-	{
-		buffer.write!double(mesh.q[i][0], &offset);
-		buffer.write!double(mesh.q[i][1], &offset);
-		buffer.write!double(mesh.q[i][2], &offset);
-		buffer.write!double(mesh.q[i][3], &offset);
-	}
-
 	auto file = fopen(filename, "wb");
 	ulong writeOffset = 0;
 	while(writeOffset < buffer.length)
@@ -672,19 +765,19 @@ UMesh2 parseXflowMesh(string meshFile)
 	immutable uint nDims = headerLine[2].to!uint;
 
 	enforce(nDims == 2, new Exception(nDims.to!string~" dimensional meshes not supported"));
-/+
+
 	writeln("Importing XFlow mesh "~meshFile);
 	writeln("    nNodes = ", nNodes);
 	writeln("    nElems = ", nElems);
 	writeln("    nDims = ", nDims);
-+/
+
 	for(uint i = 0; i < nNodes; i++)
 	{
 		mesh.nodes ~= file.readCleanLine.to!(double[]);
 	}
 
 	immutable uint nBoundaryGroups = file.readCleanLine[0].to!uint;
-	//writeln("    nBoundaryGroups = ", nBoundaryGroups);
+	writeln("    nBoundaryGroups = ", nBoundaryGroups);
 
 	uint[][] bNodes;
 	size_t[] bGroupStart;
@@ -701,7 +794,7 @@ UMesh2 parseXflowMesh(string meshFile)
 			bTags ~= faceTag;
 		}
 
-		//writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
+		writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
 
 		bGroupStart ~= bNodes.length;
 		for(uint j = 0; j < bFaces; j++)
@@ -736,7 +829,7 @@ UMesh2 parseXflowMesh(string meshFile)
 			throw new Exception("Unsuported cell type");
 		}
 
-		//writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
+		writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
 
 		for(uint i = 0; i < subElements; i++)
 		{
@@ -786,6 +879,43 @@ UMesh2 parseXflowMesh(string meshFile)
 	mesh.bGroupStart = bGroupStart;
 	mesh.bTags = bTags;
 	mesh.buildMesh;
+
+	return mesh;
+}
+
+UMesh2 parseSu2Mesh(string meshFile)
+{
+	UMesh2 mesh;
+	auto file = File(meshFile);
+	bool readingCells = false;
+	bool readingNodes = false;
+	uint numCells = 0;
+	uint cellIdx = 0;
+	uint numNodes = 0;
+	uint nodeIdx = 0;
+	uint numDims = 0;
+
+	uint[] elements;
+
+	foreach(line; file.byLine)
+	{
+		auto cleanLine = line.strip.chomp;
+		if(cleanLine.indexOf("NDIME") > -1)
+		{
+			numDims = cleanLine.split("=")[$-1].strip.to!uint;
+			writeln("Number of dimensions = "~numDims.to!string);
+		}
+		else if(cleanLine.indexOf("NELEM") > -1)
+		{
+			numCells = cleanLine.split("=")[$-1].strip.to!uint;
+			readingCells = true;
+			writeln("Number of cells = "~numCells.to!string);
+		}
+		else if(readingCells)
+		{
+
+		}
+	}
 
 	return mesh;
 }

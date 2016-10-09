@@ -254,7 +254,7 @@ struct RK2
 	}
 }
 
-@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, SolverException ex)
+@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, SolverException ex)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 
@@ -295,7 +295,7 @@ struct RK2
 	integrator.init(mesh);
 
 	// Setup IC's and BC's
-	setup(mesh, config, lastRho, lastU, lastV, lastE, ex);
+	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 
 	while(!approxEqual(t, config.tEnd))
 	{
@@ -376,7 +376,7 @@ struct RK2
 			filename[] = 0;
 			snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
 			//saveMatlabSolution(mesh, filename.ptr);
-			saveSolution(mesh, filename.ptr);
+			saveSolution(mesh, filename.ptr, t, dt);
 			saveItr++;
 		}
 
@@ -385,26 +385,49 @@ struct RK2
 	}
 }
 
-@nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, SolverException ex)
+@nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile, SolverException ex)
 {
-	// Setup initial conditions
-	for(uint i = 0; i < mesh.cells.length; i++)
+	if(saveFile == "")
 	{
-		double M = config.ic[0];
-		double aoa = config.ic[1] * (PI/180);
-		double p = config.ic[2];
-		double rho = config.ic[3];
-		double a = sqrt(gamma*(p/rho));
-		double U = M*a;
-		double u = U*cos(aoa);
-		double v = U*sin(aoa);
+		// Setup initial conditions
+		for(uint i = 0; i < mesh.cells.length; i++)
+		{
+			double M = config.ic[0];
+			double aoa = config.ic[1] * (PI/180);
+			double p = config.ic[2];
+			double rho = config.ic[3];
+			double a = sqrt(gamma*(p/rho));
+			double U = M*a;
+			double u = U*cos(aoa);
+			double v = U*sin(aoa);
 
-		mesh.q[i] = buildQ(rho, u, v, p);
+			mesh.q[i] = buildQ(rho, u, v, p);
 
-		lastRho[i] = mesh.q[i][0];
-		lastU[i] = mesh.q[i][1];
-		lastV[i] = mesh.q[i][2];
-		lastE[i] = mesh.q[i][3];
+			lastRho[i] = mesh.q[i][0];
+			lastU[i] = mesh.q[i][1];
+			lastV[i] = mesh.q[i][2];
+			lastE[i] = mesh.q[i][3];
+		}
+	}
+	else
+	{
+		if(loadSolution(mesh, t, dt, saveFile))
+		{
+			for(uint i = 0; i < mesh.cells.length; i++)
+			{
+				lastRho[i] = mesh.q[i][0];
+				lastU[i] = mesh.q[i][1];
+				lastV[i] = mesh.q[i][2];
+				lastE[i] = mesh.q[i][3];
+			}
+		}
+		else
+		{
+			ex.msg = "Failed to load solution";
+			ex.line = __LINE__;
+			ex.file = __FILE__;
+			throw ex;
+		}
 	}
 
 	// Setup bc's
@@ -767,7 +790,7 @@ struct Config
 	double[][] bc;
 }
 
-Config loadConfig(string conf, string saveFile)
+Config loadConfig(string conf)
 {
 	JSONValue jConfig = parseJSON(conf);
 	Config config;
@@ -788,15 +811,7 @@ Config loadConfig(string conf, string saveFile)
 		}
 	}
 
-	if(saveFile == "")
-	{
-		config.meshFile = jConfig["mesh"].str;
-	}
-	else
-	{
-		config.meshFile = saveFile;
-	}
-
+	config.meshFile = jConfig["mesh"].str;
 	config.limiter = jConfig["limiter"].str;
 	config.flux = jConfig["flux"].str;
 	config.dt = jConfig["dt"].floating;
@@ -885,11 +900,10 @@ Config loadConfig(string conf, string saveFile)
 	return config;
 }
 
-void startComputation(Config config)
+void startComputation(Config config, string saveFile)
 {
 	try
 	{
-		Mesh mesh;
 		UMesh2 umesh;
 
 		double dt = config.dt;
@@ -897,14 +911,14 @@ void startComputation(Config config)
 
 		auto ex = new SolverException("No error");
 
-		if(config.solver == "sfvmSolver")
-		{
-			mesh = loadMesh(config.meshFile, dt, t);
-			mesh.updateGhosts();
-		}
-		else if(config.solver == "ufvmSolver")
+		if(config.meshFile.canFind(".gri"))
 		{
 			umesh = parseXflowMesh(config.meshFile);
+		}
+		else
+		{
+			writeln("Unsupported mesh format, exiting");
+			return;
 		}
 
 		final switch(config.limiter)
@@ -930,7 +944,7 @@ void startComputation(Config config)
 											writeln("-limiter: "~lim);
 											writeln("-flux: "~fl);
 											writeln("-integrator: "~inte);
-											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, ex);
+											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, ex);
 											break;
 									}
 								}
@@ -964,7 +978,7 @@ void main(string[] args)
 	//initRPP(plotAddr, plotPort);
 
 	auto configStr = readText(configFile);
-	auto config = loadConfig(configStr, saveFile);
+	auto config = loadConfig(configStr);
 
-	startComputation(config);
+	startComputation(config, saveFile);
 }

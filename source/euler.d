@@ -87,7 +87,7 @@ Mat Lam(int kx, int ky, alias func = noop)(double u, double v, double a)
 }
 
 immutable double gamma = 1.4;
-
+/+
 template getVelocity(int dim)
 	if((dim == 0) || (dim == 1))
 {
@@ -139,12 +139,12 @@ double[][] getDensity(ref Mesh mesh)
 	}
 	return rho;
 }
-
++/
 @nogc double getPressure(ref Vector!4 q)
 {
 	return (gamma - 1)*(q[3] - 0.5*q[0]*((q[1]/q[0])^^2.0 + (q[2]/q[0])^^2.0));
 }
-
+/+
 double getPressure(ref Cell cell)
 {
 	return (gamma - 1)*(cell.q[3] - 0.5*cell.q[0]*((cell.q[1]/cell.q[0])^^2.0 + (cell.q[2]/cell.q[0])^^2.0));
@@ -282,3 +282,4 @@ double[][] getEnergy(ref Mesh mesh)
 	}
 	return e;
 }
++/
