@@ -957,9 +957,20 @@ void startComputation(Config config, string saveFile)
 			}
 		}
 	}
-	catch(Exception ex)
+	catch(SolverException ex)
 	{
 		writeln("Solver encountered an error: ", ex.msg);
+		if(ex.exceptionType == SolverException.SExceptionType.EdgeException)
+		{
+			writeln("pL = ", ex.eExcept.pL);
+			writeln("pR = ", ex.eExcept.pR);
+			writeln("Flux = ", ex.eExcept.flux);
+			writeln("qL = ", ex.eExcept.qL);
+			writeln("qR = ", ex.eExcept.qR);
+			writeln("cell L = ", ex.eExcept.cellL);
+			writeln("cell R = ", ex.eExcept.cellR);
+			writeln("normal = ", ex.eExcept.normal);
+		}
 		writeln("exiting");
 	}
 }
