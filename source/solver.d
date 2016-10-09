@@ -855,7 +855,7 @@ Config loadConfig(string conf)
 	{
 		config.order = jConfig["order"].integer;
 
-		if((config.order != 1) || (config.order != 2))
+		if((config.order != 1) && (config.order != 2))
 		{
 			writeln("Invalid order supplied, setting order 2");
 			config.order = 2;
