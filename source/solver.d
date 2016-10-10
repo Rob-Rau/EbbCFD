@@ -778,7 +778,6 @@ struct Config
 	string flux;
 	long saveIter;
 	long plotIter;
-	string solver;
 	string forceBoundary;
 	string integrator;
 	bool limited;
@@ -818,7 +817,6 @@ Config loadConfig(string conf)
 	config.tEnd = getDouble(jConfig["tEnd"]);
 	config.saveIter = jConfig["saveIter"].integer;
 	config.plotIter = jConfig["plotIter"].integer;
-	config.solver = jConfig["solver"].str;
 	config.forceBoundary = jConfig["forceBoundary"].str;
 
 	try
@@ -867,36 +865,34 @@ Config loadConfig(string conf)
 		config.order = 2;
 	}
 
-	if(config.solver == "ufvmSolver")
+	auto ics = jConfig["initialConditions"].array;
+	config.ic[0] = getDouble(ics[0]);
+	config.ic[1] = getDouble(ics[1]);
+	config.ic[2] = getDouble(ics[2]);
+	config.ic[3] = getDouble(ics[3]);
+
+	auto bcs = jConfig["boudaryConditions"].array;
+	for(uint i = 0; i < bcs.length; i++)
 	{
-		auto ics = jConfig["initialConditions"].array;
-		config.ic[0] = getDouble(ics[0]);
-		config.ic[1] = getDouble(ics[1]);
-		config.ic[2] = getDouble(ics[2]);
-		config.ic[3] = getDouble(ics[3]);
-
-		auto bcs = jConfig["boudaryConditions"].array;
-		for(uint i = 0; i < bcs.length; i++)
+		config.bTags ~= bcs[i]["tag"].str;
+		immutable string bType = bcs[i]["type"].str;
+		if(bType == "fullState")
 		{
-			config.bTags ~= bcs[i]["tag"].str;
-			immutable string bType = bcs[i]["type"].str;
-			if(bType == "fullState")
-			{
-				config.bTypes ~= BoundaryType.FullState;
-			}
-			else if(bType == "inviscidWall")
-			{
-				config.bTypes ~= BoundaryType.InviscidWall;
-			}
-			else if(bType == "constP")
-			{
-				config.bTypes ~= BoundaryType.ConstPressure;
-			}
-
-			auto state = bcs[i]["q"].array;
-			config.bc ~= [getDouble(state[0]), getDouble(state[1]), getDouble(state[2]), getDouble(state[3])];
+			config.bTypes ~= BoundaryType.FullState;
 		}
+		else if(bType == "inviscidWall")
+		{
+			config.bTypes ~= BoundaryType.InviscidWall;
+		}
+		else if(bType == "constP")
+		{
+			config.bTypes ~= BoundaryType.ConstPressure;
+		}
+
+		auto state = bcs[i]["q"].array;
+		config.bc ~= [getDouble(state[0]), getDouble(state[1]), getDouble(state[2]), getDouble(state[3])];
 	}
+
 	return config;
 }
 
