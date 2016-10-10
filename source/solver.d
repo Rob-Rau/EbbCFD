@@ -586,11 +586,16 @@ struct RK2
 						auto mid = mesh.edges[i].mid;
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
-						auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-
+						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
+						double lim = 1.0;
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+						}
+						for(uint j = 0; j < dims; j++)
+						{
+							//mesh.edges[i].q[0][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 						}
 					}
 
@@ -619,11 +624,16 @@ struct RK2
 						auto mid = mesh.edges[i].mid;
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
-						auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-
+						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
+						double lim = 1.0;
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+						}
+						for(uint j = 0; j < dims; j++)
+						{
+							//mesh.edges[i].q[0][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 						}
 					}
 
@@ -670,11 +680,16 @@ struct RK2
 					auto mid = mesh.edges[i].mid;
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
-					auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
-
+					//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
+					double lim = 1.0;
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[k][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+					}
+					for(uint j = 0; j < dims; j++)
+					{
+						//mesh.edges[i].q[k][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
 				}
 			}

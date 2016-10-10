@@ -18,13 +18,16 @@ void main(string[] args)
 {
 	bool convert;
 	bool generate;
+	bool info;
 	string inFile;
 	string outFile;
 	
-	auto result = getopt(args, "c|convert", "Convert from su2/xflow mesh format to EbbCFD format (normal or extended)", &convert,
+	auto result = getopt(args, std.getopt.config.caseSensitive, std.getopt.config.bundling,
+								"c|convert", "Convert from su2/xflow mesh format to EbbCFD format (normal or extended)", &convert,
 								"g|generate", "generate mesh", &generate,
 								"f|file", "File to convert", &inFile,
-								"o|ofile", "File to output", &outFile);
+								"o|ofile", "File to output", &outFile,
+								"i|info", "Get mesh information", &info);
 
 	if(result.helpWanted)
 	{
@@ -36,6 +39,50 @@ void main(string[] args)
 		return;
 	}
 
+	if(info)
+	{
+		if(inFile == "")
+		{
+			writeln("No mesh file supplied, exiting");
+			return;
+		}
+
+		UMesh2 mesh; 
+
+		if(inFile.canFind("gri"))
+		{
+			writeln("Reading xflow mesh file");
+			mesh = parseXflowMesh(inFile, false);
+		}
+		else if(inFile.canFind("su2"))
+		{
+			//mesh = parseSu2Mesh(inFile);
+			writeln("SU2 mesh not yet supported, exiting");
+			return;
+		}
+		else if(inFile.canFind("emsh"))
+		{
+			writeln("EbbCFD mesh not yet supported lol, exiting");
+			return;
+		}
+		else
+		{
+			writeln("Unsupported mesh type, exiting");
+			return;
+		}
+
+		writeln("----------------------------Mesh Info----------------------------");
+		writeln("mesh: ", inFile);
+		writeln("Dimensions: ", 2);
+		writeln("cells: ", mesh.cells.length);
+		writeln("nodes: ", mesh.nodes.length);
+		writeln("boundaries: ", mesh.bTags.length);
+		for(uint i = 0; i < mesh.bTags.length; i++)
+		{
+			writeln("    boundary ", i, ": ", mesh.bTags[i]);
+			writeln("        faces: ", mesh.bGroups[i].length);
+		}
+	}
 	if(convert)
 	{
 		if(inFile == "")

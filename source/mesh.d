@@ -754,7 +754,7 @@ char[][] readCleanLine(ref File file)
 	return file.readln.strip.chomp.detab.split(' ').filter!(a => a != "").array;
 }
 
-UMesh2 parseXflowMesh(string meshFile)
+UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 {
 	UMesh2 mesh;
 	auto file = File(meshFile);
@@ -766,10 +766,13 @@ UMesh2 parseXflowMesh(string meshFile)
 
 	enforce(nDims == 2, new Exception(nDims.to!string~" dimensional meshes not supported"));
 
-	writeln("Importing XFlow mesh "~meshFile);
-	writeln("    nNodes = ", nNodes);
-	writeln("    nElems = ", nElems);
-	writeln("    nDims = ", nDims);
+	if(chatty)
+	{
+		writeln("Importing XFlow mesh "~meshFile);
+		writeln("    nNodes = ", nNodes);
+		writeln("    nElems = ", nElems);
+		writeln("    nDims = ", nDims);
+	}
 
 	for(uint i = 0; i < nNodes; i++)
 	{
@@ -777,7 +780,7 @@ UMesh2 parseXflowMesh(string meshFile)
 	}
 
 	immutable uint nBoundaryGroups = file.readCleanLine[0].to!uint;
-	writeln("    nBoundaryGroups = ", nBoundaryGroups);
+	if(chatty) writeln("    nBoundaryGroups = ", nBoundaryGroups);
 
 	uint[][] bNodes;
 	size_t[] bGroupStart;
@@ -794,7 +797,7 @@ UMesh2 parseXflowMesh(string meshFile)
 			bTags ~= faceTag;
 		}
 
-		writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
+		if(chatty) writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
 
 		bGroupStart ~= bNodes.length;
 		for(uint j = 0; j < bFaces; j++)
@@ -829,7 +832,7 @@ UMesh2 parseXflowMesh(string meshFile)
 			throw new Exception("Unsuported cell type");
 		}
 
-		writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
+		if(chatty) writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
 
 		for(uint i = 0; i < subElements; i++)
 		{
