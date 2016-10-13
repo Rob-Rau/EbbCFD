@@ -1,6 +1,8 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.solver;
 
+import core.atomic;
+import core.stdc.stdio : fopen, fwrite, fopen, printf, snprintf;
 import core.sys.posix.signal;
 
 import std.algorithm : canFind, min, max, reduce;
@@ -19,6 +21,14 @@ import ebb.limiters;
 import ebb.euler;
 import ebb.flux;
 import ebb.mesh;
+
+static shared bool interupted = false;
+
+@nogc nothrow @system extern(C) void handle(int sig)
+{
+	printf("Signal received\n");
+	atomicStore(interupted, true);
+}
 
 class SolverException : Exception
 {
@@ -260,7 +270,6 @@ struct RK2
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
-	import core.stdc.stdio : fopen, fwrite, fopen;
 
 	double residRhoLast = double.infinity;
 
@@ -316,7 +325,7 @@ struct RK2
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 
-	while(!approxEqual(t, config.tEnd))
+	while(!approxEqual(t, config.tEnd) && !atomicLoad(interupted))
 	{
 		double Rmax = 0;
 
@@ -394,7 +403,6 @@ struct RK2
 
 		if(iterations % config.plotIter == 0)
 		{
-			import core.stdc.stdio : printf;
 			printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
 			printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
 		}
@@ -403,7 +411,6 @@ struct RK2
 		{
 			if(iterations % config.saveIter == 0)
 			{
-				import core.stdc.stdio : snprintf;
 				char[512] filename;
 				filename[] = 0;
 				snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
@@ -1074,6 +1081,7 @@ void main(string[] args)
 	string saveFile = "";
 	ushort plotPort = 54000;
 
+	signal(SIGINT, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, "pa|plotAddr", "IP address to plot to", &plotAddr, 
 							"pp|plotPort", "Port to plot to", &plotPort, "s|save", "Save file to start from", &saveFile);
 
