@@ -1,6 +1,8 @@
 /+ Copyright (c) 2016 Robert F. Rau II +/
 module ebb.solver;
 
+import core.sys.posix.signal;
+
 import std.algorithm : canFind, min, max, reduce;
 import std.conv;
 import std.json;
@@ -257,6 +259,8 @@ struct RK2
 @nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, SolverException ex)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
+	import std.bitmanip : write;
+	import core.stdc.stdio : fopen, fwrite, fopen;
 
 	double residRhoLast = double.infinity;
 
@@ -268,6 +272,17 @@ struct RK2
 	double dt = config.dt;
 
 	auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
+	auto ld = Vector!2(0);
+
+	immutable uint buffSize = 3*1024*1024*double.sizeof;
+	size_t buffPos = 0;
+	auto forceFile = fopen("boundaryForces.frc", "wb");
+
+	double residRho = 0.0;
+	double residU = 0.0;
+	double residV = 0.0;
+	double residE = 0.0;
+	double residMax = 0.0;
 
 	double[] lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 	double[] thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
@@ -278,8 +293,10 @@ struct RK2
 	double[] lastE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 	double[] thisE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 	double[] tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+	ubyte[] forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
 	Vector!4[] R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
 
+	scope(exit) Mallocator.instance.deallocate(forceBuffer);
 	scope(exit) Mallocator.instance.deallocate(R);
 	scope(exit) Mallocator.instance.deallocate(lastRho);
 	scope(exit) Mallocator.instance.deallocate(thisRho);
@@ -293,6 +310,8 @@ struct RK2
 
 	// let the integrator do any neccessary initialization
 	integrator.init(mesh);
+
+	double lastRmax = 0.0;
 
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
@@ -326,14 +345,15 @@ struct RK2
 		}
 
 		import std.algorithm : sum;
+
 		tmp[] = (thisRho[] - lastRho[])^^2;
-		double residRho = sqrt(mesh.cells.length*tmp.sum)/thisRho.sum;
+		residRho = sqrt(mesh.cells.length*tmp.sum)/thisRho.sum;
 		tmp[] = (thisU[] - lastU[])^^2;
-		double residU = sqrt(mesh.cells.length*tmp.sum)/thisU.sum;
+		residU = sqrt(mesh.cells.length*tmp.sum)/thisU.sum;
 		tmp[] = (thisV[] - lastV[])^^2;
-		double residV = sqrt(mesh.cells.length*tmp.sum)/thisV.sum;
+		residV = sqrt(mesh.cells.length*tmp.sum)/thisV.sum;
 		tmp[] = (thisE[] - lastE[])^^2;
-		double residE = sqrt(mesh.cells.length*tmp.sum)/thisE.sum;
+		residE = sqrt(mesh.cells.length*tmp.sum)/thisE.sum;
 
 		lastRho[] = thisRho[];
 		lastU[] = thisU[];
@@ -341,9 +361,19 @@ struct RK2
 		lastE[] = thisE[];
 
 		auto f = mesh.computeBoundaryForces(config.forceBoundary);
-		auto ld = rotMat*f;
+		ld = rotMat*f;
 
-		double residMax = max(residRho, residU, residV, residE);
+		forceBuffer.write!double(t, &buffPos);
+		forceBuffer.write!double(ld[0], &buffPos);
+		forceBuffer.write!double(ld[1], &buffPos);
+
+		if(buffPos == buffSize)
+		{
+			fwrite(forceBuffer.ptr, ubyte.sizeof, buffSize, forceFile);
+			buffPos = 0;
+		}
+
+		residMax = max(residRho, residU, residV, residE);
 		if(residRhoLast < residMax)
 		{
 			residRhoIncIters++;
@@ -369,38 +399,55 @@ struct RK2
 			printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
 		}
 		
-		if(iterations % config.saveIter == 0)
+		if(config.saveIter != -1)
 		{
-			import core.stdc.stdio : snprintf;
-			char[512] filename;
-			filename[] = 0;
-			snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
-			//saveMatlabSolution(mesh, filename.ptr);
-			saveSolution(mesh, filename.ptr, t, dt);
-			saveItr++;
+			if(iterations % config.saveIter == 0)
+			{
+				import core.stdc.stdio : snprintf;
+				char[512] filename;
+				filename[] = 0;
+				snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
+				//saveMatlabSolution(mesh, filename.ptr);
+				saveSolution(mesh, filename.ptr, t, dt);
+				saveItr++;
+			}
 		}
-
 		t += dt;
 		iterations++;
+		lastRmax = Rmax;
 	}
+
+	if(buffPos != 0)
+	{
+		fwrite(forceBuffer.ptr, ubyte.sizeof, buffPos, forceFile);
+		buffPos = 0;
+	}
+	fclose(forceFile);
+
+	saveSolution(mesh, cast(char*)"final.esln", t, dt);
+	printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+	printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
+
 }
 
 @nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile, SolverException ex)
 {
+	double M = config.ic[0];
+	double aoa = config.ic[1] * (PI/180);
+	double p = config.ic[2];
+	double rho = config.ic[3];
+	double a = sqrt(gamma*(p/rho));
+	double U = M*a;
+	double u = U*cos(aoa);
+	double v = U*sin(aoa);
+
+	printf("M = %f\tU = %f\n", M, U);
+
 	if(saveFile == "")
 	{
 		// Setup initial conditions
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
-			double M = config.ic[0];
-			double aoa = config.ic[1] * (PI/180);
-			double p = config.ic[2];
-			double rho = config.ic[3];
-			double a = sqrt(gamma*(p/rho));
-			double U = M*a;
-			double u = U*cos(aoa);
-			double v = U*sin(aoa);
-
 			mesh.q[i] = buildQ(rho, u, v, p);
 
 			lastRho[i] = mesh.q[i][0];
@@ -468,14 +515,14 @@ struct RK2
 				throw ex;
 			}
 
-			immutable double M = config.bc[bcIdx][0];
-			immutable double aoa = config.bc[bcIdx][1] * (PI/180);
-			immutable double p = config.bc[bcIdx][2];
-			immutable double rho = config.bc[bcIdx][3];
-			immutable double a = sqrt(gamma*(p/rho));
-			immutable double U = M*a;
-			immutable double u = U*cos(aoa);
-			immutable double v = U*sin(aoa);
+			M = config.bc[bcIdx][0];
+			aoa = config.bc[bcIdx][1] * (PI/180);
+			p = config.bc[bcIdx][2];
+			rho = config.bc[bcIdx][3];
+			a = sqrt(gamma*(p/rho));
+			U = M*a;
+			u = U*cos(aoa);
+			v = U*sin(aoa);
 			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.bTypes[bcIdx];
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
@@ -587,15 +634,25 @@ struct RK2
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
 						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-						double lim = 1.0;
+						
 						for(uint j = 0; j < dims; j++)
 						{
-							lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 						}
-						for(uint j = 0; j < dims; j++)
+
+						if(getPressure(mesh.edges[i].q[0]) < 0)
 						{
-							//mesh.edges[i].q[0][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-							mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+							double lim = 1.0;
+							for(uint j = 0; j < dims; j++)
+							{
+								lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+							}
+							for(uint j = 0; j < dims; j++)
+							{
+								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+								mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+							}
 						}
 					}
 
@@ -625,15 +682,26 @@ struct RK2
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
 						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-						double lim = 1.0;
+						
 						for(uint j = 0; j < dims; j++)
 						{
-							lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 						}
-						for(uint j = 0; j < dims; j++)
+
+						if(getPressure(mesh.edges[i].q[0]) < 0)
 						{
-							//mesh.edges[i].q[0][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-							mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+							double lim = 1.0;
+							for(uint j = 0; j < dims; j++)
+							{
+								lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+							}
+
+							for(uint j = 0; j < dims; j++)
+							{
+								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+								mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+							}
 						}
 					}
 
@@ -643,7 +711,8 @@ struct RK2
 					double a = sqrt(gamma*(p/mesh.edges[i].q[0][0]));
 					if(p < 0)
 					{
-						printf("pressure less than 0 at wall\n");
+						p = 1.0e-12;
+						//printf("pressure less than 0 at wall\n");
 					}
 					mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
 					mesh.edges[i].sMax = std.math.abs(a);
@@ -681,15 +750,26 @@ struct RK2
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
 					//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
-					double lim = 1.0;
+					
 					for(uint j = 0; j < dims; j++)
 					{
-						lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+						mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
-					for(uint j = 0; j < dims; j++)
+
+					if(getPressure(mesh.edges[i].q[k]) < 0)
 					{
-						//mesh.edges[i].q[k][j] = qM[j] + lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-						mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+						double lim = 1.0;
+						for(uint j = 0; j < dims; j++)
+						{
+							lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]);
+						}
+
+						for(uint j = 0; j < dims; j++)
+						{
+							//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+						}
 					}
 				}
 			}
