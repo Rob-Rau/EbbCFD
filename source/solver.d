@@ -24,7 +24,7 @@ import ebb.mesh;
 
 static shared bool interupted = false;
 
-@nogc nothrow @system extern(C) void handle(int sig)
+@nogc @system nothrow extern(C) void handle(int sig)
 {
 	printf("Signal received\n");
 	atomicStore(interupted, true);
@@ -326,6 +326,7 @@ struct RK2
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 
 	while(!approxEqual(t, config.tEnd) && !atomicLoad(interupted))
+	//while((abs(t - config.tEnd) > 1.0e-9)  && !atomicLoad(interupted))
 	{
 		double Rmax = 0;
 
