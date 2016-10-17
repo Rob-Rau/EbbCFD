@@ -63,7 +63,7 @@
 			"lflags": ["-L/usr/lib64", "-L~/ldc2-1.0.0-linux-x86_64/lib"]
 		},
 		"ldc-release-prof": {
-			"buildOptions": ["inline", "debugInfo"],
+			"buildOptions": ["releaseMode", "inline", "debugInfo"],
 			"dflags": ["-O5"]
 		}
 	}

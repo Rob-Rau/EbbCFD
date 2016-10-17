@@ -244,6 +244,21 @@ struct UMesh2
 			for(uint j = 0; j < cells[i].nEdges; j++)
 			{
 				auto edge = edges[cells[i].edges[j]];
+
+				auto v1 = edge.mid - cells[i].centroid;
+				/+
+				if(edge.isBoundary)
+				{
+					auto bDot = v1.dot(edge.bNormal);
+					if(bDot > 0.0)
+					{
+						edges[cells[i].edges[j]].bNormal *= -1.0;
+					}
+				}
+				+/
+				auto eDot = v1.dot(edge.normal);
+				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
+
 				if(!edge.isBoundary)
 				{
 					if(edge.cellIdx[0] == i)
@@ -449,6 +464,60 @@ struct SlnHeader
 		buffer.write!double(mesh.q[i][1], &offset);
 		buffer.write!double(mesh.q[i][2], &offset);
 		buffer.write!double(mesh.q[i][3], &offset);
+	}
+
+	import std.digest.crc : CRC32;
+
+	CRC32 crc;
+	crc.start();
+	crc.put(buffer);
+	auto crc32 = crc.finish();
+
+	buffer.write!ubyte(crc32[0], &offset);
+	buffer.write!ubyte(crc32[1], &offset);
+	buffer.write!ubyte(crc32[2], &offset);
+	buffer.write!ubyte(crc32[3], &offset);
+
+	auto file = fopen(filename, "wb");
+	ulong writeOffset = 0;
+	while(writeOffset < buffer.length)
+	{
+		ulong chunkSize = 1024*1024*1024;
+		if(buffer.length - writeOffset < chunkSize)
+		{
+			chunkSize = buffer.length - writeOffset;
+		}
+		fwrite(buffer[writeOffset..writeOffset+chunkSize].ptr, ubyte.sizeof, chunkSize, file);
+		writeOffset += chunkSize;
+	}
+	fclose(file);
+}
+
+@nogc void saveLimits(ref UMesh2 mesh, char* filename, double t, double dt)
+{
+	import std.experimental.allocator.mallocator : Mallocator;
+	import std.bitmanip : write;
+
+	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.cells.length, t: t, dt: dt};
+
+	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
+
+	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
+	scope(exit) Mallocator.instance.deallocate(buffer);
+
+	size_t offset = 0;
+	buffer.write!uint(header.slnMagic, &offset);
+	buffer.write!uint(header.slnVersion, &offset);
+	buffer.write!uint(header.dataPoints, &offset);
+	buffer.write!double(header.t, &offset);
+	buffer.write!double(header.dt, &offset);
+
+	for(uint i = 0; i < mesh.cells.length; i++)
+	{
+		buffer.write!double(mesh.cells[i].lim[0], &offset);
+		buffer.write!double(mesh.cells[i].lim[1], &offset);
+		buffer.write!double(mesh.cells[i].lim[2], &offset);
+		buffer.write!double(mesh.cells[i].lim[3], &offset);
 	}
 
 	import std.digest.crc : CRC32;

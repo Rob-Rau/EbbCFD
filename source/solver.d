@@ -325,8 +325,9 @@ struct RK2
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 
-	while(!approxEqual(t, config.tEnd) && !atomicLoad(interupted))
+	//while(!approxEqual(t, config.tEnd) && !atomicLoad(interupted))
 	//while((abs(t - config.tEnd) > 1.0e-9)  && !atomicLoad(interupted))
+	while((t < config.tEnd) && !atomicLoad(interupted))
 	{
 		double Rmax = 0;
 
@@ -417,6 +418,9 @@ struct RK2
 				snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
 				//saveMatlabSolution(mesh, filename.ptr);
 				saveSolution(mesh, filename.ptr, t, dt);
+				filename[] = 0;
+				snprintf(filename.ptr, 512, "save_%d.lsln", saveItr);
+				saveLimits(mesh, filename.ptr, t, dt);
 				saveItr++;
 			}
 		}
@@ -433,6 +437,7 @@ struct RK2
 	fclose(forceFile);
 
 	saveSolution(mesh, cast(char*)"final.esln", t, dt);
+	saveLimits(mesh, cast(char*)"final.lsln", t, dt);
 	printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
 	printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
 
@@ -583,7 +588,17 @@ struct RK2
 					auto qM = q[i];
 					auto grad = mesh.cells[i].gradient;
 					auto centroid = mesh.cells[i].centroid;
-					auto mid = mesh.edges[eIdx].mid;
+					//auto mid = mesh.edges[eIdx].mid;
+					Vector!2 mid;
+					if(i == mesh.edges[eIdx].cellIdx[0])
+					{
+						mid = mesh.cells[mesh.edges[eIdx].cellIdx[1]].centroid;
+					}
+					else
+					{
+						mid = mesh.cells[mesh.edges[eIdx].cellIdx[0]].centroid;
+					}
+					
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
 					auto minQ = mesh.cells[i].minQ;
@@ -613,7 +628,7 @@ struct RK2
 						{
 							printf("computed limiter greater than 1.0\n");
 						}
-						
+
 						mesh.cells[i].lim[k] = fmin(mesh.cells[i].lim[k], s);
 					}
 				}
@@ -639,6 +654,7 @@ struct RK2
 						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
 						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
 						auto mid = mesh.edges[i].mid;
+
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
 						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
@@ -755,6 +771,9 @@ struct RK2
 					auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
 					auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
 					auto mid = mesh.edges[i].mid;
+					//auto mid = mesh.edges[eIdx].mid;
+					//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(k+1)%2]].centroid;
+
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
 					//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
