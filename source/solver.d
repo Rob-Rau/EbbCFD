@@ -5,14 +5,12 @@ import core.atomic;
 import core.stdc.stdio : fopen, fwrite, fopen, printf, snprintf;
 import core.sys.posix.signal;
 
-import std.algorithm : canFind, min, max, reduce;
+import std.algorithm : canFind, min, max, reduce, sum;
 import std.conv;
 import std.json;
 import std.file;
 import std.math;
 import std.stdio;
-
-import rpp.client.rpc;
 
 import numd.utility;
 import numd.linearalgebra.matrix;
@@ -22,12 +20,148 @@ import ebb.euler;
 import ebb.flux;
 import ebb.mesh;
 
-static shared bool interupted = false;
+static shared bool interrupted = false;
 
 @nogc @system nothrow extern(C) void handle(int sig)
 {
 	printf("Signal received\n");
-	atomicStore(interupted, true);
+	atomicStore(interrupted, true);
+}
+
+@nogc void LP(uint m)(ref Matrix!(m, 2) A, ref Vector!m b, ref Vector!2 c)
+{
+	auto Ak = Matrix!(2, 2)(1, 0, 0, 1);
+	uint[2] Wk = [0, 1];
+	auto AkInv = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
+	auto xk = Vector!2(0);
+	auto pk = Vector!2(0);
+	auto lam = Vector!2(0);
+	auto e = Vector!2(0);
+	bool done = false;
+	uint k = 0;
+	uint[m - 2] D;
+	double[m - 2] gamma;
+	uint Dlen = 0;
+
+	@nogc void invertTrans(ref Matrix!(2, 2) inv, ref Matrix!(2, 2) mat)
+	{
+		inv[0] = mat[3];
+		inv[1] = -mat[2];
+		inv[2] = -mat[1];
+		inv[3] = mat[0];
+		inv *= mat.determinant;
+	}
+
+	@nogc void invert(ref Matrix!(2, 2) inv, ref Matrix!(2, 2) mat)
+	{
+		inv[0] = mat[3];
+		inv[1] = -mat[1];
+		inv[2] = -mat[2];
+		inv[3] = mat[0];
+		inv *= mat.determinant;
+	}
+
+	while(!done)
+	{
+		// compute lagrange multipliers
+		// lam = (Ak')^-1*c
+		invertTrans(AkInv, Ak);
+		lam = AkInv*c;
+
+		// If all lam >= 0, done = true
+		if((lam[0] >= 0.0) && (lam[1] >= 0.0))
+		{
+			done = true;
+			break;
+		}
+
+		// q = index(min(lam))
+		uint q;
+		lam[0] < lam[1] ? q = 0 : q = 1;
+
+		// compute step direction
+		if(q == 0)
+		{
+			e[0] = 1;
+			e[1] = 0;
+		}
+		else
+		{
+			e[0] = 0;
+			e[1] = 1;
+		}
+
+		// pk = (Ak)^-1*e_q
+		invert(AkInv, Ak);
+		pk = AkInv*e;
+
+		// find set of decreasing constraints
+		// D = (a_i'*pk < 0) note: only use i's not in Wk
+		Dlen = 0;
+		for(uint i = 0; i < m; i++)
+		{
+			if((i != Wk[0]) && (i != Wk[1]))
+			{
+				if(A[i, 0]*pk[0] + A[i,1]*pk[1] < 0)
+				{
+					D[Dlen] = i;
+					Dlen++;
+				}
+			}
+		}
+		// ensure D is not the null set. (shouldn't ever happen here)
+		assert(D[].sum != 0);
+
+		// for all i in D
+		// 		gamma_i = (a_i'*xk - b_i)/(-a_i'*pk)
+		// alpha = min(gamma_i)
+		double alpha = double.infinity;
+		for(uint i = 0; i < Dlen; i++)
+		{
+			immutable double aixk = A[D[i],0]*xk[0] + A[D[i],1]*xk[1];
+			immutable double aipk = A[D[i],0]*pk[0] + A[D[i],1]*pk[1];
+			gamma[i] = (aixk - b[D[i]])/(-aipk);
+			alpha = fmin(alpha, gamma[i]);
+		}
+		
+		uint t = 0;
+		for(uint i = 0; i < Dlen; i++)
+		{
+			if(gamma[i] == alpha)
+			{
+				t = D[i];
+				break;
+			}
+		}
+
+		if(q == Wk[0])
+		{
+			Wk[0] = t;
+		}
+		else if(q == Wk[1])
+		{
+			Wk[1] = t;
+		}
+		else
+		{
+			printf("ruh, rho, idk wtf mate\n");
+		}
+
+		Ak[0,0] = A[Wk[0],0];
+		Ak[0,1] = A[Wk[0],1];
+		Ak[1,0] = A[Wk[1],0];
+		Ak[1,1] = A[Wk[1],1];
+
+		xk += alpha*pk;
+
+		k++;
+
+		if(k > 15)
+		{
+			printf("k > 15, bailing out\n");
+			break;
+		}
+	}
 }
 
 class SolverException : Exception
@@ -327,11 +461,15 @@ struct RK2
 
 	//while(!approxEqual(t, config.tEnd) && !atomicLoad(interupted))
 	//while((abs(t - config.tEnd) > 1.0e-9)  && !atomicLoad(interupted))
-	while((t < config.tEnd) && !atomicLoad(interupted))
+	while((t < config.tEnd) && !atomicLoad(interrupted))
 	{
 		double Rmax = 0;
-
-		integrator.step!solver(R, mesh, config, dt, Rmax, ex);
+		double newDt = dt;
+		integrator.step!solver(R, mesh, config, newDt, Rmax, ex);
+		if(config.dynamicDt)
+		{
+			dt = newDt;
+		}
 
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
@@ -632,6 +770,36 @@ struct RK2
 						mesh.cells[i].lim[k] = fmin(mesh.cells[i].lim[k], s);
 					}
 				}
+				/+
+				for(uint k = 0; k < dims; k++)
+				{
+					if(mesh.cells[i].lim[k] < config.lpThresh)
+					{
+						auto A = Matrix!(8,2)(0);
+						auto b = Vector!8(0);
+						auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
+						A[0,0] = 1;
+						A[0,1] = 0;
+						A[1,0] = 0;
+						A[1,1] = 1;
+						A[2,0] = -1;
+						A[2,1] = 0;
+						A[3,0] = 0;
+						A[3,1] = -1;
+						b[0] = 0;
+						b[1] = 0;
+						b[2] = -1;
+						b[3] = -1;
+
+						for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+						{
+
+						}
+
+						LP!8(A, b, c);
+					}
+				}
+				+/
 			}
 		}
 	}
@@ -895,6 +1063,7 @@ struct Config
 {
 	string meshFile;
 	double dt;
+	bool dynamicDt;
 	double tEnd;
 	string limiter;
 	string flux;
@@ -903,6 +1072,7 @@ struct Config
 	string forceBoundary;
 	string integrator;
 	bool limited;
+	double lpThresh;
 	long order;
 	double CFL;
 	double[4] ic;
@@ -949,6 +1119,16 @@ Config loadConfig(string conf)
 	{
 		writeln("CFL not provided, setting to 0.5");
 		config.CFL = 0.5;
+	}
+
+	try
+	{
+		config.dynamicDt = (jConfig["dynamicDt"].type == JSON_TYPE.TRUE);
+	}
+	catch(Exception ex)
+	{
+		writeln("dynamicDt not provided, enabling");
+		config.dynamicDt = true;
 	}
 
 	try
@@ -1097,18 +1277,20 @@ void main(string[] args)
 {
 	import std.getopt;
 	string configFile;
-	string plotAddr = "127.0.0.1";
 	string saveFile = "";
-	ushort plotPort = 54000;
 
 	signal(SIGINT, &handle);
-	auto res = getopt(args, "c|config", "config file to read", &configFile, "pa|plotAddr", "IP address to plot to", &plotAddr, 
-							"pp|plotPort", "Port to plot to", &plotPort, "s|save", "Save file to start from", &saveFile);
-
-	//initRPP(plotAddr, plotPort);
+	auto res = getopt(args, "c|config", "config file to read", &configFile, 
+							"s|save", "Save file to start from", &saveFile);
 
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
 
 	startComputation(config, saveFile);
+	/+
+	Matrix!(5, 2) A;
+	Vector!5 b;
+	auto c = Vector!2(0);
+	LP!(5)(A, b, c);
+	+/
 }

@@ -62,6 +62,7 @@ struct UCell2
 	Matrix!(2, 6) gradMat;
 	Vector!2[4] gradient;
 	Vector!4 lim;
+	bool[4] useLP;
 	Vector!4 minQ;
 	Vector!4 maxQ;
 
@@ -73,7 +74,7 @@ struct UCell2
 	Vector!2 centroid;
 }
 
-double determinant(Matrix!(2, 2) mat)
+@nogc double determinant(Matrix!(2, 2) mat)
 {
 	return mat[0]*mat[3] - mat[1]*mat[2];
 }
