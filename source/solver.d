@@ -28,12 +28,12 @@ static shared bool interrupted = false;
 	atomicStore(interrupted, true);
 }
 
-@nogc void LP(uint m)(ref Matrix!(m, 2) A, ref Vector!m b, ref Vector!2 c)
+@nogc void LP(uint m)(ref Matrix!(m, 2) A, ref Vector!m b, ref Vector!2 c, ref Vector!2 xk)
 {
-	auto Ak = Matrix!(2, 2)(1, 0, 0, 1);
 	uint[2] Wk = [0, 1];
 	auto AkInv = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
-	auto xk = Vector!2(0);
+	auto Ak = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
+	//auto xk = Vector!2(0);
 	auto pk = Vector!2(0);
 	auto lam = Vector!2(0);
 	auto e = Vector!2(0);
@@ -49,7 +49,8 @@ static shared bool interrupted = false;
 		inv[1] = -mat[2];
 		inv[2] = -mat[1];
 		inv[3] = mat[0];
-		inv *= mat.determinant;
+		assert(mat.determinant != 0.0);
+		inv *= (1.0/mat.determinant);
 	}
 
 	@nogc void invert(ref Matrix!(2, 2) inv, ref Matrix!(2, 2) mat)
@@ -58,7 +59,8 @@ static shared bool interrupted = false;
 		inv[1] = -mat[1];
 		inv[2] = -mat[2];
 		inv[3] = mat[0];
-		inv *= mat.determinant;
+		assert(mat.determinant != 0.0);
+		inv *= (1.0/mat.determinant);
 	}
 
 	while(!done)
@@ -69,18 +71,21 @@ static shared bool interrupted = false;
 		lam = AkInv*c;
 
 		// If all lam >= 0, done = true
-		if((lam[0] >= 0.0) && (lam[1] >= 0.0))
+		//if((lam[0] >= -10e-11) && (lam[1] >= -10e-11))
+		if((lam[0] >= 0) && (lam[1] >= 0))
 		{
 			done = true;
+			printf("xk optimal. k = %d\n", k);
 			break;
 		}
 
 		// q = index(min(lam))
 		uint q;
-		lam[0] < lam[1] ? q = 0 : q = 1;
+		lam[0] < lam[1] ? q = Wk[0] : q = Wk[1];
 
 		// compute step direction
-		if(q == 0)
+		//if(q == 0)
+		if(lam[0] < lam[1])
 		{
 			e[0] = 1;
 			e[1] = 0;
@@ -100,17 +105,21 @@ static shared bool interrupted = false;
 		Dlen = 0;
 		for(uint i = 0; i < m; i++)
 		{
-			if((i != Wk[0]) && (i != Wk[1]))
+			
+			if(i != q)
 			{
-				if(A[i, 0]*pk[0] + A[i,1]*pk[1] < 0)
+				if((i != Wk[0]) && (i != Wk[1]))
 				{
-					D[Dlen] = i;
-					Dlen++;
+					if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -10.0^^-11.0)
+					{
+						D[Dlen] = i;
+						Dlen++;
+					}
 				}
 			}
 		}
 		// ensure D is not the null set. (shouldn't ever happen here)
-		assert(D[].sum != 0);
+		assert(abs(D[].sum) > 1.0e-11);
 
 		// for all i in D
 		// 		gamma_i = (a_i'*xk - b_i)/(-a_i'*pk)
@@ -121,18 +130,25 @@ static shared bool interrupted = false;
 			immutable double aixk = A[D[i],0]*xk[0] + A[D[i],1]*xk[1];
 			immutable double aipk = A[D[i],0]*pk[0] + A[D[i],1]*pk[1];
 			gamma[i] = (aixk - b[D[i]])/(-aipk);
+			printf("gamma = %.10e\n", gamma[i]);
+			assert(!gamma[i].isNaN);
 			alpha = fmin(alpha, gamma[i]);
+			assert(!alpha.isNaN);
 		}
-		
+
+		printf("alpha = %.10e\n", alpha);
 		uint t = 0;
 		for(uint i = 0; i < Dlen; i++)
 		{
 			if(gamma[i] == alpha)
 			{
 				t = D[i];
+				printf("t = %d\n", t);
 				break;
 			}
 		}
+
+		//Wk[q] = t;
 
 		if(q == Wk[0])
 		{
@@ -152,6 +168,7 @@ static shared bool interrupted = false;
 		Ak[1,0] = A[Wk[1],0];
 		Ak[1,1] = A[Wk[1],1];
 
+		assert(!pk[0].isNaN);
 		xk += alpha*pk;
 
 		k++;
@@ -720,13 +737,16 @@ struct RK2
 
 			if(config.limited)
 			{
-				for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+				//for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+				for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
 				{
-					uint eIdx = mesh.cells[i].edges[j];
+					//uint eIdx = mesh.cells[i].edges[j];
 					auto qM = q[i];
 					auto grad = mesh.cells[i].gradient;
 					auto centroid = mesh.cells[i].centroid;
 					//auto mid = mesh.edges[eIdx].mid;
+					auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
+					/+
 					Vector!2 mid;
 					if(i == mesh.edges[eIdx].cellIdx[0])
 					{
@@ -736,7 +756,7 @@ struct RK2
 					{
 						mid = mesh.cells[mesh.edges[eIdx].cellIdx[0]].centroid;
 					}
-					
+					+/
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
 					auto minQ = mesh.cells[i].minQ;
@@ -770,36 +790,50 @@ struct RK2
 						mesh.cells[i].lim[k] = fmin(mesh.cells[i].lim[k], s);
 					}
 				}
-				/+
-				for(uint k = 0; k < dims; k++)
+
+				if(config.lpThresh > 0)
 				{
-					if(mesh.cells[i].lim[k] < config.lpThresh)
+					for(uint k = 0; k < dims; k++)
 					{
-						auto A = Matrix!(8,2)(0);
-						auto b = Vector!8(0);
-						auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
-						A[0,0] = 1;
-						A[0,1] = 0;
-						A[1,0] = 0;
-						A[1,1] = 1;
-						A[2,0] = -1;
-						A[2,1] = 0;
-						A[3,0] = 0;
-						A[3,1] = -1;
-						b[0] = 0;
-						b[1] = 0;
-						b[2] = -1;
-						b[3] = -1;
-
-						for(uint j = 0; j < mesh.cells[i].nEdges; j++)
+						if(mesh.cells[i].lim[k] < config.lpThresh)
 						{
+							printf("Using LP limiter\n");
+							auto A = Matrix!(10,2)(0);
+							auto b = Vector!10(0);
+							auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
+							auto xk = Vector!2(0);
+							A[0,0] = 1;
+							A[0,1] = 0;
+							A[1,0] = 0;
+							A[1,1] = 1;
+							A[2,0] = -1;
+							A[2,1] = 0;
+							A[3,0] = 0;
+							A[3,1] = -1;
+							b[0] = 0;
+							b[1] = 0;
+							b[2] = -1;
+							b[3] = -1;
 
+							for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
+							{
+								immutable uint cellIdx = mesh.cells[i].neighborCells[j];
+
+								A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
+								A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+								b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
+
+								A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
+								A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+								b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
+							}
+
+							LP!10(A, b, c, xk);
+
+							printf("xk = [%.10e, %.10e]\n", xk[0], xk[1]);
 						}
-
-						LP!8(A, b, c);
 					}
 				}
-				+/
 			}
 		}
 	}
@@ -1149,6 +1183,16 @@ Config loadConfig(string conf)
 	{
 		writeln("Limited option not provided, setting to true");
 		config.limited = true;
+	}
+
+	try
+	{
+		config.lpThresh = getDouble(jConfig["lpThresh"]);
+	}
+	catch(Exception ex)
+	{
+		writeln("LP threshold not provided, turning off (-1)");
+		config.lpThresh = -1;
 	}
 
 	try
