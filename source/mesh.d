@@ -53,15 +53,13 @@ struct Edge
 
 struct UCell2
 {
-	// Cell everaged values
-	//Vector!4 q;
-
 	uint[6] edges;
 	double[6] fluxMultiplier;
 	uint[6] neighborCells;
 	Matrix!(2, 6) gradMat;
 	Vector!2[4] gradient;
-	Vector!4 lim;
+	Vector!2[4] lim;
+	double[4] gradErr;
 	bool[4] useLP;
 	Vector!4 minQ;
 	Vector!4 maxQ;
@@ -159,7 +157,7 @@ struct UMesh2
 			cells[i].perim = 0;
 			cells[i].centroid = Vector!2(0);
 			cells[i].nNeighborCells = 0;
-			cells[i].lim = Vector!4(1.0);
+			cells[i].lim[] = Vector!2(1.0);
 
 			for(uint j = 0; j < cells[i].nEdges; j++)
 			{
@@ -515,10 +513,10 @@ struct SlnHeader
 
 	for(uint i = 0; i < mesh.cells.length; i++)
 	{
-		buffer.write!double(mesh.cells[i].lim[0], &offset);
-		buffer.write!double(mesh.cells[i].lim[1], &offset);
-		buffer.write!double(mesh.cells[i].lim[2], &offset);
-		buffer.write!double(mesh.cells[i].lim[3], &offset);
+		buffer.write!double(mesh.cells[i].gradErr[0], &offset);
+		buffer.write!double(mesh.cells[i].gradErr[1], &offset);
+		buffer.write!double(mesh.cells[i].gradErr[2], &offset);
+		buffer.write!double(mesh.cells[i].gradErr[3], &offset);
 	}
 
 	import std.digest.crc : CRC32;
@@ -554,8 +552,13 @@ struct SlnHeader
 	import std.bitmanip : peek;
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.digest.crc : CRC32;
+	import std.string : toStringz;
+	char[1024] filenamePtr;
+	filenamePtr[] = 0;
+	filenamePtr[0..filename.length] = filename[];
+	auto file = fopen(filenamePtr.ptr, "rb");
+	assert(file != null);
 
-	auto file = fopen(filename.ptr, "rb");
 	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(8);
 	scope(exit) Mallocator.instance.deallocate(buffer);
 
@@ -711,7 +714,7 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 }
 
-@nogc void saveMatlabMesh(ref UMesh2 mesh, immutable (char)* filename)
+@nogc void saveMatlabMesh(ref UMesh2 mesh, immutable (string) filename)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -804,7 +807,10 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 		}
 	}
 
-	auto file = fopen(filename, "wb");
+	char[1024] filenamePtr;
+	filenamePtr[] = 0;
+	filenamePtr[0..filename.length] = filename[];
+	auto file = fopen(filenamePtr.ptr, "wb");
 	ulong writeOffset = 0;
 	while(writeOffset < buffer.length)
 	{

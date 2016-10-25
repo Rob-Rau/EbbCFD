@@ -14,6 +14,24 @@ import numd.linearalgebra.matrix;
 
 import ebb.mesh;
 
+double sum(string member)(UCell2[] cells)
+{
+	if(cells.length <= 6)
+	{
+		mixin("double s = cells[0]."~member~";");
+		for(uint i = 1; i < cells.length; i++)
+		{
+			mixin("s += cells[i]."~member~";");
+		}
+		return s;
+	}
+	else
+	{
+		uint m = cast(uint)floor(cast(double)cells.length/2.0);
+		return sum!member(cells[0..m-1]) + sum!member(cells[m..$-1]);
+	}
+}
+
 void main(string[] args)
 {
 	bool convert;
@@ -71,10 +89,13 @@ void main(string[] args)
 			return;
 		}
 
+		auto dAve = mesh.cells.sum!"d"/mesh.cells.length;
+
 		writeln("----------------------------Mesh Info----------------------------");
 		writeln("mesh: ", inFile);
 		writeln("Dimensions: ", 2);
 		writeln("cells: ", mesh.cells.length);
+		writeln("D_ave: ", dAve);
 		writeln("nodes: ", mesh.nodes.length);
 		writeln("boundaries: ", mesh.bTags.length);
 		for(uint i = 0; i < mesh.bTags.length; i++)
@@ -128,7 +149,7 @@ void main(string[] args)
 		else if(outFile.canFind("mmsh"))
 		{
 			writeln("Save mesh in matlab format");
-			saveMatlabMesh(mesh, outFile.ptr);
+			saveMatlabMesh(mesh, outFile);
 		}
 		else
 		{

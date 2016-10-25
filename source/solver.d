@@ -63,25 +63,39 @@ static shared bool interrupted = false;
 		inv *= (1.0/mat.determinant);
 	}
 
+	//printf("c = [%.10e, %.10e]\n", c[0], c[1]);
 	while(!done)
 	{
 		// compute lagrange multipliers
 		// lam = (Ak')^-1*c
 		invertTrans(AkInv, Ak);
+		//printf("%.10e, %.10e\n", AkInv[0,0], AkInv[0,1]);
+		//printf("%.10e, %.10e\n", AkInv[1,0], AkInv[1,1]);
 		lam = AkInv*c;
 
+		//printf("lam = [%.10e, %.10e]\n", lam[0], lam[1]);
 		// If all lam >= 0, done = true
-		//if((lam[0] >= -10e-11) && (lam[1] >= -10e-11))
-		if((lam[0] >= 0) && (lam[1] >= 0))
+		if((lam[0] >= -10e-9) && (lam[1] >= -10e-9))
+		//if((abs(lam[0]) >= 1e-12) && (abs(lam[1]) >= 1e-12))
 		{
 			done = true;
-			printf("xk optimal. k = %d\n", k);
+			//printf("xk optimal. k = %d\n", k);
 			break;
 		}
 
 		// q = index(min(lam))
 		uint q;
-		lam[0] < lam[1] ? q = Wk[0] : q = Wk[1];
+		//lam[0] < lam[1] ? q = Wk[0] : q = Wk[1];
+		if(lam[0] < lam[1])
+		{
+			//q = 0;
+			q = Wk[0];
+		}
+		else
+		{
+			//q = 1;
+			q = Wk[1];
+		}
 
 		// compute step direction
 		//if(q == 0)
@@ -105,18 +119,17 @@ static shared bool interrupted = false;
 		Dlen = 0;
 		for(uint i = 0; i < m; i++)
 		{
-			
-			if(i != q)
-			{
+			//if(i != q)
+			//{
 				if((i != Wk[0]) && (i != Wk[1]))
 				{
-					if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -10.0^^-11.0)
+					if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -1e-11)
 					{
 						D[Dlen] = i;
 						Dlen++;
 					}
 				}
-			}
+			//}
 		}
 		// ensure D is not the null set. (shouldn't ever happen here)
 		assert(abs(D[].sum) > 1.0e-11);
@@ -130,20 +143,23 @@ static shared bool interrupted = false;
 			immutable double aixk = A[D[i],0]*xk[0] + A[D[i],1]*xk[1];
 			immutable double aipk = A[D[i],0]*pk[0] + A[D[i],1]*pk[1];
 			gamma[i] = (aixk - b[D[i]])/(-aipk);
-			printf("gamma = %.10e\n", gamma[i]);
+			//printf("gamma = %.10e\n", gamma[i]);
 			assert(!gamma[i].isNaN);
 			alpha = fmin(alpha, gamma[i]);
 			assert(!alpha.isNaN);
 		}
 
-		printf("alpha = %.10e\n", alpha);
+		//printf("alpha = %.10e\n", alpha);
+		//assert(q < 2);
+
 		uint t = 0;
 		for(uint i = 0; i < Dlen; i++)
 		{
 			if(gamma[i] == alpha)
 			{
 				t = D[i];
-				printf("t = %d\n", t);
+				//printf("t = %d q = %d, Wk[q] = %d\n", t, q, Wk[q]);
+				//printf("t = %d q = %d\n", t, q);
 				break;
 			}
 		}
@@ -168,8 +184,13 @@ static shared bool interrupted = false;
 		Ak[1,0] = A[Wk[1],0];
 		Ak[1,1] = A[Wk[1],1];
 
-		assert(!pk[0].isNaN);
 		xk += alpha*pk;
+/+
+		printf("%.10e, %.10e\n", Ak[0,0], Ak[0,1]);
+		printf("%.10e, %.10e\n", Ak[1,0], Ak[1,1]);
+		printf("xk = [%.10e, %.10e]\n", xk[0], xk[1]);
++/
+		assert(!pk[0].isNaN);
 
 		k++;
 
@@ -179,6 +200,8 @@ static shared bool interrupted = false;
 			break;
 		}
 	}
+
+	//for(uint i = 0; i < 100_000_000; i++){}
 }
 
 class SolverException : Exception
@@ -276,7 +299,7 @@ struct Euler
 
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
 	{
 		double newDt = double.infinity;
 
@@ -284,7 +307,7 @@ struct Euler
 
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
-			mesh.q[i] = mesh.q[i] + dt*R[i];
+			q[i] = mesh.q[i] + dt*R[i];
 		}
 
 		dt = newDt;
@@ -328,7 +351,7 @@ struct RK4
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
 	{
 		import core.stdc.stdio : printf;
 
@@ -356,7 +379,7 @@ struct RK4
 
 		for(uint i = 0; i < mesh.q.length; i++)
 		{
-			mesh.q[i] = mesh.q[i] + (dt/6.0)*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
+			q[i] = mesh.q[i] + (dt/6.0)*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
 		}
 
 		dt = newDt;
@@ -394,7 +417,7 @@ struct RK2
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
 	{
 		import core.stdc.stdio : printf;
 
@@ -410,7 +433,7 @@ struct RK2
 
 		for(uint i = 0; i < mesh.q.length; i++)
 		{
-			mesh.q[i] = mesh.q[i] + (dt/2.0)*(k1[i] + k2[i]);
+			q[i] = mesh.q[i] + (dt/2.0)*(k1[i] + k2[i]);
 		}
 
 		dt = newDt;
@@ -456,6 +479,30 @@ struct RK2
 	ubyte[] forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
 	Vector!4[] R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
 
+	Vector!4[] q0;
+	Vector!4[] q1;
+	Vector!4[] q2;
+	Vector!4[] dem;
+	if(config.aitkenTol > 0)
+	{
+		q0 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+		q1 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+		q2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+		dem = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+
+		for(uint i = 0; i < mesh.cells.length; i++)
+		{
+			q0[i] = Vector!4(0);
+			q1[i] = Vector!4(0);
+			q2[i] = Vector!4(0);
+			dem[i] = Vector!4(0);
+		}
+		scope(exit) Mallocator.instance.deallocate(q0);
+		scope(exit) Mallocator.instance.deallocate(q1);
+		scope(exit) Mallocator.instance.deallocate(q2);
+		scope(exit) Mallocator.instance.deallocate(dem);
+	}
+
 	scope(exit) Mallocator.instance.deallocate(forceBuffer);
 	scope(exit) Mallocator.instance.deallocate(R);
 	scope(exit) Mallocator.instance.deallocate(lastRho);
@@ -482,12 +529,72 @@ struct RK2
 	{
 		double Rmax = 0;
 		double newDt = dt;
-		integrator.step!solver(R, mesh, config, newDt, Rmax, ex);
+
+		if((config.aitkenTol < 0) || ((config.aitkenTol > 0) && (iterations < 500)))
+		{
+			integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
+		}
+		else
+		{
+			q0[] = mesh.q[];
+			/+
+			for(uint i = 0; i < mesh.cells.length; i++)
+			{
+				for(uint k = 0; k < 4; k++)
+				{
+					q0[i][k] = mesh.q[i][k];
+				}
+			}
+			+/
+
+			integrator.step!solver(R, q1, mesh, config, newDt, Rmax, ex);
+			newDt = dt;
+			mesh.q[] = q1[];
+			/+
+			for(uint i = 0; i < mesh.cells.length; i++)
+			{
+				for(uint k = 0; k < 4; k++)
+				{
+					mesh.q[i][k] = q1[i][k];
+				}
+			}
+			+/
+
+			integrator.step!solver(R, q2, mesh, config, newDt, Rmax, ex);
+
+			for(uint i = 0; i < mesh.cells.length; i++)
+			{
+				for(uint k = 0; k < 4; k++)
+				{
+					printf("%f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k]);
+					/+
+					dem[i][k] = (q2[i][k] - q1[i][k]) - (q1[i][k] - q0[i][k]);
+					if(abs(dem[i][k]) > 10e-16)
+					{/+
+						ex.msg = "Aitken denominator too small";
+						ex.line = __LINE__;
+						ex.file = __FILE__;
+						throw ex;+/
+						mesh.q[i][k] = q2[i][k] - (((q2[i][k] - q1[i][k])^^2.0)/dem[i][k]);
+						printf("%f, %f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k], mesh.q[i][k]);
+					}+/
+					//mesh.q[i][k] = q2[i][k] - (((q2[i][k] - q1[i][k])^^2.0)/dem[i][k]);
+					//printf("%f, %f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k], mesh.q[i][k]);
+				}
+				printf("\n");
+			}
+		}
+
 		if(config.dynamicDt)
 		{
 			dt = newDt;
 		}
+/+
+		if((config.aitkenTol > 0) && (iterations > 0))
+		{
 
+		}
++/
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
 			thisRho[i] = mesh.q[i][0];
@@ -546,7 +653,11 @@ struct RK2
 		}
 		else
 		{
-			residRhoIncIters = 0;
+			if(residRhoIncIters >= 1)
+			{
+				residRhoIncIters--;
+			}
+			//residRhoIncIters = 0;
 		}
 
 		if(residRhoIncIters >= 2000)
@@ -702,7 +813,7 @@ struct RK2
 }
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, SolverException ex)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, SolverException ex)
 {
 	// Build gradients
 	if(config.order > 1)
@@ -716,7 +827,7 @@ struct RK2
 			}
 			mesh.cells[i].minQ = q[i];
 			mesh.cells[i].maxQ = q[i];
-			mesh.cells[i].lim = Vector!4(1.0);
+			mesh.cells[i].lim[] = Vector!2(1.0);
 			for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
 			{
 				uint idx = mesh.cells[i].neighborCells[j];
@@ -787,7 +898,8 @@ struct RK2
 							printf("computed limiter greater than 1.0\n");
 						}
 
-						mesh.cells[i].lim[k] = fmin(mesh.cells[i].lim[k], s);
+						mesh.cells[i].lim[k][0] = fmin(mesh.cells[i].lim[k][0], s);
+						mesh.cells[i].lim[k][1] = mesh.cells[i].lim[k][0];
 					}
 				}
 
@@ -795,12 +907,13 @@ struct RK2
 				{
 					for(uint k = 0; k < dims; k++)
 					{
-						if(mesh.cells[i].lim[k] < config.lpThresh)
+						if(mesh.cells[i].lim[k][0] < config.lpThresh)
 						{
-							printf("Using LP limiter\n");
+							//printf("Using LP limiter\n");
 							auto A = Matrix!(10,2)(0);
 							auto b = Vector!10(0);
 							auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
+							//auto xk = Vector!2(mesh.cells[i].lim[k][0], mesh.cells[i].lim[k][1]);
 							auto xk = Vector!2(0);
 							A[0,0] = 1;
 							A[0,1] = 0;
@@ -830,9 +943,36 @@ struct RK2
 
 							LP!10(A, b, c, xk);
 
-							printf("xk = [%.10e, %.10e]\n", xk[0], xk[1]);
+							//printf("xk = [%.10e, %.10e], lim = %.10e\n\n", xk[0], xk[1], mesh.cells[i].lim[k][0]);
+							mesh.cells[i].lim[k][0] = xk[0];
+							mesh.cells[i].lim[k][1] = xk[1];
+
+/+
+							if(xk[0] < 0.0)
+							{
+								mesh.cells[i].lim[k][0] = 0.0;
+								xk[0] = 0.0;
+							}
+
+							if(xk[1] < 0.0)
+							{
+								mesh.cells[i].lim[k][1] = 0.0;
+								xk[1] = 0.0;
+							}
++/
+							//printf("xk = [%.10e, %.10e]\n\n", xk[0], xk[1]);
+
+							assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
+							assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
 						}
 					}
+				}
+			
+				for(uint j = 0; j < 4; j++)
+				{
+					mesh.cells[i].gradErr[j] = -abs(mesh.cells[i].gradient[j][0])*mesh.cells[i].lim[j][0] +
+											   -abs(mesh.cells[i].gradient[j][1])*mesh.cells[i].lim[j][1] + 
+											    abs(mesh.cells[i].gradient[j][0]) + abs(mesh.cells[i].gradient[j][1]);
 				}
 			}
 		}
@@ -863,21 +1003,23 @@ struct RK2
 						
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+															mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
 							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 						}
 
 						if(getPressure(mesh.edges[i].q[0]) < 0)
 						{
-							double lim = 1.0;
+							double[2] lim = [1.0, 1.0];
 							for(uint j = 0; j < dims; j++)
 							{
-								lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+								lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+								lim[1] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[1]].lim[j][1]);
 							}
 							for(uint j = 0; j < dims; j++)
 							{
 								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-								mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+								mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
 							}
 						}
 					}
@@ -911,22 +1053,24 @@ struct RK2
 						
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+															mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
 							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 						}
 
 						if(getPressure(mesh.edges[i].q[0]) < 0)
 						{
-							double lim = 1.0;
+							double[2] lim = [1.0, 1.0];
 							for(uint j = 0; j < dims; j++)
 							{
-								lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]);
+								lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+								lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
 							}
 
 							for(uint j = 0; j < dims; j++)
 							{
 								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-								mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+								mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 							}
 						}
 					}
@@ -982,22 +1126,24 @@ struct RK2
 					
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
 						//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
 
 					if(getPressure(mesh.edges[i].q[k]) < 0)
 					{
-						double lim = 1.0;
+						double[2] lim = [1.0, 1.0];
 						for(uint j = 0; j < dims; j++)
 						{
-							lim = fmin(lim, mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]);
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]);
+							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]);
 						}
 
 						for(uint j = 0; j < dims; j++)
 						{
 							//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-							mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 						}
 					}
 				}
@@ -1113,6 +1259,7 @@ struct Config
 	string[] bTags;
 	BoundaryType[] bTypes;
 	double[][] bc;
+	double aitkenTol = -1;
 }
 
 Config loadConfig(string conf)
@@ -1209,6 +1356,16 @@ Config loadConfig(string conf)
 	{
 		writeln("Order option not provided, setting order 2");
 		config.order = 2;
+	}
+
+	try
+	{
+		config.aitkenTol = getDouble(jConfig["aitkenTol"]);
+	}
+	catch(Exception ex)
+	{
+		writeln("Aitken accelerator tolerance not supplied, disabling (-1)");
+		config.aitkenTol = -1;
 	}
 
 	auto ics = jConfig["initialConditions"].array;
