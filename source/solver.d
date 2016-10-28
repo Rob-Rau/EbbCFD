@@ -307,7 +307,14 @@ struct Euler
 
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
-			q[i] = mesh.q[i] + dt*R[i];
+			if(!config.localTimestep)
+			{
+				q[i] = mesh.q[i] + dt*R[i];
+			}
+			else
+			{
+				q[i] = mesh.q[i] + mesh.cells[i].dt*R[i];
+			}
 		}
 
 		dt = newDt;
@@ -379,7 +386,14 @@ struct RK4
 
 		for(uint i = 0; i < mesh.q.length; i++)
 		{
-			q[i] = mesh.q[i] + (dt/6.0)*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
+			if(!config.localTimestep)
+			{
+				q[i] = mesh.q[i] + (dt/6.0)*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
+			}
+			else
+			{
+				q[i] = mesh.q[i] + (mesh.cells[i].dt/6.0)*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
+			}
 		}
 
 		dt = newDt;
@@ -433,7 +447,14 @@ struct RK2
 
 		for(uint i = 0; i < mesh.q.length; i++)
 		{
-			q[i] = mesh.q[i] + (dt/2.0)*(k1[i] + k2[i]);
+			if(!config.localTimestep)
+			{
+				q[i] = mesh.q[i] + (dt/2.0)*(k1[i] + k2[i]);
+			}
+			else
+			{
+				q[i] = mesh.q[i] + (mesh.cells[i].dt/2.0)*(k1[i] + k2[i]);
+			}
 		}
 
 		dt = newDt;
@@ -523,8 +544,6 @@ struct RK2
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 
-	//while(!approxEqual(t, config.tEnd) && !atomicLoad(interupted))
-	//while((abs(t - config.tEnd) > 1.0e-9)  && !atomicLoad(interupted))
 	while((t < config.tEnd) && !atomicLoad(interrupted))
 	{
 		double Rmax = 0;
@@ -604,8 +623,8 @@ struct RK2
 			
 			if(mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN)
 			{
-				printf("pL = %f\n", getPressure(mesh.q[i]));
-				printf("qL = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
+				printf("p = %f\n", getPressure(mesh.q[i]));
+				printf("q = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
 				printf("cell = %d\n", i);
 				printf("iteration = %d\n", iterations);
 				printf("dt = %f\n", dt);
@@ -1187,6 +1206,25 @@ struct RK2
 
 		newDt = fmin(newDt, (config.CFL*mesh.cells[i].d)/sAve);
 
+		if(config.localTimestep)
+		{
+			mesh.cells[i].dt = config.CFL*mesh.cells[i].d/sAve;
+			if(mesh.cells[i].dt.isNaN)
+			{
+				mesh.cells[i].dt = 0;
+				//printf("R = [%.10e, %.10e, %.10e, %.10e]\n", R[0], R[1], R[2], R[3]);
+				/+
+				printf("%.10e\n", mesh.cells[i].perim);
+				//printf("%.10e\n", mesh.cells[i].perim);
+				printf("%.10e\n", sAve);
+				ex.msg = "dt is NaN";
+				ex.line = __LINE__;
+				ex.file = __FILE__;
+				throw ex;
+				+/
+			}
+		}
+
 		for(uint j = 0; j < dims; j++)
 		{
 			if(std.math.abs(R[i][j]) > Rmax)
@@ -1194,10 +1232,9 @@ struct RK2
 				Rmax = std.math.abs(R[i][j]);
 			}
 		}
-
+		
 		R[i] *= -(1.0/mesh.cells[i].area);
 	}
-
 }
 
 /+
@@ -1249,7 +1286,7 @@ struct Config
 	string flux;
 	long saveIter;
 	long plotIter;
-	string forceBoundary;
+	string[] forceBoundary;
 	string integrator;
 	bool limited;
 	double lpThresh;
@@ -1260,6 +1297,7 @@ struct Config
 	BoundaryType[] bTypes;
 	double[][] bc;
 	double aitkenTol = -1;
+	bool localTimestep = false;
 }
 
 Config loadConfig(string conf)
@@ -1290,7 +1328,19 @@ Config loadConfig(string conf)
 	config.tEnd = getDouble(jConfig["tEnd"]);
 	config.saveIter = jConfig["saveIter"].integer;
 	config.plotIter = jConfig["plotIter"].integer;
-	config.forceBoundary = jConfig["forceBoundary"].str;
+
+	try
+	{
+		auto forceBoundaries = jConfig["forceBoundary"].array;
+		for(uint i = 0; i < forceBoundaries.length; i++)
+		{
+			config.forceBoundary ~= forceBoundaries[i].str;
+		}
+	}
+	catch(Exception ex)
+	{
+		config.forceBoundary ~= jConfig["forceBoundary"].str;
+	}
 
 	try
 	{
@@ -1330,6 +1380,16 @@ Config loadConfig(string conf)
 	{
 		writeln("Limited option not provided, setting to true");
 		config.limited = true;
+	}
+
+	try
+	{
+		config.localTimestep = (jConfig["localTimestep"].type == JSON_TYPE.TRUE);
+	}
+	catch(Exception ex)
+	{
+		writeln("Local timestepping option not provided, setting to false");
+		config.localTimestep = false;
 	}
 
 	try
@@ -1488,10 +1548,4 @@ void main(string[] args)
 	auto config = loadConfig(configStr);
 
 	startComputation(config, saveFile);
-	/+
-	Matrix!(5, 2) A;
-	Vector!5 b;
-	auto c = Vector!2(0);
-	LP!(5)(A, b, c);
-	+/
 }

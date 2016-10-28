@@ -18,6 +18,11 @@ enum fluxDir
 	yDir
 }
 
+/+
+
+	auto fL = physicalFlux!dims(pL, uL, vL, rhoL, qL[3], n);
+	auto fR = physicalFlux!dims(pR, uR, vR, rhoR, qR[3], n);
++/
 @nogc Vector!dims physicalFlux(size_t dims)(double p, double u, double v, double rho, double e, Vector!2 n)
 {
 	Vector!dims f = Vector!dims([rho*u, p + rho*u^^2.0, rho*u*v, u*(p + e)]);
@@ -106,9 +111,10 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 	vel[0] = (sqrt((rhoL))*uL + sqrt((rhoR))*uR)/(sqrt((rhoL)) + sqrt((rhoR)));
 	vel[1] = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
 	immutable double u = vel.dot(n);
-
+	immutable double p = (sqrt(rhoL)*pL + sqrt(rhoR)*pR)/(sqrt(rhoL) + sqrt(rhoR));
 	immutable double h = (sqrt((rhoL))*hL + sqrt((rhoR))*hR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	immutable double a = sqrt( (gamma - 1.0)*(h - 0.5*(vel.magnitude^^2.0)));
+	//immutable double a = sqrt( (gamma - 1.0)*(h - 0.5*(vel.magnitude^^2.0)));
+	immutable double a = sqrt(gamma*(p/rho));
 
 	auto dRhoV = rhoVelR - rhoVelL;
 	auto dRho = rhoR - rhoL;
@@ -122,19 +128,19 @@ Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims
 	immutable double eps = 0.01*a;
 	if(lam1 < eps)
 	{
-		lam1 = (eps^^2 + lam1^^2)/(2.0*eps);
+		lam1 = (eps^^2.0 + lam1^^2.0)/(2.0*eps);
 	}
 	if(lam2 < eps)
 	{
-		lam2 = (eps^^2 + lam2^^2)/(2.0*eps);
+		lam2 = (eps^^2.0 + lam2^^2.0)/(2.0*eps);
 	}
 	if(lam3 < eps)
 	{
-		lam3 = (eps^^2 + lam3^^2)/(2.0*eps);
+		lam3 = (eps^^2.0 + lam3^^2.0)/(2.0*eps);
 	}
 	if(lam4 < eps)
 	{
-		lam4 = (eps^^2 + lam4^^2)/(2.0*eps);
+		lam4 = (eps^^2.0 + lam4^^2.0)/(2.0*eps);
 	}
 
 	sMax = max(abs(lam1), abs(lam2), abs(lam3), abs(lam4));

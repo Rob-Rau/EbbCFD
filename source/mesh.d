@@ -70,6 +70,7 @@ struct UCell2
 	double d = 0;
 	double perim = 0;
 	Vector!2 centroid;
+	double dt;
 }
 
 @nogc double determinant(Matrix!(2, 2) mat)
@@ -384,21 +385,24 @@ struct UMesh2
 		}
 	}
 
-	@nogc Vector!2 computeBoundaryForces(string bTag)
+	@nogc Vector!2 computeBoundaryForces(string[] tags)
 	{
 		auto f = Vector!2(0);
 
-		auto bgIdx = bTags.countUntil(bTag);
-		if(bgIdx > -1)
+		foreach(ref bTag; tags)
 		{
-			for(uint i = 0; i < bGroups[bgIdx].length; i++)
+			auto bgIdx = bTags.countUntil(bTag);
+			if(bgIdx > -1)
 			{
-				double p = getPressure(q[edges[bGroups[bgIdx][i]].cellIdx[0]]);
-				auto len = edges[bGroups[bgIdx][i]].len;
-				f += p*len*edges[bGroups[bgIdx][i]].bNormal;
+				for(uint i = 0; i < bGroups[bgIdx].length; i++)
+				{
+					//double p = getPressure(edges[bGroups[bgIdx][i]].q[0]);
+					double p = getPressure(q[edges[bGroups[bgIdx][i]].cellIdx[0]]);
+					auto len = edges[bGroups[bgIdx][i]].len;
+					f += p*len*edges[bGroups[bgIdx][i]].bNormal;
+				}
 			}
 		}
-
 		return f;
 	}
 }
