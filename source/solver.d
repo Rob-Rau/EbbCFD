@@ -1057,12 +1057,29 @@ void startComputation(Config config, string saveFile)
 	}
 }
 
+import mpi;
+import mpi.util;
+
 void main(string[] args)
 {
 	import std.getopt;
+
 	string configFile;
 	string saveFile = "";
 
+	int argc = cast(int)args.length;
+    auto argv = args.toArgv;
+
+	int numprocs;
+	int myid;
+
+	MPI_Init(&argc, &argv);
+	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
+	writeln("numprocs = ", numprocs);
+	writeln("myid = ", myid);
+	
 	signal(SIGINT, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);

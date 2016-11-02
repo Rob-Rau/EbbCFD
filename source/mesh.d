@@ -15,6 +15,8 @@ import numd.utility;
 
 import ebb.euler;
 
+import parmetis;
+
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
 
@@ -147,6 +149,8 @@ struct UMesh2
 	+/
 	void buildMesh()
 	{
+		//void  ParMETIS_V3_PartMeshKway(idxtype *elmdist, idxtype *eptr, idxtype *eind, idxtype *elmwgt, int *wgtflag, int *numflag, int *ncon, int *ncommonnodes, int *nparts, float *tpwgts, float *ubvec, int *options, int *edgecut, idxtype *part, MPI_Comm *comm);
+		ParMETIS_V3_PartMeshKway(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 		bGroups = new uint[][](bTags.length);
 		for(uint i = 0; i < elements.length; i++)
 		{

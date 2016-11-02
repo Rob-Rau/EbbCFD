@@ -4,7 +4,8 @@
 	"copyright": "Copyright © 2016, Robert F. Rau II",
 	"authors": ["Robert F. Rau II"],
 	"dependencies": {
-		"numd": "~master"
+		"numd": "~master",
+		"mpi": "~master"
 	},
 	"configurations": [
 		{
@@ -48,6 +49,7 @@
 			"targetType": "executable"
 		}
 	],
+	"lflags": ["-lparmetis"],
 	"buildTypes": {
 		"debug": {
 			"buildOptions": ["debugMode", "debugInfo"]
