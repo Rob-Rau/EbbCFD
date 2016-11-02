@@ -3,6 +3,8 @@
 import re
 import sys
 import os
+import subprocess
+#from subprocess import run
 from os import listdir
 from os.path import isfile, join
 
@@ -65,12 +67,18 @@ def sort_nicely(l):
 
 if __name__ == "__main__":
 	
+	framerate = 30
 	if len(sys.argv) < 3:
 		print('Not enough input arguments')
 		sys.exit()
 
 	meshFile = sys.argv[1]
 	state = sys.argv[2]
+
+	if len(sys.argv) < 4:
+		print('Assuming 30 fps')
+	elif len(sys.argv) == 4:
+		framerate = int(sys.argv[3])
 
 	mesh = eu.importEbbMatlabMesh(meshFile)
 
@@ -82,4 +90,4 @@ if __name__ == "__main__":
 		U = eu.importEbbSolution(slnFiles[idx])
 		plotstate(mesh, U, state, "output/"+str(idx).zfill(8)+".png")
 	
-	#ffmpeg -framerate 30 -i %08d.png -c:v libx264 mach.mp4
+	subprocess.call(["ffmpeg", "-framerate", str(framerate), "-i", "output/%08d.png", "-c:v", "libx264", "output/"+state+".mp4"], stdout=subprocess.PIPE)
