@@ -15,6 +15,9 @@ import numd.utility;
 
 import ebb.euler;
 
+import mpi;
+import mpi.util;
+
 import parmetis;
 
 alias Vec = Vector!4;
@@ -149,8 +152,6 @@ struct UMesh2
 	+/
 	void buildMesh()
 	{
-		//void  ParMETIS_V3_PartMeshKway(idxtype *elmdist, idxtype *eptr, idxtype *eind, idxtype *elmwgt, int *wgtflag, int *numflag, int *ncon, int *ncommonnodes, int *nparts, float *tpwgts, float *ubvec, int *options, int *edgecut, idxtype *part, MPI_Comm *comm);
-		ParMETIS_V3_PartMeshKway(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 		bGroups = new uint[][](bTags.length);
 		for(uint i = 0; i < elements.length; i++)
 		{
@@ -409,6 +410,60 @@ struct UMesh2
 		}
 		return f;
 	}
+}
+
+UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
+{
+	//idxtype[2] elmdist = [0, bigMesh.cells.length.to!idxtype];
+	idxtype[] elmdist;
+	idxtype[] eptr;
+	idxtype[] eind;
+	int wgtflag = 0; // un-weighted
+	int numflag = 0; // c style indexing
+	int ncon = 0; // no constraints?
+	int ncommonnodes = 2; // 2 shared nodes between cells
+	int nparts = p;
+	float[] tpwgts;
+	float[] ubvec;
+	int[] options;
+	int[] edgecut;
+	idxtype[] part;
+
+	auto cellsPerProc = cast(int)ceil(cast(double)bigMesh.cells.length/p);
+	elmdist ~= 0;
+	for(uint i = 1; i < (p + 1); i++)
+	{
+		elmdist ~= i*cellsPerProc;
+	}
+
+	if(id == (p - 1))
+	{
+		// make sure we don't overflow
+		if(cellsPerProc*p > bigMesh.elements.length)
+		{
+			cellsPerProc -= (cellsPerProc*p - bigMesh.elements.length);
+			elmdist[$-1] -= (cellsPerProc*p - bigMesh.elements.length);
+		}
+	}
+	
+	eptr = new idxtype[cellsPerProc];
+
+	auto startIdx = cellsPerProc*id;
+	uint currIdx = 0;
+	foreach(el; bigMesh.elements[startIdx..startIdx+cellsPerProc])
+	{
+		eptr~= currIdx;
+		foreach(ind; el)
+		{
+			eind ~= ind;
+		}
+		currIdx += el.length;
+	}
+
+	//ParMETIS_V3_PartMeshKway(idxtype *elmdist, idxtype *eptr, idxtype *eind, idxtype *elmwgt, int *wgtflag, int *numflag, int *ncon, int *ncommonnodes, int *nparts, float *tpwgts, float *ubvec, int *options, int *edgecut, idxtype *part, MPI_Comm *comm);
+	ParMETIS_V3_PartMeshKway(elmdist.ptr, eptr.ptr, eind.ptr, null, &wgtflag, &numflag, &ncon, &ncommonnodes, &nparts, tpwgts.ptr, ubvec.ptr, options.ptr, edgecut.ptr, part.ptr, &comm);
+	auto smallMesh = UMesh2(0);
+	return smallMesh;
 }
 
 import core.stdc.stdio;

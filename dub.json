@@ -10,22 +10,22 @@
 	"configurations": [
 		{
 			"excludedSourceFiles": [
-				"source/solver.d",
-				"source/plotter.d",
-				"source/post.d"
-			],
-			"name": "mesher",
-			"targetName": "ebb-mesh",
-			"targetType": "executable"
-		},
-		{
-			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/plotter.d",
 				"source/post.d"
 			],
 			"name": "solver",
 			"targetName": "ebb-solve",
+			"targetType": "executable"
+		},
+		{
+			"excludedSourceFiles": [
+				"source/solver.d",
+				"source/plotter.d",
+				"source/post.d"
+			],
+			"name": "mesher",
+			"targetName": "ebb-mesh",
 			"targetType": "executable"
 		},
 		{
