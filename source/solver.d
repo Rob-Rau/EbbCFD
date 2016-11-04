@@ -491,7 +491,11 @@ static shared bool interrupted = false;
 		// Setup initial conditions
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
-			mesh.q[i] = buildQ(rho, u, v, p);
+			//mesh.q[i] = buildQ(rho, u, v, p);
+			mesh.q[i][0] = rho;
+			mesh.q[i][1] = M*cos(aoa);
+			mesh.q[i][2] = M*sin(aoa);
+			mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
 
 			lastRho[i] = mesh.q[i][0];
 			lastU[i] = mesh.q[i][1];
@@ -570,14 +574,18 @@ static shared bool interrupted = false;
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
-				mesh.edges[mesh.bGroups[i][j]].q[1] = buildQ(rho, u, v, p);
+				//mesh.edges[mesh.bGroups[i][j]].q[1] = buildQ(rho, u, v, p);
+				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
+				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
+				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
+				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
 			}
 		}
 	}
 }
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, SolverException ex)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
 	// Build gradients
 	if(config.order > 1)
@@ -610,7 +618,7 @@ static shared bool interrupted = false;
 				mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
 			}
 
-			if(config.limited)
+			if(config.limited && limit)
 			{
 				//for(uint j = 0; j < mesh.cells[i].nEdges; j++)
 				for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
@@ -621,17 +629,7 @@ static shared bool interrupted = false;
 					auto centroid = mesh.cells[i].centroid;
 					//auto mid = mesh.edges[eIdx].mid;
 					auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
-					/+
-					Vector!2 mid;
-					if(i == mesh.edges[eIdx].cellIdx[0])
-					{
-						mid = mesh.cells[mesh.edges[eIdx].cellIdx[1]].centroid;
-					}
-					else
-					{
-						mid = mesh.cells[mesh.edges[eIdx].cellIdx[0]].centroid;
-					}
-					+/
+
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
 					auto minQ = mesh.cells[i].minQ;
@@ -710,21 +708,6 @@ static shared bool interrupted = false;
 							//printf("xk = [%.10e, %.10e], lim = %.10e\n\n", xk[0], xk[1], mesh.cells[i].lim[k][0]);
 							mesh.cells[i].lim[k][0] = xk[0];
 							mesh.cells[i].lim[k][1] = xk[1];
-
-/+
-							if(xk[0] < 0.0)
-							{
-								mesh.cells[i].lim[k][0] = 0.0;
-								xk[0] = 0.0;
-							}
-
-							if(xk[1] < 0.0)
-							{
-								mesh.cells[i].lim[k][1] = 0.0;
-								xk[1] = 0.0;
-							}
-+/
-							//printf("xk = [%.10e, %.10e]\n\n", xk[0], xk[1]);
 
 							assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
 							assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
@@ -953,20 +936,23 @@ static shared bool interrupted = false;
 
 		if(config.localTimestep)
 		{
-			mesh.cells[i].dt = config.CFL*mesh.cells[i].d/sAve;
-			if(mesh.cells[i].dt.isNaN)
+			if(dtUpdate)
 			{
-				mesh.cells[i].dt = 0;
-				//printf("R = [%.10e, %.10e, %.10e, %.10e]\n", R[0], R[1], R[2], R[3]);
-				/+
-				printf("%.10e\n", mesh.cells[i].perim);
-				//printf("%.10e\n", mesh.cells[i].perim);
-				printf("%.10e\n", sAve);
-				ex.msg = "dt is NaN";
-				ex.line = __LINE__;
-				ex.file = __FILE__;
-				throw ex;
-				+/
+				mesh.cells[i].dt = config.CFL*mesh.cells[i].d/sAve;
+				if(mesh.cells[i].dt.isNaN)
+				{
+					mesh.cells[i].dt = 0;
+					//printf("R = [%.10e, %.10e, %.10e, %.10e]\n", R[0], R[1], R[2], R[3]);
+					/+
+					printf("%.10e\n", mesh.cells[i].perim);
+					//printf("%.10e\n", mesh.cells[i].perim);
+					printf("%.10e\n", sAve);
+					ex.msg = "dt is NaN";
+					ex.line = __LINE__;
+					ex.file = __FILE__;
+					throw ex;
+					+/
+				}
 			}
 		}
 

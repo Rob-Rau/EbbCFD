@@ -66,6 +66,7 @@ struct Config
 	double[][] bc;
 	double aitkenTol = -1;
 	bool localTimestep = false;
+	bool multistageLimiting = false;
 }
 
 Config loadConfig(string conf)
@@ -194,6 +195,16 @@ Config loadConfig(string conf)
 	{
 		writeln("Aitken accelerator tolerance not supplied, disabling (-1)");
 		config.aitkenTol = -1;
+	}
+
+	try
+	{
+		config.multistageLimiting = (jConfig["multistageLimiting"].type == JSON_TYPE.TRUE);
+	}
+	catch(Exception ex)
+	{
+		writeln("Multistage Limiting option not provided, enabling");
+		config.multistageLimiting = true;
 	}
 
 	auto ics = jConfig["initialConditions"].array;

@@ -12,7 +12,8 @@ import ebb.mesh;
 import numd.utility;
 import numd.linearalgebra.matrix;
 
-alias integratorList = aliasSeqOf!(["BEuler", "Euler", "RK2", "RK4"]);
+//alias integratorList = aliasSeqOf!(["BEuler", "Euler", "RK2", "RK2_TVD", "RK4"]);
+alias integratorList = aliasSeqOf!(["Euler", "RK2", "RK2_TVD", "RK4"]);
 
 @nogc Vector!4 abs(Vector!4 data)
 {
@@ -123,7 +124,7 @@ struct BEuler
 		@nogc void func(Vector!4[] f, Vector!4[] qn)
 		{
 			printf("in func\n");
-			solver(R, qn, mesh, config, newDt, Rmax, ex);
+			solver(R, qn, mesh, config, newDt, Rmax, true, false, ex);
 			for(uint i = 0; i < f.length; i++)
 			{
 				f[i] = qn[i] - mesh.q[i] - dt*R[i];
@@ -222,7 +223,7 @@ struct Euler
 	{
 		double newDt = double.infinity;
 
-		solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
+		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
@@ -286,25 +287,25 @@ struct RK4
 
 		double newDt = double.infinity;
 
-		solver(k1, mesh.q, mesh, config, newDt, Rmax, ex);
+		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
 		for(uint i = 0; i < tmp.length; i++)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k1[i]);
 		}
-		solver(k2, tmp, mesh, config, newDt, Rmax, ex);
+		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		for(uint i = 0; i < tmp.length; i++)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k2[i]);
 		}
-		solver(k3, tmp, mesh, config, newDt, Rmax, ex);
+		solver(k3, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		for(uint i = 0; i < tmp.length; i++)
 		{
 			tmp[i] = mesh.q[i] + (dt*k3[i]);
 		}
-		solver(k4, tmp, mesh, config, newDt, Rmax, ex);
+		solver(k4, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		for(uint i = 0; i < mesh.q.length; i++)
 		{
@@ -315,6 +316,85 @@ struct RK4
 			else
 			{
 				q[i] = mesh.q[i] + (mesh.cells[i].dt/6.0)*(k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i]);
+			}
+		}
+
+		dt = newDt;
+	}
+}
+
+struct RK2_TVD
+{
+	private static bool initialized = false;
+	private static Vector!4[] tmp;
+	private static Vector!4[] qFE;
+	private static Vector!4[] k2;
+
+	@nogc static void init(ref UMesh2 mesh)
+	{
+		import std.experimental.allocator.mallocator : Mallocator;
+		if(!initialized)
+		{
+			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			qFE = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			initialized = true;
+		}
+	}
+
+	@nogc static ~this()
+	{
+		if(initialized)
+		{
+			import std.experimental.allocator.mallocator : Mallocator;
+			Mallocator.instance.deallocate(tmp);
+			Mallocator.instance.deallocate(qFE);
+			Mallocator.instance.deallocate(k2);
+			initialized = false;
+		}
+	}
+
+	@nogc static void step(alias solver)(Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	{
+		import core.stdc.stdio : printf;
+
+		double newDt = double.infinity;
+
+		//Euler.step!solver(R, qFE, mesh, config, newDt, Rmax, ex);
+		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
+
+		for(uint i = 0; i < mesh.cells.length; i++)
+		{
+			if(!config.localTimestep)
+			{
+				qFE[i] = mesh.q[i] + dt*R[i];
+			}
+			else
+			{
+				qFE[i] = mesh.q[i] + mesh.cells[i].dt*R[i];
+			}
+		}
+
+		//solver(k1, mesh.q, mesh, config, newDt, Rmax, ex);
+		/*
+		for(uint i = 0; i < tmp.length; i++)
+		{
+			tmp[i] = mesh.q[i] + (dt*k1[i]);
+		}
+		*/
+		solver(k2, qFE, mesh, config, newDt, Rmax, false, false, ex);
+
+		for(uint i = 0; i < mesh.q.length; i++)
+		{
+			if(!config.localTimestep)
+			{
+				q[i] = 0.5*(mesh.q[i] + qFE[i] + dt*k2[i]);
+				//q[i] = mesh.q[i] + (dt/2.0)*(k1[i] + k2[i]);
+			}
+			else
+			{
+				q[i] = 0.5*(mesh.q[i] + qFE[i] + mesh.cells[i].dt*k2[i]);
+				//q[i] = mesh.q[i] + (mesh.cells[i].dt/2.0)*(k1[i] + k2[i]);
 			}
 		}
 
@@ -362,13 +442,13 @@ struct RK2
 
 		double newDt = double.infinity;
 
-		solver(k1, mesh.q, mesh, config, newDt, Rmax, ex);
+		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
 		for(uint i = 0; i < tmp.length; i++)
 		{
 			tmp[i] = mesh.q[i] + (dt*k1[i]);
 		}
-		solver(k2, tmp, mesh, config, newDt, Rmax, ex);
+		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		for(uint i = 0; i < mesh.q.length; i++)
 		{
