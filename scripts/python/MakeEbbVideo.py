@@ -90,4 +90,12 @@ if __name__ == "__main__":
 		U = eu.importEbbSolution(slnFiles[idx])
 		plotstate(mesh, U, state, "output/"+str(idx).zfill(8)+".png")
 	
-	subprocess.call(["ffmpeg", "-framerate", str(framerate), "-i", "output/%08d.png", "-c:v", "libx264", "output/"+state+".mp4"], stdout=subprocess.PIPE)
+	try:
+		subprocess.call(["ffmpeg", "-framerate", str(framerate), "-i", "output/%08d.png", "-c:v", "libx264", "output/"+state+".mp4"], stdout=subprocess.PIPE)
+	except OSError as e:
+		if e.errno == os.errno.ENOENT:
+			print("ffmpeg not installed, trying avconv")
+			subprocess.call(["avconv", "-framerate", str(framerate), "-i", "output/%08d.png", "-c:v", "libx264", "output/"+state+".mp4"], stdout=subprocess.PIPE)
+		else:
+			print("Failed to convert video")
+

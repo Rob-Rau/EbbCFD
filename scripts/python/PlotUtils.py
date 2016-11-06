@@ -58,7 +58,8 @@ def plotstate(Mesh, U, field, fname):
 	plt.axis([-100, 100,-100, 100])
 	#plt.axis([-2, 10,-4, 4])
 	plt.colorbar()
-	#plt.clim(0, 10)
+	#plt.clim(0, 0.7)
+	#plt.clim(9, 12)
 	plt.title(field, fontsize=16)
 
 	f.tight_layout()
