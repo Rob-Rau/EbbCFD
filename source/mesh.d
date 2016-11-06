@@ -412,56 +412,138 @@ struct UMesh2
 	}
 }
 
-UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
+idxtype[] buildPartitionMap(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
-	//idxtype[2] elmdist = [0, bigMesh.cells.length.to!idxtype];
-	idxtype[] elmdist;
+	idxtype[2] elmdist = [0, bigMesh.elements.length.to!idxtype];
 	idxtype[] eptr;
 	idxtype[] eind;
 	int wgtflag = 0; // un-weighted
 	int numflag = 0; // c style indexing
-	int ncon = 0; // no constraints?
+	int ncon = 1; // one constraint. still not totally sure what this is.
 	int ncommonnodes = 2; // 2 shared nodes between cells
 	int nparts = p;
-	float[] tpwgts;
-	float[] ubvec;
-	int[] options;
-	int[] edgecut;
+	float[] tpwgts = new float[ncon*nparts];
+	float[] ubvec = new float[ncon];
+	int[4] options;
+	int edgecut;
 	idxtype[] part;
 
-	auto cellsPerProc = cast(int)ceil(cast(double)bigMesh.cells.length/p);
-	elmdist ~= 0;
-	for(uint i = 1; i < (p + 1); i++)
-	{
-		elmdist ~= i*cellsPerProc;
-	}
+	tpwgts[] = 1.0/cast(double)nparts;
+	ubvec[] = 1.05; // recommended value from the manual
+	options[] = 0; // default options
 
-	if(id == (p - 1))
-	{
-		// make sure we don't overflow
-		if(cellsPerProc*p > bigMesh.elements.length)
-		{
-			cellsPerProc -= (cellsPerProc*p - bigMesh.elements.length);
-			elmdist[$-1] -= (cellsPerProc*p - bigMesh.elements.length);
-		}
-	}
-	
-	eptr = new idxtype[cellsPerProc];
-
-	auto startIdx = cellsPerProc*id;
 	uint currIdx = 0;
-	foreach(el; bigMesh.elements[startIdx..startIdx+cellsPerProc])
+	foreach(el; bigMesh.elements)
 	{
 		eptr~= currIdx;
 		foreach(ind; el)
 		{
-			eind ~= ind;
+			eind ~= (ind - 1);
 		}
 		currIdx += el.length;
 	}
+	eptr~= currIdx;
 
-	//ParMETIS_V3_PartMeshKway(idxtype *elmdist, idxtype *eptr, idxtype *eind, idxtype *elmwgt, int *wgtflag, int *numflag, int *ncon, int *ncommonnodes, int *nparts, float *tpwgts, float *ubvec, int *options, int *edgecut, idxtype *part, MPI_Comm *comm);
-	ParMETIS_V3_PartMeshKway(elmdist.ptr, eptr.ptr, eind.ptr, null, &wgtflag, &numflag, &ncon, &ncommonnodes, &nparts, tpwgts.ptr, ubvec.ptr, options.ptr, edgecut.ptr, part.ptr, &comm);
+	logln("eind.length = ", eind.length);
+	logln("eptr.length = ", eptr.length);
+	part = new idxtype[bigMesh.elements.length];
+
+	logln("Partitioning mesh");
+	MPI_Comm tmpComm = comm;
+	comm = MPI_COMM_SELF;
+	ParMETIS_V3_PartMeshKway(elmdist.ptr, eptr.ptr, eind.ptr, null, &wgtflag, &numflag, &ncon, &ncommonnodes, &nparts, tpwgts.ptr, ubvec.ptr, options.ptr, &edgecut, part.ptr, &comm);
+	comm = tmpComm;
+
+	logln("edgecut = ", edgecut);
+
+	return part;
+}
+
+uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNodes)
+{
+	auto idx = localNodes.countUntil(globalNodes[elNode]);
+
+	if(idx < 0)
+	{
+		idx = localNodes.length;
+		localNodes ~= globalNodes[elNode];
+	}
+
+	return cast(uint)(idx + 1);
+}
+
+void logln(S...)(S args)
+{
+	int id;
+	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+	writeln("Proc ", id, ": ", args);
+}
+
+UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
+{
+	int partTag = 2001;
+
+	if(id == 0)
+	{
+		bigMesh.buildMesh;
+		
+		auto part = bigMesh.buildPartitionMap(p, id, comm);
+
+		for(uint i = 0; i < p; i++)
+		{
+			uint nElems = 0;
+			uint[][] localElements;
+			double[][] localNodes;
+
+			foreach(uint j, pa; part)
+			{
+				if(pa == i)
+				{
+					uint[] localEl;
+					foreach(el; bigMesh.elements[j])
+					{
+						localEl ~= (el - 1).localElementMap(localNodes, bigMesh.nodes);
+						nElems++;
+					}
+					localElements ~= localEl;
+				}
+			}
+
+			logln("localNode length = ", localNodes.length);
+			uint[] flatElementMap = localElements.joiner.array;
+
+			logln("localElements length = ", localElements.length);
+			logln("flat localElements length = ", flatElementMap.length);
+
+			//MPI_Send(void* data,int count,MPI_Datatype datatype,int destination,int tag,MPI_Comm communicator)
+			MPI_Send(&nElems, 1, MPI_UINT32_T, i, partTag, comm);
+			MPI_Send(flatElementMap.ptr, cast(uint)flatElementMap.length, MPI_UINT32_T, i, partTag, comm);
+
+			if(i == 0)
+			{
+				logln("Number of local elements: ", nElems);
+			}
+		}
+
+		logln("Finished partitioning");
+	}
+	else
+	{
+		uint nElems;
+		//MPI_Recv(void* data,int count,MPI_Datatype datatype,int source,int tag,MPI_Comm communicator,MPI_Status* status)
+		MPI_Status status;
+		MPI_Recv(&nElems, 1, MPI_UINT32_T, 0, partTag, comm, &status);
+		logln("Number of local elements: ", nElems);
+
+		if(status.MPI_ERROR == MPI_SUCCESS)
+		{
+			logln("Getting elements");
+			uint[] localElements = new uint[nElems];
+			MPI_Recv(localElements.ptr, nElems, MPI_UINT32_T, 0, partTag, comm, &status);
+		}
+	}
+	logln("waiting");
+	MPI_Barrier(comm);
 	auto smallMesh = UMesh2(0);
 	return smallMesh;
 }
@@ -1020,7 +1102,7 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 	mesh.bNodes = bNodes;
 	mesh.bGroupStart = bGroupStart;
 	mesh.bTags = bTags;
-	mesh.buildMesh;
+	//mesh.buildMesh;
 
 	return mesh;
 }

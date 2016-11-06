@@ -280,7 +280,7 @@ struct RK4
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
 	{
 		import core.stdc.stdio : printf;
 
@@ -356,7 +356,7 @@ struct RK2
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
 	{
 		import core.stdc.stdio : printf;
 

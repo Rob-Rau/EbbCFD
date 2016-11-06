@@ -982,7 +982,7 @@ static shared bool interrupted = false;
 	}
 }
 
-void startComputation(Config config, string saveFile)
+void startComputation(Config config, string saveFile, uint p, uint id)
 {
 	try
 	{
@@ -1002,6 +1002,13 @@ void startComputation(Config config, string saveFile)
 			writeln("Unsupported mesh format, exiting");
 			return;
 		}
+
+		//umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+		partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+		//core.stdc.stdlib.abort;
+		return;
+		/+
+		umesh.buildMesh;
 
 		final switch(config.limiter)
 		{
@@ -1038,6 +1045,7 @@ void startComputation(Config config, string saveFile)
 				}
 			}
 		}
+		+/
 	}
 	catch(SolverException ex)
 	{
@@ -1060,7 +1068,7 @@ void startComputation(Config config, string saveFile)
 import mpi;
 import mpi.util;
 
-void main(string[] args)
+int main(string[] args)
 {
 	import std.getopt;
 
@@ -1070,15 +1078,16 @@ void main(string[] args)
 	int argc = cast(int)args.length;
     auto argv = args.toArgv;
 
-	int numprocs;
-	int myid;
+	int p;
+	int id;
 
 	MPI_Init(&argc, &argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
-	MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-	writeln("numprocs = ", numprocs);
-	writeln("myid = ", myid);
+	MPI_Comm_size(MPI_COMM_WORLD, &p);
+	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+
+	writeln("numprocs = ", p);
+	writeln("myid = ", id);
 	
 	signal(SIGINT, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
@@ -1087,5 +1096,8 @@ void main(string[] args)
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
 
-	startComputation(config, saveFile);
+	startComputation(config, saveFile, p, id);
+
+	writeln("exiting");
+	return MPI_Finalize();
 }
