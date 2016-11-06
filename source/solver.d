@@ -585,7 +585,7 @@ static shared bool interrupted = false;
 }
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(out Vector!4[] R, in Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
 	// Build gradients
 	if(config.order > 1)
