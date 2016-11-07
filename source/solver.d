@@ -21,6 +21,7 @@ import ebb.flux;
 import ebb.integrators;
 import ebb.limiters;
 import ebb.mesh;
+import ebb.io;
 
 static shared bool interrupted = false;
 
@@ -1080,6 +1081,8 @@ int main(string[] args)
 	MPI_Comm_size(MPI_COMM_WORLD, &p);
 	MPI_Comm_rank(MPI_COMM_WORLD, &id);
 
+	double startTime = MPI_Wtime();
+
 	signal(SIGINT, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);
@@ -1089,6 +1092,12 @@ int main(string[] args)
 
 	startComputation(config, saveFile, p, id);
 
-	writeln("exiting");
+	MPI_Barrier(MPI_COMM_WORLD);
+	double elapsed = MPI_Wtime() - startTime;
+	if(id == 0)
+	{
+		writeln("total time: ", elapsed);
+	}
+	
 	return MPI_Finalize();
 }

@@ -17,7 +17,7 @@ def plotmesh(Mesh, color):
 	F = np.zeros((np.size(E)/3, 1))
 	F = F[:,0]
 	F[:] = 1
-	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, edgecolors=color, cmap=plt.cm.gray, vmin=0, vmax=1, alpha=0.5, linewidth=1.4)
+	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, edgecolors=color, cmap=plt.cm.gray, vmin=0, vmax=1, alpha=1, linewidth=1.4)
 
 	for i in range(len(BE)):
 		x = [V[BE[i,0],0], V[BE[i,1],0]]
