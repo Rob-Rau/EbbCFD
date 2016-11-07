@@ -585,7 +585,7 @@ static shared bool interrupted = false;
 }
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(out Vector!4[] R, in Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
 	// Build gradients
 	if(config.order > 1)
@@ -979,21 +979,30 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 
 		auto ex = new SolverException("No error");
 
-		if(config.meshFile.canFind(".gri"))
+		if(id == 0)
 		{
-			umesh = parseXflowMesh(config.meshFile);
-		}
-		else
-		{
-			writeln("Unsupported mesh format, exiting");
-			return;
+			if(config.meshFile.canFind(".gri"))
+			{
+				umesh = parseXflowMesh(config.meshFile);
+			}
+			else
+			{
+				writeln("Unsupported mesh format, exiting");
+				return;
+			}
 		}
 
 		//umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
-		partitionMesh(umesh, p, id, MPI_COMM_WORLD);
-		//core.stdc.stdlib.abort;
-		return;
-		/+
+		if(p > 1)
+		{
+			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+			umesh.buildMesh;
+			import std.array : split;
+			saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
+			//core.stdc.stdlib.abort;
+			return;
+		}
+
 		umesh.buildMesh;
 
 		final switch(config.limiter)
@@ -1031,7 +1040,6 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 				}
 			}
 		}
-		+/
 	}
 	catch(SolverException ex)
 	{

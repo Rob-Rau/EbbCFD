@@ -23,6 +23,53 @@ import parmetis;
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
 
+private MPI_Datatype toMPIType(T)()
+{
+	static if(!is(T : char))
+	{
+		static if(is(T : int) && !is(T: uint))
+		{
+			pragma(msg, "here int");
+			return MPI_INT32_T;
+		}
+		else static if(is(T : uint))
+		{
+			pragma(msg, "here uint");
+			return MPI_UINT32_T;
+		}
+		else static if(is(T : long) && !is(T : ulong))
+		{
+			pragma(msg, "here long");
+			return MPI_INT64_T;
+		}
+		else static if(is(T : ulong))
+		{
+			pragma(msg, "here ulong");
+			return MPI_UINT64_T;
+		}
+		else static if(is(T : float) && !is(T : double))
+		{
+			pragma(msg, "here float");
+			return MPI_FLOAT;
+		}
+		else static if(is(T : double))
+		{
+			pragma(msg, "here double");
+			return MPI_DOUBLE;
+		}
+		else
+		{
+			pragma(msg, "here");
+			static assert(false, "type not supported");
+		}
+	}
+	else
+	{
+		pragma(msg, "here char");
+		return MPI_CHAR;
+	}
+}
+
 enum BoundaryType
 {
 	FullState,
@@ -479,9 +526,46 @@ void logln(S...)(S args)
 	writeln("Proc ", id, ": ", args);
 }
 
+void send(T)(T data, uint proc, int tag, MPI_Comm comm)
+{
+	MPI_Send(&data, 1, toMPIType!T, proc, tag, comm);
+}
+
+T recv(T)(uint from, int tag, MPI_Comm comm)
+{
+	T data;
+	MPI_Status status;
+	MPI_Recv(&data, 1, toMPIType!T, from, tag, comm, &status);
+	return data;
+}
+
+void sendArray(T)(T[] data, uint proc, int tag, MPI_Comm comm)
+{
+	uint len = cast(uint)data.length;
+	MPI_Send(&len, 1, MPI_UINT32_T, proc, tag, comm);
+	MPI_Send(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag, comm);
+}
+
+T[] recvArray(T)(uint from, int tag, MPI_Comm comm)
+{
+	uint nElems;
+	T[] data;
+
+	MPI_Status status;
+	MPI_Recv(&nElems, 1, MPI_UINT32_T, from, tag, comm, &status);
+	data = new T[nElems];
+	
+	enforce(status.MPI_ERROR == MPI_SUCCESS, "Error receiving array length. MPI Error: "~status.MPI_ERROR.to!string);
+	
+	MPI_Recv(data.ptr, nElems, toMPIType!T, 0, tag, comm, &status);
+
+	return data;
+}
+
 UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
 	int partTag = 2001;
+	UMesh2 smallMesh;
 
 	if(id == 0)
 	{
@@ -493,16 +577,68 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 		{
 			uint nElems = 0;
 			uint[][] localElements;
+			uint[] nodesPerElement;
 			double[][] localNodes;
+			uint[][] localbNodes;
+			uint[] localbGroupStart;
+			string[] localbTag;
 
+			logln(bigMesh.bGroupStart);
 			foreach(uint j, pa; part)
 			{
 				if(pa == i)
 				{
 					uint[] localEl;
-					foreach(el; bigMesh.elements[j])
+					nodesPerElement ~= cast(uint)bigMesh.elements[j].length; 
+					foreach(uint k, el; bigMesh.elements[j])
 					{
 						localEl ~= (el - 1).localElementMap(localNodes, bigMesh.nodes);
+
+						auto bIdx1 = bigMesh.bNodes.countUntil([el - 1, bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1]);
+						auto bIdx2 = bigMesh.bNodes.countUntil([bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1, el - 1]);
+
+						if(bIdx1 > 0)
+						{
+							uint b1 = localEl[$-1] - 1;
+							uint b2 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
+							localbNodes ~= [b1, b2];
+
+							auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx1);
+							 
+							if(bGroup < 0)
+							{
+								bGroup = bigMesh.bGroups.length - 1;
+							}
+							
+							//logln("bGroup = ", bGroup);
+							//logln("bIdx1 = ", bIdx1);
+							if(!localbTag.canFind(bigMesh.bTags[bGroup]))
+							{
+								localbTag ~= bigMesh.bTags[bGroup];
+								localbGroupStart ~= cast(uint)localbNodes.length - 1;
+							}
+						}
+						if(bIdx2 > 0)
+						{
+							uint b2 = localEl[$-1] - 1;
+							uint b1 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
+							localbNodes ~= [b1, b2];
+
+							//auto bGroup = bigMesh.bGroupStart.countUntil!"a > b"(bIdx2) - 1;
+							auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx2);
+
+							if(bGroup < 0)
+							{
+								bGroup = bigMesh.bGroups.length - 1;
+							}
+
+							//logln("bGroup = ", bGroup);
+							if(!localbTag.canFind(bigMesh.bTags[bGroup]))
+							{
+								localbTag ~= bigMesh.bTags[bGroup];
+								localbGroupStart ~= cast(uint)localbNodes.length - 1;
+							}
+						}
 						nElems++;
 					}
 					localElements ~= localEl;
@@ -511,16 +647,42 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 
 			logln("localNode length = ", localNodes.length);
 			uint[] flatElementMap = localElements.joiner.array;
+			double[] flatNodes = localNodes.joiner.array;
 
 			logln("localElements length = ", localElements.length);
 			logln("flat localElements length = ", flatElementMap.length);
 
-			//MPI_Send(void* data,int count,MPI_Datatype datatype,int destination,int tag,MPI_Comm communicator)
-			MPI_Send(&nElems, 1, MPI_UINT32_T, i, partTag, comm);
-			MPI_Send(flatElementMap.ptr, cast(uint)flatElementMap.length, MPI_UINT32_T, i, partTag, comm);
-
-			if(i == 0)
+			if(i != 0)
 			{
+				send!uint(2, i, partTag, comm);
+				sendArray(flatElementMap, i, partTag, comm);
+				sendArray(nodesPerElement, i, partTag, comm);
+				sendArray(flatNodes, i, partTag, comm);
+				sendArray(localbGroupStart.to!(uint[]), i, partTag, comm);
+
+				uint[] flatBnodes = localbNodes.joiner.array;
+				sendArray(flatBnodes, i, partTag, comm);
+
+				send!uint(cast(uint)localbTag.length, i, partTag, comm);
+				foreach(tag; localbTag)
+				{
+					sendArray!char(tag.to!(char[]), i, partTag, comm);
+				}
+			}
+			else
+			{
+				smallMesh = UMesh2(cast(uint)localElements.length);
+				smallMesh.elements = localElements;
+				foreach(uint j, el; smallMesh.elements)
+				{
+					smallMesh.cells[j].nEdges = cast(uint)el.length;
+				}
+				smallMesh.q = new Vector!4[smallMesh.cells.length];
+
+				smallMesh.nodes = localNodes[];
+				smallMesh.bGroupStart = localbGroupStart.to!(size_t[]);
+				smallMesh.bNodes = localbNodes[];
+				smallMesh.bTags = localbTag[];
 				logln("Number of local elements: ", nElems);
 			}
 		}
@@ -529,22 +691,90 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 	}
 	else
 	{
-		uint nElems;
-		//MPI_Recv(void* data,int count,MPI_Datatype datatype,int source,int tag,MPI_Comm communicator,MPI_Status* status)
-		MPI_Status status;
-		MPI_Recv(&nElems, 1, MPI_UINT32_T, 0, partTag, comm, &status);
-		logln("Number of local elements: ", nElems);
+		auto dims = recv!uint(0, partTag, comm);
+		auto flatLocalElements = recvArray!uint(0, partTag, comm);
+		auto nodesPerElement = recvArray!uint(0, partTag, comm);
+		auto flatLocalNodes = recvArray!double(0, partTag, comm);
+		auto bGroupStart = recvArray!uint(0, partTag, comm);
 
-		if(status.MPI_ERROR == MPI_SUCCESS)
+		smallMesh.bGroupStart = bGroupStart.to!(size_t[]);
+
+		auto flatBnodes = recvArray!uint(0, partTag, comm);
+
+		auto nBTags = recv!uint(0, partTag, comm);
+		logln("Recieving ", nBTags, " boundary tags");
+		for(uint i = 0; i < nBTags; i++)
 		{
-			logln("Getting elements");
-			uint[] localElements = new uint[nElems];
-			MPI_Recv(localElements.ptr, nElems, MPI_UINT32_T, 0, partTag, comm, &status);
+			smallMesh.bTags ~= recvArray!(char)(0, partTag, comm).to!string;
+		}
+
+		logln(dims);
+		auto nNodes = flatLocalNodes.length/dims;
+
+		logln("flatLocalElements.length = ", flatLocalElements.length);
+		logln("flatLocalNodes.length = ", flatLocalNodes.length);
+
+		// unpack node coords
+		for(uint i = 0; i < flatLocalNodes.length; i += dims)
+		{
+			double[] node;
+			for(uint j = 0; j < dims; j++)
+			{
+				node ~= flatLocalNodes[i + j];
+			}
+			smallMesh.nodes ~= node;
+		}
+		
+		// unpack elements
+		uint npeIdx = 0;
+		for(uint i = 0; i < flatLocalElements.length; i += nodesPerElement[npeIdx])
+		{
+			uint[] element;
+			for(uint j = 0; j < nodesPerElement[npeIdx]; j++)
+			{
+				element ~= flatLocalElements[i + j];
+			}
+			UCell2 cell;
+			cell.nEdges = nodesPerElement[npeIdx];
+			smallMesh.cells ~= cell;
+
+			smallMesh.elements ~= element;
+			npeIdx++;
+			if(npeIdx >= nodesPerElement.length)
+			{
+				npeIdx = cast(uint)nodesPerElement.length - 1;
+			}
+		}
+	
+		smallMesh.q = new Vector!4[smallMesh.cells.length];
+
+		for(uint i = 0; i < flatBnodes.length; i += dims)
+		{
+			uint[] node;
+			for(uint j = 0; j < dims; j++)
+			{
+				node ~= flatBnodes[i + j];
+			}
+			smallMesh.bNodes ~= node;
 		}
 	}
+
 	logln("waiting");
 	MPI_Barrier(comm);
-	auto smallMesh = UMesh2(0);
+
+/+
+	mesh.cells = new UCell2[nElems];
+	mesh.q = new Vector!4[nElems];
+
+	for(uint i = 0; i < nElems; i++)
+	{
+		mesh.cells[i].nEdges = faces;
+	}
+	mesh.elements = elements;
+	mesh.bNodes = bNodes;
+	mesh.bGroupStart = bGroupStart;
+	mesh.bTags = bTags;
++/
 	return smallMesh;
 }
 
