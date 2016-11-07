@@ -1080,9 +1080,6 @@ int main(string[] args)
 	MPI_Comm_size(MPI_COMM_WORLD, &p);
 	MPI_Comm_rank(MPI_COMM_WORLD, &id);
 
-	writeln("numprocs = ", p);
-	writeln("myid = ", id);
-	
 	signal(SIGINT, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);

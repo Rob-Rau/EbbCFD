@@ -526,12 +526,12 @@ void logln(S...)(S args)
 	writeln("Proc ", id, ": ", args);
 }
 
-void send(T)(T data, uint proc, int tag, MPI_Comm comm)
+void send(T)(MPI_Comm comm, T data, uint proc, int tag)
 {
 	MPI_Send(&data, 1, toMPIType!T, proc, tag, comm);
 }
 
-T recv(T)(uint from, int tag, MPI_Comm comm)
+T recv(T)(MPI_Comm comm, uint from, int tag)
 {
 	T data;
 	MPI_Status status;
@@ -539,14 +539,14 @@ T recv(T)(uint from, int tag, MPI_Comm comm)
 	return data;
 }
 
-void sendArray(T)(T[] data, uint proc, int tag, MPI_Comm comm)
+void sendArray(T)(MPI_Comm comm, T[] data, uint proc, int tag)
 {
 	uint len = cast(uint)data.length;
 	MPI_Send(&len, 1, MPI_UINT32_T, proc, tag, comm);
 	MPI_Send(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag, comm);
 }
 
-T[] recvArray(T)(uint from, int tag, MPI_Comm comm)
+T[] recvArray(T)(MPI_Comm comm, uint from, int tag)
 {
 	uint nElems;
 	T[] data;
@@ -654,19 +654,19 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 
 			if(i != 0)
 			{
-				send!uint(2, i, partTag, comm);
-				sendArray(flatElementMap, i, partTag, comm);
-				sendArray(nodesPerElement, i, partTag, comm);
-				sendArray(flatNodes, i, partTag, comm);
-				sendArray(localbGroupStart.to!(uint[]), i, partTag, comm);
+				comm.send!uint(2, i, partTag);
+				comm.sendArray(flatElementMap, i, partTag);
+				comm.sendArray(nodesPerElement, i, partTag);
+				comm.sendArray(flatNodes, i, partTag);
+				comm.sendArray(localbGroupStart.to!(uint[]), i, partTag);
 
 				uint[] flatBnodes = localbNodes.joiner.array;
-				sendArray(flatBnodes, i, partTag, comm);
+				comm.sendArray(flatBnodes, i, partTag);
 
-				send!uint(cast(uint)localbTag.length, i, partTag, comm);
+				comm.send!uint(cast(uint)localbTag.length, i, partTag);
 				foreach(tag; localbTag)
 				{
-					sendArray!char(tag.to!(char[]), i, partTag, comm);
+					comm.sendArray!char(tag.to!(char[]), i, partTag);
 				}
 			}
 			else
@@ -691,21 +691,21 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 	}
 	else
 	{
-		auto dims = recv!uint(0, partTag, comm);
-		auto flatLocalElements = recvArray!uint(0, partTag, comm);
-		auto nodesPerElement = recvArray!uint(0, partTag, comm);
-		auto flatLocalNodes = recvArray!double(0, partTag, comm);
-		auto bGroupStart = recvArray!uint(0, partTag, comm);
+		auto dims = comm.recv!uint(0, partTag);
+		auto flatLocalElements = comm.recvArray!uint(0, partTag);
+		auto nodesPerElement = comm.recvArray!uint(0, partTag);
+		auto flatLocalNodes = comm.recvArray!double(0, partTag);
+		auto bGroupStart = comm.recvArray!uint(0, partTag);
 
 		smallMesh.bGroupStart = bGroupStart.to!(size_t[]);
 
-		auto flatBnodes = recvArray!uint(0, partTag, comm);
+		auto flatBnodes = comm.recvArray!uint(0, partTag);
 
-		auto nBTags = recv!uint(0, partTag, comm);
+		auto nBTags = comm.recv!uint(0, partTag);
 		logln("Recieving ", nBTags, " boundary tags");
 		for(uint i = 0; i < nBTags; i++)
 		{
-			smallMesh.bTags ~= recvArray!(char)(0, partTag, comm).to!string;
+			smallMesh.bTags ~= comm.recvArray!(char)(0, partTag).to!string;
 		}
 
 		logln(dims);
