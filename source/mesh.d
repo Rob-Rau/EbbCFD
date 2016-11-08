@@ -582,7 +582,10 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			uint[] localbGroupStart;
 			string[] localbTag;
 
-			logln(bigMesh.bGroupStart);
+			uint[][] commEdges;
+			//logln(bigMesh.bGroupStart);
+			uint[] commP;
+			uint[][] commEdgeList;
 			foreach(uint j, pa; part)
 			{
 				if(pa == i)
@@ -591,48 +594,41 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 					nodesPerElement ~= cast(uint)bigMesh.elements[j].length; 
 					foreach(uint k, el; bigMesh.elements[j])
 					{
+						// map global node index to new proc local node index
 						localEl ~= (el - 1).localElementMap(localNodes, bigMesh.nodes);
 
+						// Is this edge a boundary edge
+						size_t bIdx = 0;
+						uint b1 = 0;
+						uint b2 = 0;
 						auto bIdx1 = bigMesh.bNodes.countUntil([el - 1, bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1]);
 						auto bIdx2 = bigMesh.bNodes.countUntil([bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1, el - 1]);
 
-						if(bIdx1 > 0)
+						// map global boundary node indexes to proc local boundary node indexes
+						if(bIdx1 >= 0)
 						{
-							uint b1 = localEl[$-1] - 1;
-							uint b2 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
-							localbNodes ~= [b1, b2];
-
-							auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx1);
-							 
-							if(bGroup < 0)
-							{
-								bGroup = bigMesh.bGroups.length - 1;
-							}
-							
-
-							//logln("bGroup = ", bGroup);
-							//logln("bIdx1 = ", bIdx1);
-							if(!localbTag.canFind(bigMesh.bTags[bGroup]))
-							{
-								localbTag ~= bigMesh.bTags[bGroup];
-								localbGroupStart ~= cast(uint)localbNodes.length - 1;
-							}
+							bIdx = bIdx1;
+							b1 = localEl[$-1] - 1;
+							b2 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
 						}
-						if(bIdx2 > 0)
+						else if(bIdx2 >= 0)
 						{
-							uint b2 = localEl[$-1] - 1;
-							uint b1 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
+							bIdx = bIdx2;
+							b2 = localEl[$-1] - 1;
+							b1 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
+						}
+
+						if((bIdx1 >= 0) || (bIdx2 >= 0))
+						{
+							// If boundary edge compute local boundary group
 							localbNodes ~= [b1, b2];
 
-							//auto bGroup = bigMesh.bGroupStart.countUntil!"a > b"(bIdx2) - 1;
-							auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx2);
+							auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx) - 1;
 
 							if(bGroup < 0)
 							{
 								bGroup = bigMesh.bGroups.length - 1;
 							}
-
-							//logln("bGroup = ", bGroup);
 							if(!localbTag.canFind(bigMesh.bTags[bGroup]))
 							{
 								localbTag ~= bigMesh.bTags[bGroup];
@@ -645,12 +641,51 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 				}
 			}
 
+			// compute communication edges
+			foreach(uint j, ref edge; bigMesh.edges)
+			{
+				// Is edge comm boundary
+				if(((part[edge.cellIdx[0]] == i) && (part[edge.cellIdx[1]] != i)) ||
+					((part[edge.cellIdx[1]] == i) && (part[edge.cellIdx[0]] != i)))
+				{
+					// map edge nodes
+					uint n1 = edge.nodeIdx[0].localElementMap(localNodes, bigMesh.nodes) - 1;
+					uint n2 = edge.nodeIdx[1].localElementMap(localNodes, bigMesh.nodes) - 1;
+					commEdges ~= [n1, n2];
+
+					uint partIdx = 0;
+					if(part[edge.cellIdx[0]] != i)
+					{
+						partIdx = edge.cellIdx[0];
+					}
+					else if(part[edge.cellIdx[1]] != i)
+					{
+						partIdx = edge.cellIdx[1];
+					}
+
+					// add comm proc to commP if not already in there.
+					auto cIdx = commP.countUntil(part[partIdx]);
+					if(cIdx < 0)
+					{
+						if(!edge.isBoundary)
+						{
+							commP ~= part[partIdx];
+						}
+					}
+				}
+			}
+
+			logln("Proc ", i, " comm: ", commP);
 			//logln("localNode length = ", localNodes.length);
 			uint[] flatElementMap = localElements.joiner.array;
 			double[] flatNodes = localNodes.joiner.array;
 
 			//logln("localElements length = ", localElements.length);
 			//logln("flat localElements length = ", flatElementMap.length);
+
+			localbGroupStart ~= cast(uint)localbNodes.length;
+			localbNodes ~= commEdges;
+			localbTag ~= "Comm";
 
 			if(i != 0)
 			{
@@ -683,10 +718,10 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 				smallMesh.bGroupStart = localbGroupStart.to!(size_t[]);
 				smallMesh.bNodes = localbNodes[];
 				smallMesh.bTags = localbTag[];
-				logln("Number of local elements: ", nElems);
+				logln("Local elements: ", smallMesh.elements.length);
 			}
-		}
 
+		}
 		logln("Finished partitioning");
 	}
 	else
@@ -702,17 +737,17 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 		auto flatBnodes = comm.recvArray!uint(0, partTag);
 
 		auto nBTags = comm.recv!uint(0, partTag);
-		logln("Recieving ", nBTags, " boundary tags");
+		//logln("Recieving ", nBTags, " boundary tags");
 		for(uint i = 0; i < nBTags; i++)
 		{
 			smallMesh.bTags ~= comm.recvArray!(char)(0, partTag).to!string;
 		}
 
-		logln(dims);
+		//logln(dims);
 		auto nNodes = flatLocalNodes.length/dims;
 
-		logln("flatLocalElements.length = ", flatLocalElements.length);
-		logln("flatLocalNodes.length = ", flatLocalNodes.length);
+		//logln("flatLocalElements.length = ", flatLocalElements.length);
+		//logln("flatLocalNodes.length = ", flatLocalNodes.length);
 
 		// unpack node coords
 		for(uint i = 0; i < flatLocalNodes.length; i += dims)
@@ -746,6 +781,8 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			}
 		}
 	
+		logln("Local elements: ", smallMesh.elements.length);
+
 		smallMesh.q = new Vector!4[smallMesh.cells.length];
 
 		for(uint i = 0; i < flatBnodes.length; i += dims)

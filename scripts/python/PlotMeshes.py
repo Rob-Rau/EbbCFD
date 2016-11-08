@@ -17,12 +17,12 @@ def plotmesh(Mesh, color):
 	F = np.zeros((np.size(E)/3, 1))
 	F = F[:,0]
 	F[:] = 1
-	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, edgecolors=color, cmap=plt.cm.gray, vmin=0, vmax=1, alpha=1, linewidth=1.4)
+	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, edgecolors=color, cmap=plt.cm.gray, vmin=0, vmax=1, alpha=1, linewidth=0.5)
 
 	for i in range(len(BE)):
 		x = [V[BE[i,0],0], V[BE[i,1],0]]
 		y = [V[BE[i,0],1], V[BE[i,1],1]]
-		plt.plot(x, y, '-', linewidth=2, color=color)
+		plt.plot(x, y, '-', linewidth=2.5, color=color)
 
 	plt.axis('equal')
 	plt.axis([-100, 100,-100, 100])

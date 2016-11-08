@@ -323,6 +323,92 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 }
 
+UMesh2 loadMatlabMesh(string filename)
+{
+	UMesh2 mesh;
+	import std.algorithm : canFind;
+	import std.bitmanip : read;
+	import std.conv : to;
+
+	//writeln("Reading file ", filename);
+	auto meshFile = File(filename);
+
+	auto fileSize = meshFile.size;
+
+	auto buffer = meshFile.rawRead(new ubyte[fileSize]);
+	auto nNodes = buffer.read!ulong;
+
+	for(uint i = 0; i < nNodes; i++)
+	{
+		mesh.nodes ~= [buffer.read!(double), buffer.read!(double)];
+	}
+
+	auto nEls = buffer.read!ulong;
+
+	for(uint i = 0; i < nEls; i++)
+	{
+		mesh.elements ~= [cast(uint)buffer.read!(double), cast(uint)buffer.read!(double), cast(uint)buffer.read!(double)];
+	}
+
+	auto nIe = buffer.read!ulong;
+	//writeln("nIe = ", nIe);
+	for(uint i = 0; i < nIe; i++)
+	{
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+		buffer.read!(double);
+	}
+
+	auto nBe = buffer.read!ulong;
+	uint[] bGroup;
+	//writeln("nBe = ", nBe);
+	for(uint i = 0; i < nBe; i++)
+	{
+		mesh.bNodes ~= [cast(uint)buffer.read!(double) - 1, cast(uint)buffer.read!(double) - 1];
+		buffer.read!(double);
+		bGroup ~= cast(uint)buffer.read!(double);
+	}
+
+	writeln(bGroup);
+	auto nTags = buffer.read!ulong;
+	//writeln("nTags = ", nTags);
+	for(uint i = 0; i < nTags; i++)
+	{
+		auto strLen = buffer.read!uint;
+		string str;
+		for(uint j = 0; j < strLen; j++)
+		{
+			str ~= buffer.read!char;
+		}
+		mesh.bTags ~= str;
+	}
+
+	writeln(mesh.bTags);
+	/+
+	f = fopen(meshFile, 'rb');
+	
+	nNodes = fread(f, 1, 'uint64', 'b');
+	nodes = fread(f, [2, nNodes], 'double', 'b')';
+	
+	nEls = fread(f, 1, 'uint64', 'b');
+	e2n = fread(f, [3, nEls], 'double', 'b')';
+	
+	ieSize = fread(f, 1, 'uint64', 'b');
+	ie = fread(f, [4, ieSize], 'double', 'b')';
+	
+	beSize = fread(f, 1, 'uint64', 'b');
+	be = fread(f, [4, beSize], 'double', 'b')';
+	
+	nTags = fread(f, 1, 'uint64', 'b');
+	for i = 1:nTags
+		tagLen = fread(f, 1, 'uint32', 'b');
+		tags{i} = fread(f, tagLen, '*char');
+	end
+	fclose(f);
+	+/
+	return mesh;
+}
 @nogc void saveMatlabMesh(ref UMesh2 mesh, immutable (string) filename)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
