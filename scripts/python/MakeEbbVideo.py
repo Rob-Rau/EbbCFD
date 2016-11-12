@@ -23,7 +23,7 @@ def plotstate(Mesh, U, field, fname):
 	f = plt.figure(figsize=(12,6))
 
 	F = pu.getField(U, field)
-	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat', vmin=0.0, vmax=0.8)
+	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat', vmin=1.55, vmax=1.9)
 
 	for i in range(len(BE)):
 		x = [V[BE[i,0],0], V[BE[i,1],0]]
