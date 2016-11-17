@@ -37,6 +37,7 @@ if __name__ == "__main__":
 
 	f = plt.figure(figsize=(12,6))
 	for idx in range(len(sys.argv) - 1):
+		print("Plotting "+sys.argv[idx+1])
 		mesh = eu.importEbbMatlabMesh(sys.argv[idx+1])
 		plotmesh(mesh, colors[idx%len(colors)])
 		plt.hold(True)
