@@ -22,6 +22,7 @@ import ebb.integrators;
 import ebb.limiters;
 import ebb.mesh;
 import ebb.io;
+import ebb.mpid;
 
 static shared bool interrupted = false;
 
@@ -36,7 +37,6 @@ static shared bool interrupted = false;
 	uint[2] Wk = [0, 1];
 	auto AkInv = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
 	auto Ak = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
-	//auto xk = Vector!2(0);
 	auto pk = Vector!2(0);
 	auto lam = Vector!2(0);
 	auto e = Vector!2(0);
@@ -66,42 +66,31 @@ static shared bool interrupted = false;
 		inv *= (1.0/mat.determinant);
 	}
 
-	//printf("c = [%.10e, %.10e]\n", c[0], c[1]);
 	while(!done)
 	{
 		// compute lagrange multipliers
 		// lam = (Ak')^-1*c
 		invertTrans(AkInv, Ak);
-		//printf("%.10e, %.10e\n", AkInv[0,0], AkInv[0,1]);
-		//printf("%.10e, %.10e\n", AkInv[1,0], AkInv[1,1]);
 		lam = AkInv*c;
 
-		//printf("lam = [%.10e, %.10e]\n", lam[0], lam[1]);
 		// If all lam >= 0, done = true
 		if((lam[0] >= -10e-9) && (lam[1] >= -10e-9))
-		//if((abs(lam[0]) >= 1e-12) && (abs(lam[1]) >= 1e-12))
 		{
 			done = true;
-			//printf("xk optimal. k = %d\n", k);
 			break;
 		}
 
-		// q = index(min(lam))
 		uint q;
-		//lam[0] < lam[1] ? q = Wk[0] : q = Wk[1];
 		if(lam[0] < lam[1])
 		{
-			//q = 0;
 			q = Wk[0];
 		}
 		else
 		{
-			//q = 1;
 			q = Wk[1];
 		}
 
 		// compute step direction
-		//if(q == 0)
 		if(lam[0] < lam[1])
 		{
 			e[0] = 1;
@@ -122,18 +111,16 @@ static shared bool interrupted = false;
 		Dlen = 0;
 		for(uint i = 0; i < m; i++)
 		{
-			//if(i != q)
-			//{
-				if((i != Wk[0]) && (i != Wk[1]))
+			if((i != Wk[0]) && (i != Wk[1]))
+			{
+				if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -1e-11)
 				{
-					if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -1e-11)
-					{
-						D[Dlen] = i;
-						Dlen++;
-					}
+					D[Dlen] = i;
+					Dlen++;
 				}
-			//}
+			}
 		}
+
 		// ensure D is not the null set. (shouldn't ever happen here)
 		assert(abs(D[].sum) > 1.0e-11);
 
@@ -146,14 +133,10 @@ static shared bool interrupted = false;
 			immutable double aixk = A[D[i],0]*xk[0] + A[D[i],1]*xk[1];
 			immutable double aipk = A[D[i],0]*pk[0] + A[D[i],1]*pk[1];
 			gamma[i] = (aixk - b[D[i]])/(-aipk);
-			//printf("gamma = %.10e\n", gamma[i]);
 			assert(!gamma[i].isNaN);
 			alpha = fmin(alpha, gamma[i]);
 			assert(!alpha.isNaN);
 		}
-
-		//printf("alpha = %.10e\n", alpha);
-		//assert(q < 2);
 
 		uint t = 0;
 		for(uint i = 0; i < Dlen; i++)
@@ -161,13 +144,9 @@ static shared bool interrupted = false;
 			if(gamma[i] == alpha)
 			{
 				t = D[i];
-				//printf("t = %d q = %d, Wk[q] = %d\n", t, q, Wk[q]);
-				//printf("t = %d q = %d\n", t, q);
 				break;
 			}
 		}
-
-		//Wk[q] = t;
 
 		if(q == Wk[0])
 		{
@@ -188,11 +167,7 @@ static shared bool interrupted = false;
 		Ak[1,1] = A[Wk[1],1];
 
 		xk += alpha*pk;
-/+
-		printf("%.10e, %.10e\n", Ak[0,0], Ak[0,1]);
-		printf("%.10e, %.10e\n", Ak[1,0], Ak[1,1]);
-		printf("xk = [%.10e, %.10e]\n", xk[0], xk[1]);
-+/
+
 		assert(!pk[0].isNaN);
 
 		k++;
@@ -203,8 +178,6 @@ static shared bool interrupted = false;
 			break;
 		}
 	}
-
-	//for(uint i = 0; i < 100_000_000; i++){}
 }
 
 @nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, SolverException ex)
@@ -302,28 +275,10 @@ static shared bool interrupted = false;
 		else
 		{
 			q0[] = mesh.q[];
-			/+
-			for(uint i = 0; i < mesh.cells.length; i++)
-			{
-				for(uint k = 0; k < 4; k++)
-				{
-					q0[i][k] = mesh.q[i][k];
-				}
-			}
-			+/
 
 			integrator.step!solver(R, q1, mesh, config, newDt, Rmax, ex);
 			newDt = dt;
 			mesh.q[] = q1[];
-			/+
-			for(uint i = 0; i < mesh.cells.length; i++)
-			{
-				for(uint k = 0; k < 4; k++)
-				{
-					mesh.q[i][k] = q1[i][k];
-				}
-			}
-			+/
 
 			integrator.step!solver(R, q2, mesh, config, newDt, Rmax, ex);
 
@@ -332,19 +287,6 @@ static shared bool interrupted = false;
 				for(uint k = 0; k < 4; k++)
 				{
 					printf("%f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k]);
-					/+
-					dem[i][k] = (q2[i][k] - q1[i][k]) - (q1[i][k] - q0[i][k]);
-					if(abs(dem[i][k]) > 10e-16)
-					{/+
-						ex.msg = "Aitken denominator too small";
-						ex.line = __LINE__;
-						ex.file = __FILE__;
-						throw ex;+/
-						mesh.q[i][k] = q2[i][k] - (((q2[i][k] - q1[i][k])^^2.0)/dem[i][k]);
-						printf("%f, %f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k], mesh.q[i][k]);
-					}+/
-					//mesh.q[i][k] = q2[i][k] - (((q2[i][k] - q1[i][k])^^2.0)/dem[i][k]);
-					//printf("%f, %f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k], mesh.q[i][k]);
 				}
 				printf("\n");
 			}
@@ -354,12 +296,7 @@ static shared bool interrupted = false;
 		{
 			dt = newDt;
 		}
-/+
-		if((config.aitkenTol > 0) && (iterations > 0))
-		{
 
-		}
-+/
 		for(uint i = 0; i < mesh.cells.length; i++)
 		{
 			thisRho[i] = mesh.q[i][0];
@@ -422,7 +359,6 @@ static shared bool interrupted = false;
 			{
 				residRhoIncIters--;
 			}
-			//residRhoIncIters = 0;
 		}
 
 		if(residRhoIncIters >= 2000)
@@ -447,7 +383,6 @@ static shared bool interrupted = false;
 				char[512] filename;
 				filename[] = 0;
 				snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
-				//saveMatlabSolution(mesh, filename.ptr);
 				saveSolution(mesh, filename.ptr, t, dt);
 				filename[] = 0;
 				snprintf(filename.ptr, 512, "save_%d.lsln", saveItr);
@@ -1099,5 +1034,5 @@ int main(string[] args)
 		writeln("total time: ", elapsed);
 	}
 	
-	return MPI_Finalize();
+	return MPI_Shutdown;
 }

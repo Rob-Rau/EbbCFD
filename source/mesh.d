@@ -6,15 +6,14 @@ import std.array;
 import std.conv;
 import std.exception;
 import std.math;
-import std.meta;
 import std.stdio;
 import std.string;
-import std.traits;
 
 import numd.linearalgebra.matrix;
 import numd.utility;
 
 import ebb.euler;
+import ebb.mpid;
 
 import mpi;
 import mpi.util;
@@ -23,73 +22,6 @@ import parmetis;
 
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
-
-private MPI_Datatype toMPIType(T)()
-{
-	static if(!is(T : char))
-	{
-		static if(is(T : int) && !is(T: uint))
-		{
-			return MPI_INT32_T;
-		}
-		else static if(is(T : uint))
-		{
-			return MPI_UINT32_T;
-		}
-		else static if(is(T : long) && !is(T : ulong))
-		{
-			return MPI_INT64_T;
-		}
-		else static if(is(T : ulong))
-		{
-			return MPI_UINT64_T;
-		}
-		else static if(is(T : float) && !is(T : double))
-		{
-			return MPI_FLOAT;
-		}
-		else static if(is(T : double))
-		{
-			return MPI_DOUBLE;
-		}
-		else
-		{
-			T inst;
-
-			MPI_Datatype newDataType;
-
-			long[] offsets;
-			MPI_Datatype[] dataTypes;
-			int[] blocklengths;
-
-			foreach(uint i, member; FieldNameTuple!T)
-			{
-				static assert(!isDynamicArray!(Fields!T[i]), "Dynamic arrays not supported");
-				static if(isArray!(Fields!T[i]))
-				{
-					mixin("blocklengths ~= inst."~member~".length;");
-					mixin("dataTypes ~= toMPIType!("~ForeachType!(Fields!T[i]).stringof~");");
-					mixin("offsets ~= cast(uint)(cast(void*)&inst."~member~"[0] - cast(void*)&inst);");
-				}
-				else
-				{
-					blocklengths ~= 1;
-					mixin("dataTypes ~= toMPIType!("~Fields!T[i].stringof~");");
-					mixin("offsets ~= cast(uint)(cast(void*)&inst."~member~" - cast(void*)&inst);");
-				}
-			}
-
-			MPI_Type_create_struct(cast(int)FieldNameTuple!T.length, blocklengths.ptr, offsets.ptr, dataTypes.ptr, &newDataType);
-			MPI_Type_commit(&newDataType);
-
-			return newDataType;
-		}
-	}
-	else
-	{
-		return MPI_CHAR;
-	}
-}
 
 enum BoundaryType
 {
@@ -169,11 +101,18 @@ struct UMesh2
 
 	uint[] commProc;
 	CommEdgeNodes[][] commEdgeLists;
+
 	uint[][] commEdgeIdx;
+	uint[][] commCellIdx;
 
 	// Computed mesh data
+	uint[] interiorCells;
+	uint[] ghostCells;
 	UCell2[] cells;
 	Vector!4[] q;
+
+	uint[] interiorEdges;
+	uint[] boundaryEdges;
 	Edge[] edges;
 
 	this(uint nCells)
@@ -207,6 +146,20 @@ struct UMesh2
 				bNodeIdx = i;
 				return true;
 			}
+		}
+		return false;
+	}
+
+	private bool isCommEdge(ref Edge edge)
+	{
+		foreach(commEdgeList; commEdgeLists)
+		{
+			auto pred = (CommEdgeNodes a, Edge b) => (((b.nodeIdx[0] == a.n1) && (b.nodeIdx[1] == a.n2)) || ((b.nodeIdx[0] == a.n2) && (b.nodeIdx[1] == a.n1)));
+			if(commEdgeList.canFind!pred(edge))
+			{
+				return true;
+			}
+
 		}
 		return false;
 	}
@@ -279,6 +232,10 @@ struct UMesh2
 						cells[i].fluxMultiplier[j] = 1.0;
 						edges ~= edge;
 						edgeidx = edges.length.to!uint - 1;
+						if(!isCommEdge(edge))
+						{
+							interiorEdges ~= edgeidx;
+						}
 					}
 				}
 				else
@@ -299,8 +256,11 @@ struct UMesh2
 					cells[i].fluxMultiplier[j] = 1.0;
 					edges ~= edge;
 					edgeidx = edges.length.to!uint - 1;
+					boundaryEdges ~= edgeidx;
+
 				}
 
+				interiorCells ~= i;
 				cells[i].edges[j] = edgeidx;
 				cells[i].perim += edges[edgeidx].len;
 				auto mat = Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]);
@@ -316,6 +276,24 @@ struct UMesh2
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
 			cells[i].centroid[0] *= 1/(6*cells[i].area);
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
+		}
+
+		foreach(commEdgeList; commEdgeLists)
+		{
+			//uint[][] commEdgeIdx;
+			commEdgeIdx.length++;
+			foreach(commEdge; commEdgeList)
+			{
+				foreach(uint edgeIdx, edge; edges)
+				{
+					// is edge a communication edge
+					if(((edge.nodeIdx[0] == commEdge.n1) && (edge.nodeIdx[1] == commEdge.n2)) ||
+						((edge.nodeIdx[0] == commEdge.n2) && (edge.nodeIdx[1] == commEdge.n1)))
+					{
+						commEdgeIdx[$-1] ~= edgeIdx;
+					}
+				}
+			}
 		}
 
 		for(uint i = 0; i < cells.length; i++)
@@ -550,49 +528,6 @@ uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNo
 	return cast(uint)(idx + 1);
 }
 
-void logln(S...)(S args)
-{
-	int id;
-	MPI_Comm_rank(MPI_COMM_WORLD, &id);
-	writeln("Proc ", id, ": ", args);
-}
-
-void send(T)(MPI_Comm comm, T data, uint proc, int tag)
-{
-	MPI_Send(&data, 1, toMPIType!T, proc, tag, comm);
-}
-
-T recv(T)(MPI_Comm comm, uint from, int tag)
-{
-	T data;
-	MPI_Status status;
-	MPI_Recv(&data, 1, toMPIType!T, from, tag, comm, &status);
-	return data;
-}
-
-void sendArray(T)(MPI_Comm comm, T[] data, uint proc, int tag)
-{
-	uint len = cast(uint)data.length;
-	MPI_Send(&len, 1, MPI_UINT32_T, proc, tag, comm);
-	MPI_Send(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag, comm);
-}
-
-T[] recvArray(T)(MPI_Comm comm, uint from, int tag)
-{
-	uint nElems;
-	T[] data;
-
-	MPI_Status status;
-	MPI_Recv(&nElems, 1, MPI_UINT32_T, from, tag, comm, &status);
-	data = new T[nElems];
-	
-	enforce(status.MPI_ERROR == MPI_SUCCESS, "Error receiving array length. MPI Error: "~status.MPI_ERROR.to!string);
-	
-	MPI_Recv(data.ptr, nElems, toMPIType!T, 0, tag, comm, &status);
-
-	return data;
-}
-
 UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
 	int partTag = 2001;
@@ -722,9 +657,9 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			uint[] flatElementMap = localElements.joiner.array;
 			double[] flatNodes = localNodes.joiner.array;
 
-			localbGroupStart ~= cast(uint)localbNodes.length;
-			localbNodes ~= commEdges;
-			localbTag ~= "Comm";
+			//localbGroupStart ~= cast(uint)localbNodes.length;
+			//localbNodes ~= commEdges;
+			//localbTag ~= "Comm";
 
 			if(i != 0)
 			{
