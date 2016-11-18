@@ -9,8 +9,8 @@ import std.traits;
 import numd.linearalgebra.matrix;
 import numd.utility;
 
-import mpi;
-import mpi.util;
+public import mpi;
+public import mpi.util;
 
 MPI_Datatype[string] customDataTypes;
 

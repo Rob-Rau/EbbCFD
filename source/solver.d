@@ -199,7 +199,12 @@ static shared bool interrupted = false;
 
 	immutable uint buffSize = 3*1024*1024*double.sizeof;
 	size_t buffPos = 0;
-	auto forceFile = fopen("boundaryForces.frc", "wb");
+
+	FILE* forceFile;
+	if(mesh.mpiRank == 0)
+	{
+		forceFile = fopen("boundaryForces.frc", "wb");
+	}
 
 	double residRho = 0.0;
 	double residU = 0.0;
@@ -262,7 +267,7 @@ static shared bool interrupted = false;
 
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
-
+	MPI_Barrier(mesh.comm);
 	while((t < config.tEnd) && !atomicLoad(interrupted))
 	{
 		double Rmax = 0;
@@ -337,11 +342,14 @@ static shared bool interrupted = false;
 		lastE[] = thisE[];
 
 		auto f = mesh.computeBoundaryForces(config.forceBoundary);
-		ld = rotMat*f;
+		if(mesh.mpiRank == 0)
+		{
+			ld = rotMat*f;
 
-		forceBuffer.write!double(t, &buffPos);
-		forceBuffer.write!double(ld[0], &buffPos);
-		forceBuffer.write!double(ld[1], &buffPos);
+			forceBuffer.write!double(t, &buffPos);
+			forceBuffer.write!double(ld[0], &buffPos);
+			forceBuffer.write!double(ld[1], &buffPos);
+		}
 
 		if(buffPos == buffSize)
 		{
@@ -386,10 +394,10 @@ static shared bool interrupted = false;
 			{
 				char[512] filename;
 				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
+				snprintf(filename.ptr, 512, "save_%d_%d.esln", mesh.mpiRank, saveItr);
 				saveSolution(mesh, filename.ptr, t, dt);
 				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d.lsln", saveItr);
+				snprintf(filename.ptr, 512, "save_%d_%d.lsln", mesh.mpiRank, saveItr);
 				saveLimits(mesh, filename.ptr, t, dt);
 				saveItr++;
 			}
@@ -399,18 +407,27 @@ static shared bool interrupted = false;
 		lastRmax = Rmax;
 	}
 
-	if(buffPos != 0)
+	if(mesh.mpiRank == 0)
 	{
-		fwrite(forceBuffer.ptr, ubyte.sizeof, buffPos, forceFile);
-		buffPos = 0;
+		if(buffPos != 0)
+		{
+			fwrite(forceBuffer.ptr, ubyte.sizeof, buffPos, forceFile);
+			buffPos = 0;
+		}
+		fclose(forceFile);
 	}
-	fclose(forceFile);
 
-	saveSolution(mesh, cast(char*)"final.esln", t, dt);
-	saveLimits(mesh, cast(char*)"final.lsln", t, dt);
-	printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-	printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
-
+	char[512] filename;
+	filename[] = 0;
+	snprintf(filename.ptr, 512, "final_%d.esln", mesh.mpiRank);
+	saveSolution(mesh, filename.ptr, t, dt);
+	snprintf(filename.ptr, 512, "final_%d.lsln", mesh.mpiRank);
+	saveLimits(mesh, filename.ptr, t, dt);
+	if(mesh.mpiRank == 0)
+	{
+		printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+		printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
+	}
 }
 
 @nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile, SolverException ex)
@@ -529,7 +546,7 @@ MPI_Datatype vec4dataType;
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
-	MPI_Barrier(mesh.comm);
+	//MPI_Barrier(mesh.comm);
 
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
@@ -573,6 +590,9 @@ MPI_Datatype vec4dataType;
 			with(BoundaryType)
 		{
 			case FullState:
+				//printf("Cell idx 0 = %d\n", edge.cellIdx[0]);
+				//printf("Cell idx 1 = %d\n", edge.cellIdx[1]);
+
 				mesh.q[edge.cellIdx[1]] = mesh.q[edge.cellIdx[0]];
 				break;
 			case InviscidWall:
@@ -588,10 +608,13 @@ MPI_Datatype vec4dataType;
 				auto newV = inv*localV;
 				auto cellIdx2 = edge.cellIdx[1];
 				// update ghost cell
+				//mesh.q[cellIdx2] = mesh.q[cellIdx];
+				
 				mesh.q[cellIdx2][0] = mesh.q[cellIdx][0];
 				mesh.q[cellIdx2][1] = mesh.q[cellIdx][0]*newV[0];
 				mesh.q[cellIdx2][2] = mesh.q[cellIdx][0]*newV[1];
 				mesh.q[cellIdx2][3] = mesh.q[cellIdx][3];
+				
 				// reflect
 			 	break;
 
@@ -1124,13 +1147,15 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			umesh.comm = MPI_COMM_WORLD;
 			umesh.mpiRank = id;
 			//umesh.buildMesh;
-			//import std.array : split;
-			//saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
+			
 			//core.stdc.stdlib.abort;
 			//return;
 		}
 
 		umesh.buildMesh;
+
+		import std.array : split;
+		saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 
 		final switch(config.limiter)
 		{

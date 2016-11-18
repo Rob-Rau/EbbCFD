@@ -118,15 +118,22 @@ struct UMesh2
 	uint[] boundaryEdges;
 	Edge[] edges;
 
+	MPI_Datatype vec2Type;
+	MPI_Datatype vec4Type;
+
 	Vector!4[][] stateBuffers;
 
 	this(uint nCells)
 	{
+		vec2Type = toMPIType!(Vector!2);
+		vec4Type = toMPIType!(Vector!4);
 		cells = new UCell2[nCells];
 	}
 
 	this(uint nCells, MPI_Comm comm, uint rank)
 	{
+		vec2Type = toMPIType!(Vector!2);
+		vec4Type = toMPIType!(Vector!4);
 		cells = new UCell2[nCells];
 		this.comm = comm;
 		this.mpiRank = rank;
@@ -134,6 +141,8 @@ struct UMesh2
 
 	this(MPI_Comm, uint rank)
 	{
+		vec2Type = toMPIType!(Vector!2);
+		vec4Type = toMPIType!(Vector!4);
 		this.comm = comm;
 		this.mpiRank = rank;
 	}
@@ -322,12 +331,20 @@ struct UMesh2
 			double yr = 2.0*d*m - y1 + 2.0*c;
 			cell.centroid = Vector!2(xr, yr);
 
+			//logln("new cell centroid = ", cell.centroid);
+			//logln("other cell centroid = ", otherCell.centroid, "\n");
 			cell.nNeighborCells = 1;
 			cell.lim[] = Vector!2(1.0);
 			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
 			cell.edges[0] = bEdge;
+
+			auto newq = Vector!4(0);
+			q ~= newq;
+
 			cells ~= cell; 
 			edges[bEdge].cellIdx[1] = cast(uint)(cells.length - 1);
+
+			//logln("Adding ghost cell. Boundary type = ", edges[bEdge].boundaryTag, "\t cell index = ", edges[bEdge].cellIdx[1]);
 			ghostCells ~= edges[bEdge].cellIdx[1];
 		}
 
@@ -578,7 +595,12 @@ struct UMesh2
 				}
 			}
 		}
-		return f;
+
+		auto globalF = Vector!2(0);
+
+		MPI_Reduce(f.mData.ptr, globalF.mData.ptr, 2, MPI_DOUBLE, MPI_SUM, 0, comm);
+
+		return globalF;
 	}
 }
 

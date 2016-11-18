@@ -52,7 +52,7 @@ struct SlnHeader
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.cells.length, t: t, dt: dt};
+	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.interiorCells.length, t: t, dt: dt};
 
 	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
@@ -66,7 +66,8 @@ struct SlnHeader
 	buffer.write!double(header.t, &offset);
 	buffer.write!double(header.dt, &offset);
 
-	for(uint i = 0; i < mesh.cells.length; i++)
+	//for(uint i = 0; i < mesh.cells.length; i++)
+	foreach(i; mesh.interiorCells)
 	{
 		buffer.write!double(mesh.q[i][0], &offset);
 		buffer.write!double(mesh.q[i][1], &offset);
@@ -106,7 +107,7 @@ struct SlnHeader
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.cells.length, t: t, dt: dt};
+	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.interiorCells.length, t: t, dt: dt};
 
 	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
@@ -120,7 +121,8 @@ struct SlnHeader
 	buffer.write!double(header.t, &offset);
 	buffer.write!double(header.dt, &offset);
 
-	for(uint i = 0; i < mesh.cells.length; i++)
+	//for(uint i = 0; i < mesh.cells.length; i++)
+	foreach(i; mesh.interiorCells)
 	{
 		buffer.write!double(mesh.cells[i].gradErr[0], &offset);
 		buffer.write!double(mesh.cells[i].gradErr[1], &offset);

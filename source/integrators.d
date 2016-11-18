@@ -8,6 +8,7 @@ import std.math;
 import ebb.config;
 import ebb.exception;
 import ebb.mesh;
+import ebb.mpid;
 
 import numd.utility;
 import numd.linearalgebra.matrix;
@@ -289,24 +290,29 @@ struct RK4
 
 		double newDt = double.infinity;
 
+		//MPI_Barrier(mesh.comm);
+
 		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k1[i]);
 		}
+		//MPI_Barrier(mesh.comm);
 		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k2[i]);
 		}
+		//MPI_Barrier(mesh.comm);
 		solver(k3, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + (dt*k3[i]);
 		}
+		//MPI_Barrier(mesh.comm);
 		solver(k4, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		foreach(i; mesh.interiorCells)
