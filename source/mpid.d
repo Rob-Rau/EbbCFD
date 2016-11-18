@@ -123,10 +123,10 @@ void sendArray(T)(MPI_Comm comm, T[] data, uint proc, int tag)
 {
 	uint len = cast(uint)data.length;
 	MPI_Send(&len, 1, MPI_UINT32_T, proc, tag, comm);
-	MPI_Send(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag, comm);
+	MPI_Send(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag + 1, comm);
 }
 
-T[] recvArray(T)(MPI_Comm comm, uint from, int tag)
+T[] recvArray(T)(MPI_Comm comm, uint from, const int tag)
 {
 	uint nElems;
 	T[] data;
@@ -137,7 +137,7 @@ T[] recvArray(T)(MPI_Comm comm, uint from, int tag)
 	
 	enforce(status.MPI_ERROR == MPI_SUCCESS, "Error receiving array length. MPI Error: "~status.MPI_ERROR.to!string);
 	
-	MPI_Recv(data.ptr, nElems, toMPIType!T, 0, tag, comm, &status);
+	MPI_Recv(data.ptr, nElems, toMPIType!T, 0, tag + 1, comm, &status);
 
 	return data;
 }

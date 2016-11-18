@@ -107,7 +107,8 @@ struct BEuler
 		immutable double tol = 1e-10;
 		uint iterations = 0;
 
-		for(uint i = 0; i < q.length; i++)
+		//for(uint i = 0; i < q.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			for(uint j = 0; j < 4; j++)
 			{
@@ -125,7 +126,8 @@ struct BEuler
 		{
 			printf("in func\n");
 			solver(R, qn, mesh, config, newDt, Rmax, true, false, ex);
-			for(uint i = 0; i < f.length; i++)
+			//for(uint i = 0; i < f.length; i++)
+			foreach(i; mesh.interiorCells)
 			{
 				f[i] = qn[i] - mesh.q[i] - dt*R[i];
 			}
@@ -135,7 +137,7 @@ struct BEuler
 		{
 			func(f1, q);
 			func(f2, qLast);
-			for(uint i = 0; i < qNext.length; i++)
+			foreach(i; mesh.interiorCells)
 			{
 				for(uint j = 0; j < 4; j++)
 				{
@@ -163,7 +165,7 @@ struct BEuler
 			iterations++;
 			//maxDiff = f1.sum!("", "abs", Vector!4)[].sum;
 			maxDiff = -double.infinity;
-			for(uint i = 0; i < qNext.length; i++)
+			foreach(i; mesh.interiorCells)
 			{
 				for(uint j = 0; j < 4; j++)
 				{
@@ -225,7 +227,7 @@ struct Euler
 
 		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
-		for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			if(!config.localTimestep)
 			{
@@ -289,25 +291,25 @@ struct RK4
 
 		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
-		for(uint i = 0; i < tmp.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k1[i]);
 		}
 		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
-		for(uint i = 0; i < tmp.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k2[i]);
 		}
 		solver(k3, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
-		for(uint i = 0; i < tmp.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + (dt*k3[i]);
 		}
 		solver(k4, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
-		for(uint i = 0; i < mesh.q.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			if(!config.localTimestep)
 			{
@@ -363,7 +365,7 @@ struct RK2_TVD
 		//Euler.step!solver(R, qFE, mesh, config, newDt, Rmax, ex);
 		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
-		for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			if(!config.localTimestep)
 			{
@@ -384,7 +386,7 @@ struct RK2_TVD
 		*/
 		solver(k2, qFE, mesh, config, newDt, Rmax, false, false, ex);
 
-		for(uint i = 0; i < mesh.q.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			if(!config.localTimestep)
 			{
@@ -444,13 +446,13 @@ struct RK2
 
 		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
-		for(uint i = 0; i < tmp.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + (dt*k1[i]);
 		}
 		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
-		for(uint i = 0; i < mesh.q.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			if(!config.localTimestep)
 			{

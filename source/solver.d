@@ -5,7 +5,7 @@ import core.atomic;
 import core.stdc.stdio : fopen, fwrite, fopen, printf, snprintf;
 import core.sys.posix.signal;
 
-import std.algorithm : canFind, min, max, reduce, sum;
+import std.algorithm : canFind, countUntil, min, max, reduce, sum;
 import std.conv;
 import std.file;
 import std.math;
@@ -425,7 +425,7 @@ static shared bool interrupted = false;
 	if(saveFile == "")
 	{
 		// Setup initial conditions
-		for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			//mesh.q[i] = buildQ(rho, u, v, p);
 			mesh.q[i][0] = rho;
@@ -443,7 +443,7 @@ static shared bool interrupted = false;
 	{
 		if(loadSolution(mesh, t, dt, saveFile))
 		{
-			for(uint i = 0; i < mesh.cells.length; i++)
+			foreach(i; mesh.interiorCells)
 			{
 				lastRho[i] = mesh.q[i][0];
 				lastU[i] = mesh.q[i][1];
@@ -520,13 +520,74 @@ static shared bool interrupted = false;
 	}
 }
 
+MPI_Datatype vec4dataType;
+static this()
+{
+	vec4dataType = toMPIType!(Vector!4);
+}
+
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
+	// TODO: Update cell average values from neigboring processors
+
+	MPI_Barrier(mesh.comm);
+
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i, edge; commEdges)
+		{
+			mesh.stateBuffers[commIdx][i] = mesh.q[mesh.edges[edge].cellIdx[0]]; 
+		}
+		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
+	}
+
+	for(uint c = 0; c < mesh.commProc.length; c++)
+	{
+		MPI_Status status;
+		MPI_Probe(MPI_ANY_SOURCE, mesh.meshTag, mesh.comm, &status);
+
+		// determine which proc this is comming from, will be different order
+		// than commProc
+		if(mesh.commProc.canFind(status.MPI_SOURCE))
+		{
+			auto commIdx = mesh.commProc.countUntil(status.MPI_SOURCE);
+			auto commEdges = mesh.commEdgeIdx[commIdx];
+
+			MPI_Recv(mesh.stateBuffers[commIdx].ptr, cast(int)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm, &status);
+
+			foreach(i, edge; commEdges)
+			{
+				mesh.q[mesh.edges[edge].cellIdx[1]] = mesh.stateBuffers[commIdx][i];
+			}
+		}
+		else
+		{
+			printf("Unexpected source message from %d\n", status.MPI_SOURCE);
+		}
+	}
+
+	foreach(i; mesh.ghostCells)
+	{
+		auto edge = mesh.edges[mesh.cells[i].edges[0]];
+		switch(edge.boundaryType)
+			with(BoundaryType)
+		{
+			case FullState:
+				mesh.q[edge.cellIdx[1]] = mesh.q[edge.cellIdx[0]];
+				break;
+			case InviscidWall:
+			 break;
+
+			default:
+				break;
+		}
+	}
 	// Build gradients
 	if(config.order > 1)
 	{
-		for(uint i = 0; i < mesh.cells.length; i++)
+		//for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			Vector!6[4] du;
 			for(uint j = 0; j < 4; j++)
@@ -661,196 +722,194 @@ static shared bool interrupted = false;
 		}
 	}
 
-	for(uint i = 0; i < mesh.edges.length; i++)
+	foreach(i; mesh.boundaryEdges)
 	{
-		if(mesh.edges[i].isBoundary)
+		switch(mesh.edges[i].boundaryType)
+			with(BoundaryType)
 		{
-			switch(mesh.edges[i].boundaryType)
-				with(BoundaryType)
-			{
-				case FullState:
-					if(config.order == 1)
-					{
-						mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-					}
-					else
-					{
-						auto qM = q[mesh.edges[i].cellIdx[0]];
-						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
-						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
-						auto mid = mesh.edges[i].mid;
-
-						auto dx = mid[0] - centroid[0];
-						auto dy = mid[1] - centroid[1];
-						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-						
-						for(uint j = 0; j < dims; j++)
-						{
-							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-															mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
-						}
-
-						if(getPressure(mesh.edges[i].q[0]) < 0)
-						{
-							double[2] lim = [1.0, 1.0];
-							for(uint j = 0; j < dims; j++)
-							{
-								lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
-								lim[1] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[1]].lim[j][1]);
-							}
-							for(uint j = 0; j < dims; j++)
-							{
-								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-								mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
-							}
-						}
-					}
-
-					auto qL = mesh.edges[i].q[0];
-					auto qR = mesh.edges[i].q[1];
-
-					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
-					if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-					{
-						ex.msg = "Got nan on FullState boundary";
-						ex.file = __FILE__;
-						ex.line = __LINE__;
-						throw ex;
-					}
-					break;
-				case InviscidWall:
-					if(config.order == 1)
-					{
-						mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-					}
-					else
-					{
-						auto qM = q[mesh.edges[i].cellIdx[0]];
-						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
-						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
-						auto mid = mesh.edges[i].mid;
-						auto dx = mid[0] - centroid[0];
-						auto dy = mid[1] - centroid[1];
-						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-						
-						for(uint j = 0; j < dims; j++)
-						{
-							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-															mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
-						}
-
-						if(getPressure(mesh.edges[i].q[0]) < 0)
-						{
-							double[2] lim = [1.0, 1.0];
-							for(uint j = 0; j < dims; j++)
-							{
-								lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
-								lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
-							}
-
-							for(uint j = 0; j < dims; j++)
-							{
-								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-								mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
-							}
-						}
-					}
-
-					Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
-					auto vel = (velP - (velP.dot(mesh.edges[i].normal))*mesh.edges[i].normal).magnitude;
-					double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel^^2);
-					double a = sqrt(gamma*(p/mesh.edges[i].q[0][0]));
-					if(p < 0)
-					{
-						p = 1.0e-12;
-						//printf("pressure less than 0 at wall\n");
-					}
-					mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
-					mesh.edges[i].sMax = std.math.abs(a);
-
-					if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-					{
-						ex.msg = "Got nan on wall boundary";
-						ex.file = __FILE__;
-						ex.line = __LINE__;
-						throw ex;
-					}
-					break;
-				default:
-					ex.msg = "Unsupported boundary type";
-					ex.file = __FILE__;
-					ex.line = __LINE__;
-					throw ex;
-			}
-		}
-		else
-		{
-			if(config.order == 1)
-			{
-				mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-				mesh.edges[i].q[1] = q[mesh.edges[i].cellIdx[1]];
-			}
-			else
-			{
-				for(uint k = 0; k < 2; k++)
+			case FullState:
+				if(config.order == 1)
 				{
-					auto qM = q[mesh.edges[i].cellIdx[k]];
-					auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
-					auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
 					auto mid = mesh.edges[i].mid;
-					//auto mid = mesh.edges[eIdx].mid;
-					//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(k+1)%2]].centroid;
 
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
-					//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
+					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
 					
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
-														mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
-						//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
 
-					if(getPressure(mesh.edges[i].q[k]) < 0)
+					if(getPressure(mesh.edges[i].q[0]) < 0)
 					{
 						double[2] lim = [1.0, 1.0];
 						for(uint j = 0; j < dims; j++)
 						{
-							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]);
-							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]);
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[1]].lim[j][1]);
+						}
+						for(uint j = 0; j < dims; j++)
+						{
+							//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
+						}
+					}
+				}
+
+				auto qL = mesh.edges[i].q[0];
+				auto qR = mesh.edges[i].q[1];
+
+				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
+				{
+					ex.msg = "Got nan on FullState boundary";
+					ex.file = __FILE__;
+					ex.line = __LINE__;
+					throw ex;
+				}
+				break;
+			case InviscidWall:
+				if(config.order == 1)
+				{
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+					auto mid = mesh.edges[i].mid;
+					auto dx = mid[0] - centroid[0];
+					auto dy = mid[1] - centroid[1];
+					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
+					
+					for(uint j = 0; j < dims; j++)
+					{
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+					}
+
+					if(getPressure(mesh.edges[i].q[0]) < 0)
+					{
+						double[2] lim = [1.0, 1.0];
+						for(uint j = 0; j < dims; j++)
+						{
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
 						}
 
 						for(uint j = 0; j < dims; j++)
 						{
-							//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-							mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+							//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 						}
 					}
 				}
-			}
 
-			auto qL = mesh.edges[i].q[0];
-			auto qR = mesh.edges[i].q[1];
+				Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
+				auto vel = (velP - (velP.dot(mesh.edges[i].normal))*mesh.edges[i].normal).magnitude;
+				double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel^^2);
+				double a = sqrt(gamma*(p/mesh.edges[i].q[0][0]));
+				if(p < 0)
+				{
+					p = 1.0e-12;
+					//printf("pressure less than 0 at wall\n");
+				}
+				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
+				mesh.edges[i].sMax = std.math.abs(a);
 
-			mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
-
-			if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-			{
-				ex.SetException(SolverException.SExceptionType.EdgeException,
-								"Got NaN on interior edge",
-								SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-															  getPressure(mesh.edges[i].q[1]),
-															  mesh.edges[i].flux,
-															  mesh.edges[i].q[0],
-															  mesh.edges[i].q[1],
-															  mesh.edges[i].normal,
-															  mesh.edges[i].cellIdx[0],
-															  mesh.edges[i].cellIdx[1]));
+				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
+				{
+					ex.msg = "Got nan on wall boundary";
+					ex.file = __FILE__;
+					ex.line = __LINE__;
+					throw ex;
+				}
+				break;
+			default:
+				ex.msg = "Unsupported boundary type";
+				ex.file = __FILE__;
+				ex.line = __LINE__;
 				throw ex;
+		}
+	}
+
+	foreach(i; mesh.interiorEdges)
+	{
+		if(config.order == 1)
+		{
+			mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+			mesh.edges[i].q[1] = q[mesh.edges[i].cellIdx[1]];
+		}
+		else
+		{
+			for(uint k = 0; k < 2; k++)
+			{
+				auto qM = q[mesh.edges[i].cellIdx[k]];
+				auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
+				auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
+				auto mid = mesh.edges[i].mid;
+				//auto mid = mesh.edges[eIdx].mid;
+				//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(k+1)%2]].centroid;
+
+				auto dx = mid[0] - centroid[0];
+				auto dy = mid[1] - centroid[1];
+				//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
+				
+				for(uint j = 0; j < dims; j++)
+				{
+					mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
+													mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
+					//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+				}
+
+				if(getPressure(mesh.edges[i].q[k]) < 0)
+				{
+					double[2] lim = [1.0, 1.0];
+					for(uint j = 0; j < dims; j++)
+					{
+						lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]);
+						lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]);
+					}
+
+					for(uint j = 0; j < dims; j++)
+					{
+						//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+					}
+				}
 			}
+		}
+
+		auto qL = mesh.edges[i].q[0];
+		auto qR = mesh.edges[i].q[1];
+
+		mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+
+		if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
+		{
+			ex.SetException(SolverException.SExceptionType.EdgeException,
+							"Got NaN on interior edge",
+							SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
+															getPressure(mesh.edges[i].q[1]),
+															mesh.edges[i].flux,
+															mesh.edges[i].q[0],
+															mesh.edges[i].q[1],
+															mesh.edges[i].normal,
+															mesh.edges[i].cellIdx[0],
+															mesh.edges[i].cellIdx[1]));
+			throw ex;
 		}
 	}
 
@@ -908,7 +967,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 {
 	try
 	{
-		UMesh2 umesh;
+		auto umesh = UMesh2(MPI_COMM_SELF, id);
 
 		double dt = config.dt;
 		double t = 0;
@@ -920,6 +979,8 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			if(config.meshFile.canFind(".gri"))
 			{
 				umesh = parseXflowMesh(config.meshFile);
+				umesh.comm = MPI_COMM_SELF;
+				umesh.mpiRank = id;
 			}
 			else
 			{
@@ -928,10 +989,10 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			}
 		}
 
-		//umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
 		if(p > 1)
 		{
 			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+			umesh.comm = MPI_COMM_WORLD;
 			umesh.buildMesh;
 			import std.array : split;
 			saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");

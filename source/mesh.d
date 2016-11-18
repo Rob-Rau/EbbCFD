@@ -91,6 +91,9 @@ struct UCell2
 
 struct UMesh2
 {
+	MPI_Comm comm;
+	uint mpiRank;
+	static const int meshTag = 2000;
 	// Raw mesh data
 	double[][] nodes;
 	uint[][] elements;
@@ -115,9 +118,24 @@ struct UMesh2
 	uint[] boundaryEdges;
 	Edge[] edges;
 
+	Vector!4[][] stateBuffers;
+
 	this(uint nCells)
 	{
 		cells = new UCell2[nCells];
+	}
+
+	this(uint nCells, MPI_Comm comm, uint rank)
+	{
+		cells = new UCell2[nCells];
+		this.comm = comm;
+		this.mpiRank = rank;
+	}
+
+	this(MPI_Comm, uint rank)
+	{
+		this.comm = comm;
+		this.mpiRank = rank;
 	}
 
 	ref UCell2 opIndex(size_t i)
@@ -184,6 +202,10 @@ struct UMesh2
 	void buildMesh()
 	{
 		bGroups = new uint[][](bTags.length);
+
+		import std.range : iota;
+		//interiorCells = iota(0, cells.length).array.to!(uint[]);
+
 		for(uint i = 0; i < elements.length; i++)
 		{
 			q[i] = Vector!4(0);
@@ -257,10 +279,8 @@ struct UMesh2
 					edges ~= edge;
 					edgeidx = edges.length.to!uint - 1;
 					boundaryEdges ~= edgeidx;
-
 				}
 
-				interiorCells ~= i;
 				cells[i].edges[j] = edgeidx;
 				cells[i].perim += edges[edgeidx].len;
 				auto mat = Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]);
@@ -271,6 +291,7 @@ struct UMesh2
 				cells[i].centroid[1] += (nodes[ni[0]][1] + nodes[ni[1]][1])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 			}
 
+			interiorCells ~= i;
 			cells[i].area *= 0.5;
 			//cells[i].area.writeln;
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
@@ -278,10 +299,43 @@ struct UMesh2
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
 		}
 
+		foreach(bEdge; boundaryEdges)
+		{
+			UCell2 cell;
+			cell.edges[] = 0;
+			cell.fluxMultiplier[] = -1.0;
+			cell.area = 0.0;
+			cell.d = 0.0;
+			cell.perim = 0;
+			
+			// reflect centroid across edge
+			auto edge = edges[bEdge];
+			auto otherCell = cells[edge.cellIdx[0]];
+			double x1 = otherCell.centroid[0];
+			double y1 = otherCell.centroid[1];
+			double m = (nodes[edge.nodeIdx[0]][1] - nodes[edge.nodeIdx[1]][1])/(nodes[edge.nodeIdx[0]][0] - nodes[edge.nodeIdx[1]][0]);
+			double x = nodes[edge.nodeIdx[0]][0];
+			double y = nodes[edge.nodeIdx[0]][1];
+			double c = y - m*x;
+			double d = (x1 + (y1 - c)*m)/(1.0 + m^^2.0);
+			double xr = 2.0*d - x1;
+			double yr = 2.0*d*m - y1 + 2.0*c;
+			cell.centroid = Vector!2(xr, yr);
+
+			cell.nNeighborCells = 1;
+			cell.lim[] = Vector!2(1.0);
+			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
+			cell.edges[0] = bEdge;
+			cells ~= cell; 
+			edges[bEdge].cellIdx[1] = cast(uint)(cells.length - 1);
+			ghostCells ~= edges[bEdge].cellIdx[1];
+		}
+
 		foreach(commEdgeList; commEdgeLists)
 		{
-			//uint[][] commEdgeIdx;
 			commEdgeIdx.length++;
+			commCellIdx.length++;
+			stateBuffers.length++;
 			foreach(commEdge; commEdgeList)
 			{
 				foreach(uint edgeIdx, edge; edges)
@@ -291,15 +345,77 @@ struct UMesh2
 						((edge.nodeIdx[0] == commEdge.n2) && (edge.nodeIdx[1] == commEdge.n1)))
 					{
 						commEdgeIdx[$-1] ~= edgeIdx;
+						UCell2 cell;
+						cell.edges[] = 0;
+						cell.fluxMultiplier[] = -1.0;
+						cell.area = 0.0;
+						cell.d = 0.0;
+						cell.perim = 0;
+						cell.neighborCells[0] = edge.cellIdx[0];
+						cell.centroid = Vector!2(0.0);
+						cell.nNeighborCells = 1;
+						cell.lim[] = Vector!2(1.0);
+						cell.edges[0] = edgeIdx;
+
+						auto newq = Vector!4(0);
+						q ~= newq;
+						cells ~= cell;
+
+						commCellIdx[$-1] ~= cast(uint)(cells.length - 1);
+						edge.cellIdx[1] = commCellIdx[$-1][$-1];
 					}
 				}
+
+				stateBuffers[$-1] = new Vector!4[commCellIdx[$-1].length];
 			}
 		}
 
-		for(uint i = 0; i < cells.length; i++)
+		MPI_Barrier(comm);
+		// We now need to distribute cell centroids to neighboring 
+		// processors so they can set up their ghost cells
+		foreach(commIdx, commEdges; commEdgeIdx)
+		{
+			auto centroids = new Vector!2[commEdges.length];
+			foreach(i, edge; commEdges)
+			{
+				centroids[i] = cells[edges[edge].cellIdx[0]].centroid; 
+			}
+			MPI_Send(centroids.ptr, cast(uint)centroids.length, toMPIType!(Vector!2), commProc[commIdx], meshTag, comm);
+		}
+
+		// recieve cell centroids
+		for(uint c = 0; c < commProc.length; c++)
+		{
+			MPI_Status status;
+			MPI_Probe(MPI_ANY_SOURCE, meshTag, comm, &status);
+
+			// determine which proc this is comming from, will be different order
+			// than commProc
+			if(commProc.canFind(status.MPI_SOURCE))
+			{
+				auto commIdx = commProc.countUntil(status.MPI_SOURCE);
+				auto commEdges = commEdgeIdx[commIdx];
+				auto centroids = new Vector!2[commEdges.length];
+
+				MPI_Recv(centroids.ptr, cast(int)centroids.length, toMPIType!(Vector!2), commProc[commIdx], meshTag, comm, &status);
+
+				foreach(i, edge; commEdges)
+				{
+					cells[edges[edge].cellIdx[1]].centroid = centroids[i];
+				}
+			}
+			else
+			{
+				logln("Unexpected source message from ", status.MPI_SOURCE);
+			}
+		}
+
+		//for(uint i = 0; i < cells.length; i++)
+		foreach(i; interiorCells)
 		{
 			cells[i].gradMat = Matrix!(2, 6)(0);
 			auto tmpMat = Matrix!(6, 2)(0);
+
 			// Run through the edges and find indecies
 			// of cell neighbors
 			for(uint j = 0; j < cells[i].nEdges; j++)
@@ -320,22 +436,19 @@ struct UMesh2
 				auto eDot = v1.dot(edge.normal);
 				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
-				if(!edge.isBoundary)
+				if(edge.cellIdx[0] == i)
 				{
-					if(edge.cellIdx[0] == i)
-					{
-						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[1];
-					}
-					else
-					{
-						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
-					}
-					uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
-					tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
-					tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
-
-					cells[i].nNeighborCells++;
+					cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[1];
 				}
+				else
+				{
+					cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
+				}
+				uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
+				tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
+				tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
+
+				cells[i].nNeighborCells++;
 			}
 
 			// This cell has a boundary edge and we need to find another
@@ -346,6 +459,7 @@ struct UMesh2
 			{
 				if(cells[i].nNeighborCells != cells[i].nEdges)
 				{
+					logln("Not equal");
 					Edge edge;
 					// find non-boundary edge
 					for(uint j = 0; j < cells[i].nEdges; j++)
@@ -531,7 +645,7 @@ uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNo
 UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
 	int partTag = 2001;
-	UMesh2 smallMesh;
+	auto smallMesh = UMesh2(comm, id);
 
 	if(id == 0)
 	{
@@ -612,7 +726,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			}
 
 			// compute communication edges
-			foreach(uint j, ref edge; bigMesh.edges)
+			foreach(uint j, edge; bigMesh.interiorEdges.map!(a => bigMesh.edges[a]).array)
 			{
 				// Is edge comm boundary
 				if(((part[edge.cellIdx[0]] == i) && (part[edge.cellIdx[1]] != i)) ||
