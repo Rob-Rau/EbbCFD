@@ -577,7 +577,8 @@ static this()
 				mesh.q[edge.cellIdx[1]] = mesh.q[edge.cellIdx[0]];
 				break;
 			case InviscidWall:
-			 break;
+				// reflect
+			 	break;
 
 			default:
 				break;
