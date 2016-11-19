@@ -6,6 +6,58 @@ import sys
 import EbbUtils as eu
 import PlotUtils as pu
 
+def tryint(s):
+    try:
+        return int(s)
+    except:
+        return s
+
+def alphanum_key(s):
+    """ Turn a string into a list of string and number chunks.
+        "z23a" -> ["z", 23, "a"]
+    """
+    return [ tryint(c) for c in re.split('([0-9]+)', s) ]
+
+def sort_nicely(l):
+    """ Sort the given list in the way that humans expect.
+    """
+    l.sort(key=alphanum_key)
+
+#-----------------------------------------------------------
+def plotstate(Mesh, U, field, fname):
+	V = Mesh['V']
+	E = Mesh['E']
+	BE = Mesh['BE']
+
+	#f = plt.figure(figsize=(12,6))
+
+	F = getField(U, field)
+	
+	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat')
+
+	for i in range(len(BE)):
+		x = [V[BE[i,0],0], V[BE[i,1],0]]
+		y = [V[BE[i,0],1], V[BE[i,1],1]]
+		plt.plot(x, y, '-', linewidth=2, color='black')
+	
+	dosave = (len(fname) != 0)
+
+	plt.axis('equal')
+
+	plt.axis([-100, 100,-100, 100])
+	#plt.axis([-2, 10,-4, 4])
+	plt.colorbar()
+	#plt.clim(0, 0.7)
+	#plt.clim(9, 12)
+	plt.title(field, fontsize=16)
+
+	#f.tight_layout()
+	plt.show(block=(not dosave))
+	#if (dosave):
+	#	plt.savefig(fname)
+	
+	#plt.close(f)
+
 #-----------------------------------------------------------
 if __name__ == "__main__":
 	if len(sys.argv) < 4:
