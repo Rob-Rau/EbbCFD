@@ -394,10 +394,10 @@ static shared bool interrupted = false;
 			{
 				char[512] filename;
 				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d_%d.esln", mesh.mpiRank, saveItr);
+				snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
 				saveSolution(mesh, filename.ptr, t, dt);
 				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d_%d.lsln", mesh.mpiRank, saveItr);
+				snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
 				saveLimits(mesh, filename.ptr, t, dt);
 				saveItr++;
 			}
