@@ -83,11 +83,30 @@ void main(string[] args)
 
 		auto dAve = mesh.cells.sum!".d"/mesh.cells.length;
 
+		double x1 = -1.5;
+		double y1 = 1.5;
+		double x2 = 10;
+		double y2 = -1.5;
+
+		double dxSum = 0;
+		uint dxCnt = 0;
+		foreach(cell; mesh.cells)
+		{
+			if((cell.centroid[0] >= x1) && (cell.centroid[1] <= y1) && (cell.centroid[0] <= x2) && (cell.centroid[1] >= y2))
+			{
+				dxSum += cell.d;
+				dxCnt++;
+			}
+		}
+
+		double dxAve = dxSum/cast(double)dxCnt;
+
 		writeln("----------------------------Mesh Info----------------------------");
 		writeln("mesh: ", inFile);
 		writeln("Dimensions: ", 2);
 		writeln("cells: ", mesh.cells.length);
 		writeln("D_ave: ", dAve);
+		writeln("D_ave (bounded): ", dxAve);
 		writeln("nodes: ", mesh.nodes.length);
 		writeln("boundaries: ", mesh.bTags.length);
 		for(uint i = 0; i < mesh.bTags.length; i++)
