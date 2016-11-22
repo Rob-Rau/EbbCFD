@@ -28,7 +28,7 @@ def sort_nicely(l):
     l.sort(key=alphanum_key)
 
 #-----------------------------------------------------------
-def plotstate(Mesh, U, field, fname, clim1, clim2):
+def plotstate(Mesh, U, field, fname, clim1, clim2, color):
 	V = Mesh['V']
 	E = Mesh['E']
 	BE = Mesh['BE']
@@ -36,7 +36,8 @@ def plotstate(Mesh, U, field, fname, clim1, clim2):
 	#f = plt.figure(figsize=(12,6))
 	F = pu.getField(U, field)
 	
-	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat', vmin=clim1, vmax=clim2)
+	#plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, edgecolors=color, shading='flat', vmin=clim1, vmax=clim2, linewidth=1)
+	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat', vmin=clim1, vmax=clim2, linewidth=1)
 
 	for i in range(len(BE)):
 		x = [V[BE[i,0],0], V[BE[i,1],0]]
@@ -71,8 +72,6 @@ if __name__ == "__main__":
 
 	meshIndicies = [i for i, s in enumerate(sys.argv) if 'mmsh' in s]
 	slnIndicies = [i for i, s in enumerate(sys.argv) if 'sln' in s]
-	print(meshIndicies)
-	print(slnIndicies)
 
 	meshFiles = []
 	for idx in meshIndicies:
@@ -85,8 +84,6 @@ if __name__ == "__main__":
 	sort_nicely(meshFiles)
 	sort_nicely(slnFiles)
 
-	print(meshFiles)
-	print(slnFiles)
 #	meshFile = sys.argv[1]
 #	slnFile = sys.argv[2]
 #	state = sys.argv[3]
@@ -118,12 +115,14 @@ if __name__ == "__main__":
 	globalMin = globalMin - 0.001
 	globalMax = globalMax + 0.001
 
+	colors = ['k', 'b', 'g', 'c', 'y', 'm', 'r']
+
 	f = plt.figure(figsize=(12,6))
 	plt.axis([-100, 100,-100, 100])
 	for idx in range(len(meshFiles)):
 		mesh = eu.importEbbMatlabMesh(meshFiles[idx])
 		#sln = eu.importEbbSolution(slnFiles[idx])
-		plotstate(mesh, slns[idx], state, "", globalMin, globalMax)
+		plotstate(mesh, slns[idx], state, "", globalMin, globalMax, colors[idx%len(colors)])
 		plt.hold(True)
 
 	plt.colorbar()

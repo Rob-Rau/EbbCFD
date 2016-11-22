@@ -212,9 +212,6 @@ struct UMesh2
 	{
 		bGroups = new uint[][](bTags.length);
 
-		import std.range : iota;
-		//interiorCells = iota(0, cells.length).array.to!(uint[]);
-
 		for(uint i = 0; i < elements.length; i++)
 		{
 			q[i] = Vector!4(0);
@@ -279,7 +276,7 @@ struct UMesh2
 					edge.tangent = tangent;
 					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 					edge.boundaryTag = bTags[bGroup];
-					edge.bNormal = (1/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
+					edge.bNormal = (1.0/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
 					double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
 					double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
 					edge.mid = Vector!2(x, y);
@@ -379,7 +376,7 @@ struct UMesh2
 						cells ~= cell;
 
 						commCellIdx[$-1] ~= cast(uint)(cells.length - 1);
-						edge.cellIdx[1] = commCellIdx[$-1][$-1];
+						edges[edgeIdx].cellIdx[1] = commCellIdx[$-1][$-1];
 					}
 				}
 
@@ -427,7 +424,6 @@ struct UMesh2
 			}
 		}
 
-		//for(uint i = 0; i < cells.length; i++)
 		foreach(i; interiorCells)
 		{
 			cells[i].gradMat = Matrix!(2, 6)(0);
@@ -451,7 +447,7 @@ struct UMesh2
 				}
 				+/
 				auto eDot = v1.dot(edge.normal);
-				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
+				//cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
 				if(edge.cellIdx[0] == i)
 				{

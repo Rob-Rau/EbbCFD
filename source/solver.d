@@ -224,6 +224,16 @@ static shared bool interrupted = false;
 	ubyte[] forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
 	Vector!4[] R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
 
+	lastRho[] = 0.0;
+	thisRho[] = 0.0;
+	lastU[] = 0.0;
+	thisU[] = 0.0;
+	lastV[] = 0.0;
+	thisV[] = 0.0;
+	lastE[] = 0.0;
+	thisE[] = 0.0;
+	tmp[] = 0.0;
+
 	Vector!4[] q0;
 	Vector!4[] q1;
 	Vector!4[] q2;
@@ -302,7 +312,6 @@ static shared bool interrupted = false;
 			dt = newDt;
 		}
 
-		//for(uint i = 0; i < mesh.cells.length; i++)
 		foreach(i; mesh.interiorCells)
 		{
 			thisRho[i] = mesh.q[i][0];
@@ -327,6 +336,23 @@ static shared bool interrupted = false;
 
 		import std.algorithm : sum;
 
+		@nogc double computeResidual(double[] now, double[] last)
+		{
+			tmp[] = (now[] - last[])^^2;
+			double tmpSum = tmp.sum;
+			MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			uint totLen = cast(uint)mesh.interiorCells.length;
+			MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
+			double valSum = now.sum;
+			MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			return sqrt(cast(double)totLen*tmpSum)/valSum;
+		}
+
+		residRho = computeResidual(thisRho, lastRho);
+		residU = computeResidual(thisU, lastU);
+		residV = computeResidual(thisV, lastV);
+		residE = computeResidual(thisE, lastE);
+		/*
 		tmp[] = (thisRho[] - lastRho[])^^2;
 		residRho = sqrt(mesh.cells.length*tmp.sum)/thisRho.sum;
 		tmp[] = (thisU[] - lastU[])^^2;
@@ -335,7 +361,8 @@ static shared bool interrupted = false;
 		residV = sqrt(mesh.cells.length*tmp.sum)/thisV.sum;
 		tmp[] = (thisE[] - lastE[])^^2;
 		residE = sqrt(mesh.cells.length*tmp.sum)/thisE.sum;
-
+		*/
+		//MPI_Allreduce(&residRho, &residRho, 1, MPI_DOUBLE, MPI_)
 		lastRho[] = thisRho[];
 		lastU[] = thisU[];
 		lastV[] = thisV[];
@@ -552,7 +579,7 @@ MPI_Datatype vec4dataType;
 	{
 		foreach(i, edge; commEdges)
 		{
-			mesh.stateBuffers[commIdx][i] = mesh.q[mesh.edges[edge].cellIdx[0]]; 
+			mesh.stateBuffers[commIdx][i] = q[mesh.edges[edge].cellIdx[0]]; 
 		}
 		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
 	}
@@ -573,7 +600,7 @@ MPI_Datatype vec4dataType;
 
 			foreach(i, edge; commEdges)
 			{
-				mesh.q[mesh.edges[edge].cellIdx[1]] = mesh.stateBuffers[commIdx][i];
+				q[mesh.edges[edge].cellIdx[1]] = mesh.stateBuffers[commIdx][i];
 			}
 		}
 		else
@@ -593,11 +620,11 @@ MPI_Datatype vec4dataType;
 				//printf("Cell idx 0 = %d\n", edge.cellIdx[0]);
 				//printf("Cell idx 1 = %d\n", edge.cellIdx[1]);
 
-				mesh.q[edge.cellIdx[1]] = mesh.q[edge.cellIdx[0]];
+				q[edge.cellIdx[1]] = q[edge.cellIdx[0]];
 				break;
 			case InviscidWall:
 				auto cellIdx = edge.cellIdx[0];
-				auto v = Vector!2(mesh.q[cellIdx][1]/mesh.q[cellIdx][0], mesh.q[cellIdx][2]/mesh.q[cellIdx][0]);
+				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
 				// rotate velocity into edge frame.
 				auto localV = edge.rotMat*v;
 				// flip normal velocity component;
@@ -608,17 +635,19 @@ MPI_Datatype vec4dataType;
 				auto newV = inv*localV;
 				auto cellIdx2 = edge.cellIdx[1];
 				// update ghost cell
-				//mesh.q[cellIdx2] = mesh.q[cellIdx];
-				
-				mesh.q[cellIdx2][0] = mesh.q[cellIdx][0];
-				mesh.q[cellIdx2][1] = mesh.q[cellIdx][0]*newV[0];
-				mesh.q[cellIdx2][2] = mesh.q[cellIdx][0]*newV[1];
-				mesh.q[cellIdx2][3] = mesh.q[cellIdx][3];
-				
+				q[cellIdx2] = q[cellIdx];
+				// TODO: Fix this for wall boundaries
+				/*
+				q[cellIdx2][0] = q[cellIdx][0];
+				q[cellIdx2][1] = q[cellIdx][0]*newV[0];
+				q[cellIdx2][2] = q[cellIdx][0]*newV[1];
+				q[cellIdx2][3] = q[cellIdx][3];
+				*/
 				// reflect
 			 	break;
 
 			default:
+				printf("HIT DEFAULT!!\n");
 				break;
 		}
 	}
@@ -626,7 +655,6 @@ MPI_Datatype vec4dataType;
 	// Build gradients
 	if(config.order > 1)
 	{
-		//for(uint i = 0; i < mesh.cells.length; i++)
 		foreach(i; mesh.interiorCells)
 		{
 			Vector!6[4] du;
@@ -1009,7 +1037,7 @@ MPI_Datatype vec4dataType;
 	{
 		foreach(i, edge; commEdges)
 		{
-			mesh.stateBuffers[commIdx][i] = mesh.edges[edge].q[0]; 
+			mesh.stateBuffers[commIdx][i] = mesh.edges[edge].q[0];
 		}
 		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
 	}
@@ -1067,7 +1095,7 @@ MPI_Datatype vec4dataType;
 
 	newDt = double.infinity;
 
-	for(uint i = 0; i < mesh.cells.length; i++)
+	foreach(i; mesh.interiorCells)
 	{
 		R[i] = Vector!4(0);
 		double sAve = 0;
@@ -1113,6 +1141,9 @@ MPI_Datatype vec4dataType;
 		
 		R[i] *= -(1.0/mesh.cells[i].area);
 	}
+
+	MPI_Allreduce(&newDt, &newDt, 1, MPI_DOUBLE, MPI_MIN, mesh.comm);
+	MPI_Allreduce(&Rmax, &Rmax, 1, MPI_DOUBLE, MPI_MAX, mesh.comm);
 }
 
 void startComputation(Config config, string saveFile, uint p, uint id)
