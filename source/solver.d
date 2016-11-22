@@ -1032,7 +1032,7 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	MPI_Barrier(mesh.comm);
+	//MPI_Barrier(mesh.comm);
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
 		foreach(i, edge; commEdges)
