@@ -49,7 +49,7 @@
 			"targetType": "executable"
 		}
 	],
-	"lflags": ["-lparmetis"],
+	"lflags": ["-lparmetis", "-lmetis"],
 	"buildTypes": {
 		"debug": {
 			"buildOptions": ["debugMode", "debugInfo"]
