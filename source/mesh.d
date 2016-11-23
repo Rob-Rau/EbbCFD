@@ -436,7 +436,7 @@ struct UMesh2
 				auto edge = edges[cells[i].edges[j]];
 
 				auto v1 = edge.mid - cells[i].centroid;
-				/+
+				
 				if(edge.isBoundary)
 				{
 					auto bDot = v1.dot(edge.bNormal);
@@ -445,7 +445,7 @@ struct UMesh2
 						edges[cells[i].edges[j]].bNormal *= -1.0;
 					}
 				}
-				+/
+				
 				auto eDot = v1.dot(edge.normal);
 				//cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
@@ -660,6 +660,18 @@ uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNo
 	return cast(uint)(idx + 1);
 }
 
+import std.typecons : Tuple, tuple;
+Tuple!(K, V)[] aa_sort(K, V)(V[K] aa)
+{
+	typeof(return) r=[];
+	foreach(k,v;aa)
+	{
+		r~=tuple(k,v);
+	}
+	sort!q{a[0]<b[0]}(r);
+	return r;
+}
+
 UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
 	int partTag = 2001;
@@ -678,6 +690,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			uint[] nodesPerElement;
 			double[][] localNodes;
 			uint[][] localbNodes;
+			uint[][] localbNodesUnsorted;
 			uint[] localbGroupStart;
 			string[] localbTag;
 
@@ -688,6 +701,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			// holds the localy mapped edge nodes for comm boundaries.
 			// first dim matches up with commP, aka the proc to send edge data to
 			CommEdgeNodes[][] commEdgeList;
+			uint[size_t] bNodeMap;
 			foreach(uint j, pa; part)
 			{
 				if(pa == i)
@@ -723,23 +737,50 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 						if((bIdx1 >= 0) || (bIdx2 >= 0))
 						{
 							// If boundary edge compute local boundary group
-							localbNodes ~= [b1, b2];
-
-							auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx) - 1;
+							localbNodesUnsorted ~= [b1, b2];
+/+
+							long bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx) - 1;
 
 							if(bGroup < 0)
 							{
 								bGroup = bigMesh.bGroups.length - 1;
 							}
++/
+							bNodeMap[bIdx] = cast(uint)localbNodesUnsorted.length - 1;
+
+							//logln("bIdx = ", bIdx, ", group = ", bigMesh.bTags[bGroup]);
+							/*
 							if(!localbTag.canFind(bigMesh.bTags[bGroup]))
 							{
 								localbTag ~= bigMesh.bTags[bGroup];
-								localbGroupStart ~= cast(uint)localbNodes.length - 1;
+								//localbGroupStart ~= cast(uint)localbNodes.length - 1;
 							}
+							*/
 						}
 						nElems++;
 					}
 					localElements ~= localEl;
+				}
+			}
+
+			auto sortedMap = bNodeMap.aa_sort;
+
+			foreach(kvPair; sortedMap)
+			{
+				long bGroup = bigMesh.bGroupStart.countUntil!"b < a"(kvPair[0]) - 1;
+
+				localbNodes ~= localbNodesUnsorted[kvPair[1]];
+				if(bGroup < 0)
+				{
+					bGroup = bigMesh.bGroups.length - 1;
+				}
+
+				logln("bIdx = ", kvPair[0], ", group = ", bigMesh.bTags[bGroup]);
+
+				if(!localbTag.canFind(bigMesh.bTags[bGroup]))
+				{
+					localbTag ~= bigMesh.bTags[bGroup];
+					localbGroupStart ~= cast(uint)localbNodes.length - 1;
 				}
 			}
 
