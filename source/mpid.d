@@ -5,6 +5,7 @@ import std.exception;
 import std.meta;
 import std.stdio;
 import std.traits;
+import std.typecons;
 
 import numd.linearalgebra.matrix;
 import numd.utility;

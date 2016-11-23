@@ -8,6 +8,7 @@ import std.exception;
 import std.math;
 import std.stdio;
 import std.string;
+import std.typecons : Tuple, tuple;
 
 import numd.linearalgebra.matrix;
 import numd.utility;
@@ -660,18 +661,6 @@ uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNo
 	return cast(uint)(idx + 1);
 }
 
-import std.typecons : Tuple, tuple;
-Tuple!(K, V)[] aa_sort(K, V)(V[K] aa)
-{
-	typeof(return) r=[];
-	foreach(k,v;aa)
-	{
-		r~=tuple(k,v);
-	}
-	sort!q{a[0]<b[0]}(r);
-	return r;
-}
-
 UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
 	int partTag = 2001;
@@ -701,7 +690,8 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 			// holds the localy mapped edge nodes for comm boundaries.
 			// first dim matches up with commP, aka the proc to send edge data to
 			CommEdgeNodes[][] commEdgeList;
-			uint[size_t] bNodeMap;
+			Tuple!(size_t, uint)[] bNodeMap;
+
 			foreach(uint j, pa; part)
 			{
 				if(pa == i)
@@ -738,24 +728,8 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 						{
 							// If boundary edge compute local boundary group
 							localbNodesUnsorted ~= [b1, b2];
-/+
-							long bGroup = bigMesh.bGroupStart.countUntil!"b < a"(bIdx) - 1;
 
-							if(bGroup < 0)
-							{
-								bGroup = bigMesh.bGroups.length - 1;
-							}
-+/
-							bNodeMap[bIdx] = cast(uint)localbNodesUnsorted.length - 1;
-
-							//logln("bIdx = ", bIdx, ", group = ", bigMesh.bTags[bGroup]);
-							/*
-							if(!localbTag.canFind(bigMesh.bTags[bGroup]))
-							{
-								localbTag ~= bigMesh.bTags[bGroup];
-								//localbGroupStart ~= cast(uint)localbNodes.length - 1;
-							}
-							*/
+							bNodeMap ~= tuple(bIdx, cast(uint)localbNodesUnsorted.length - 1);
 						}
 						nElems++;
 					}
@@ -763,7 +737,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 				}
 			}
 
-			auto sortedMap = bNodeMap.aa_sort;
+			auto sortedMap = bNodeMap.sort!"a[0] < b[0]";
 
 			foreach(kvPair; sortedMap)
 			{
@@ -775,7 +749,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 					bGroup = bigMesh.bGroups.length - 1;
 				}
 
-				logln("bIdx = ", kvPair[0], ", group = ", bigMesh.bTags[bGroup]);
+				logln("bIdx = ", kvPair[0], ", unsortedIdx = ", kvPair[1], ", group = ", bigMesh.bTags[bGroup]);
 
 				if(!localbTag.canFind(bigMesh.bTags[bGroup]))
 				{
