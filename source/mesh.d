@@ -438,6 +438,7 @@ struct UMesh2
 
 				auto v1 = edge.mid - cells[i].centroid;
 				
+				/+
 				if(edge.isBoundary)
 				{
 					auto bDot = v1.dot(edge.bNormal);
@@ -446,7 +447,7 @@ struct UMesh2
 						edges[cells[i].edges[j]].bNormal *= -1.0;
 					}
 				}
-				
+				+/
 				auto eDot = v1.dot(edge.normal);
 				//cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
