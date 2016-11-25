@@ -318,15 +318,31 @@ struct UMesh2
 			// reflect centroid across edge
 			auto edge = edges[bEdge];
 			auto otherCell = cells[edge.cellIdx[0]];
-			double x1 = otherCell.centroid[0];
-			double y1 = otherCell.centroid[1];
-			double m = (nodes[edge.nodeIdx[0]][1] - nodes[edge.nodeIdx[1]][1])/(nodes[edge.nodeIdx[0]][0] - nodes[edge.nodeIdx[1]][0]);
-			double x = nodes[edge.nodeIdx[0]][0];
-			double y = nodes[edge.nodeIdx[0]][1];
-			double c = y - m*x;
-			double d = (x1 + (y1 - c)*m)/(1.0 + m^^2.0);
-			double xr = 2.0*d - x1;
-			double yr = 2.0*d*m - y1 + 2.0*c;
+			double xr = 0;
+			double yr = 0;
+			if(nodes[edge.nodeIdx[0]][0] != nodes[edge.nodeIdx[1]][0])
+			{
+				double x1 = otherCell.centroid[0];
+				double y1 = otherCell.centroid[1];
+				double m = (nodes[edge.nodeIdx[0]][1] - nodes[edge.nodeIdx[1]][1])/(nodes[edge.nodeIdx[0]][0] - nodes[edge.nodeIdx[1]][0]);
+				
+				double x = nodes[edge.nodeIdx[0]][0];
+				double y = nodes[edge.nodeIdx[0]][1];
+				double c = y - m*x;
+				double d = (x1 + (y1 - c)*m)/(1.0 + m^^2.0);
+				xr = 2.0*d - x1;
+				yr = 2.0*d*m - y1 + 2.0*c;
+			}
+			else
+			{
+				// edge is vertical
+				double x = nodes[edge.nodeIdx[0]][0];
+				double y = nodes[edge.nodeIdx[0]][1];
+				double d = otherCell.centroid[0] - x;
+				double x1 = otherCell.centroid[0];
+				xr = 2.0*d - x1;
+				yr = otherCell.centroid[1];
+			}
 			cell.centroid = Vector!2(xr, yr);
 
 			//logln("new cell centroid = ", cell.centroid);
@@ -750,7 +766,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 					bGroup = bigMesh.bGroups.length - 1;
 				}
 
-				logln("bIdx = ", kvPair[0], ", unsortedIdx = ", kvPair[1], ", group = ", bigMesh.bTags[bGroup]);
+				//logln("bIdx = ", kvPair[0], ", unsortedIdx = ", kvPair[1], ", group = ", bigMesh.bTags[bGroup]);
 
 				if(!localbTag.canFind(bigMesh.bTags[bGroup]))
 				{

@@ -559,10 +559,12 @@ static shared bool interrupted = false;
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
 				//mesh.edges[mesh.bGroups[i][j]].q[1] = buildQ(rho, u, v, p);
+				//printf("bGroup = %d\n", mesh.bGroups[i][j]);
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+				//printf("i = %d; q0 = %f, %f, %f, %f\n", mesh.bGroups[i][j], mesh.edges[mesh.bGroups[i][j]].q[1][0], mesh.edges[mesh.bGroups[i][j]].q[1][1], mesh.edges[mesh.bGroups[i][j]].q[1][2], mesh.edges[mesh.bGroups[i][j]].q[1][3]);
 			}
 		}
 	}
@@ -619,7 +621,7 @@ MPI_Datatype vec4dataType;
 			case FullState:
 				//printf("Cell idx 0 = %d\n", edge.cellIdx[0]);
 				//printf("Cell idx 1 = %d\n", edge.cellIdx[1]);
-
+				//printf("i = %d; q0 = %f, %f, %f, %f\n", i, q[edge.cellIdx[0]][0], q[edge.cellIdx[0]][1], q[edge.cellIdx[0]][2], q[edge.cellIdx[0]][3]);
 				q[edge.cellIdx[1]] = q[edge.cellIdx[0]];
 				break;
 			case InviscidWall:
@@ -641,11 +643,11 @@ MPI_Datatype vec4dataType;
 				+/
 				auto cellIdx = edge.cellIdx[0];
 				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
-				double x1 = mesh.nodes[edge.nodeIdx[0]][0];
-				double y1 = mesh.nodes[edge.nodeIdx[0]][1];
-				double x2 = mesh.nodes[edge.nodeIdx[1]][0];
-				double y2 = mesh.nodes[edge.nodeIdx[1]][1];
-				double m = (y2 - y1)/(x2 - x1);
+				immutable double x1 = mesh.nodes[edge.nodeIdx[0]][0];
+				immutable double y1 = mesh.nodes[edge.nodeIdx[0]][1];
+				immutable double x2 = mesh.nodes[edge.nodeIdx[1]][0];
+				immutable double y2 = mesh.nodes[edge.nodeIdx[1]][1];
+				immutable double m = (y2 - y1)/(x2 - x1);
 				auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
 				auto newV = reflection*v;
 				
@@ -695,6 +697,9 @@ MPI_Datatype vec4dataType;
 			{
 				mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
 			}
+			//printf("du = [%f, %f, %f, %f]\n", du[0][0], du[1][0], du[2][0], du[3][0]);
+			//printf("du = [%f, %f, %f, %f]\n", du[0][1], du[1][1], du[2][1], du[3][1]);
+			//printf("du = [%f, %f, %f, %f]\n", du[0][2], du[1][2], du[2][2], du[3][2]);
 /+
 			printf("grad[0] = %f, %f\n", mesh.cells[i].gradient[0][0], mesh.cells[i].gradient[0][1]);
 			printf("grad[1] = %f, %f\n", mesh.cells[i].gradient[1][0], mesh.cells[i].gradient[1][1]);
@@ -865,19 +870,20 @@ MPI_Datatype vec4dataType;
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];
 
+				//printf("edge = %d\n", i);
 				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
 				{
 					ex.SetException(SolverException.SExceptionType.EdgeException,
-					"Got NaN on interior edge",
-					SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-													getPressure(mesh.edges[i].q[1]),
-													mesh.edges[i].flux,
-													mesh.edges[i].q[0],
-													mesh.edges[i].q[1],
-													mesh.edges[i].normal,
-													mesh.edges[i].cellIdx[0],
-													mesh.edges[i].cellIdx[1]));
+									"Got NaN on fullstate edge",
+									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
+																	getPressure(mesh.edges[i].q[1]),
+																	mesh.edges[i].flux,
+																	mesh.edges[i].q[0],
+																	mesh.edges[i].q[1],
+																	mesh.edges[i].normal,
+																	mesh.edges[i].cellIdx[0],
+																	mesh.edges[i].cellIdx[1]));
 
 					//ex.msg = "Got nan on FullState boundary";
 					//ex.file = __FILE__;
@@ -935,12 +941,23 @@ MPI_Datatype vec4dataType;
 				}
 				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
 				mesh.edges[i].sMax = std.math.abs(a);
-
+				
+				auto qL = mesh.edges[i].q[0];
+				auto qR = q[mesh.edges[i].cellIdx[1]];
+				//mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				
 				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
 				{
-					ex.msg = "Got nan on wall boundary";
-					ex.file = __FILE__;
-					ex.line = __LINE__;
+					ex.SetException(SolverException.SExceptionType.EdgeException,
+									"Got NaN on wall edge",
+									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
+																	getPressure(mesh.edges[i].q[1]),
+																	mesh.edges[i].flux,
+																	qL,
+																	qR,
+																	mesh.edges[i].normal,
+																	mesh.edges[i].cellIdx[0],
+																	mesh.edges[i].cellIdx[1]));
 					throw ex;
 				}
 				break;
