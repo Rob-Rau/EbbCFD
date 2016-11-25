@@ -489,6 +489,7 @@ static shared bool interrupted = false;
 	}
 	else
 	{
+		saveFile ~= mesh.mpiRank.to!string ~ ".esln";
 		if(loadSolution(mesh, t, dt, saveFile))
 		{
 			foreach(i; mesh.interiorCells)
