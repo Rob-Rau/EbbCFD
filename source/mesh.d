@@ -340,8 +340,9 @@ struct UMesh2
 				double y = nodes[edge.nodeIdx[0]][1];
 				double d = otherCell.centroid[0] - x;
 				double x1 = otherCell.centroid[0];
-				xr = 2.0*d - x1;
+				xr = -(2.0*d - x1);
 				yr = otherCell.centroid[1];
+				//logln("xc = ", otherCell.centroid[0], ", x = ", nodes[edge.nodeIdx[0]][0], ", xr = ", xr);
 			}
 			cell.centroid = Vector!2(xr, yr);
 
