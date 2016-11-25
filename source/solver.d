@@ -623,6 +623,7 @@ MPI_Datatype vec4dataType;
 				q[edge.cellIdx[1]] = q[edge.cellIdx[0]];
 				break;
 			case InviscidWall:
+				/+
 				auto cellIdx = edge.cellIdx[0];
 				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
 				// rotate velocity into edge frame.
@@ -637,12 +638,23 @@ MPI_Datatype vec4dataType;
 				// update ghost cell
 				q[cellIdx2] = q[cellIdx];
 				// TODO: Fix this for wall boundaries
-				/*
+				+/
+				auto cellIdx = edge.cellIdx[0];
+				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
+				double x1 = mesh.nodes[edge.nodeIdx[0]][0];
+				double y1 = mesh.nodes[edge.nodeIdx[0]][1];
+				double x2 = mesh.nodes[edge.nodeIdx[1]][0];
+				double y2 = mesh.nodes[edge.nodeIdx[1]][1];
+				double m = (y2 - y1)/(x2 - x1);
+				auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
+				auto newV = reflection*v;
+				
+				auto cellIdx2 = edge.cellIdx[1];
 				q[cellIdx2][0] = q[cellIdx][0];
 				q[cellIdx2][1] = q[cellIdx][0]*newV[0];
 				q[cellIdx2][2] = q[cellIdx][0]*newV[1];
 				q[cellIdx2][3] = q[cellIdx][3];
-				*/
+				
 				// reflect
 			 	break;
 
