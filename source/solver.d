@@ -1312,6 +1312,7 @@ int main(string[] args)
 	double startTime = MPI_Wtime();
 
 	signal(SIGINT, &handle);
+	signal(SIGUSR1, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);
 
