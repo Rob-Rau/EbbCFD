@@ -647,10 +647,19 @@ MPI_Datatype vec4dataType;
 				immutable double y1 = mesh.nodes[edge.nodeIdx[0]][1];
 				immutable double x2 = mesh.nodes[edge.nodeIdx[1]][0];
 				immutable double y2 = mesh.nodes[edge.nodeIdx[1]][1];
-				immutable double m = (y2 - y1)/(x2 - x1);
-				auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
-				auto newV = reflection*v;
-				
+				auto newV = Vector!2(0.0);
+				if(x1 != x2)
+				{
+					immutable double m = (y2 - y1)/(x2 - x1);
+					auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
+					newV = reflection*v;
+				}
+				else
+				{
+					newV[0] = -v[0];
+					newV[1] = v[1];
+				}
+
 				auto cellIdx2 = edge.cellIdx[1];
 				q[cellIdx2][0] = q[cellIdx][0];
 				q[cellIdx2][1] = q[cellIdx][0]*newV[0];
@@ -697,15 +706,7 @@ MPI_Datatype vec4dataType;
 			{
 				mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
 			}
-			//printf("du = [%f, %f, %f, %f]\n", du[0][0], du[1][0], du[2][0], du[3][0]);
-			//printf("du = [%f, %f, %f, %f]\n", du[0][1], du[1][1], du[2][1], du[3][1]);
-			//printf("du = [%f, %f, %f, %f]\n", du[0][2], du[1][2], du[2][2], du[3][2]);
-/+
-			printf("grad[0] = %f, %f\n", mesh.cells[i].gradient[0][0], mesh.cells[i].gradient[0][1]);
-			printf("grad[1] = %f, %f\n", mesh.cells[i].gradient[1][0], mesh.cells[i].gradient[1][1]);
-			printf("grad[2] = %f, %f\n", mesh.cells[i].gradient[2][0], mesh.cells[i].gradient[2][1]);
-			printf("grad[3] = %f, %f\n", mesh.cells[i].gradient[3][0], mesh.cells[i].gradient[3][1]);
-+/
+
 			if(config.limited && limit)
 			{
 				//for(uint j = 0; j < mesh.cells[i].nEdges; j++)
@@ -835,22 +836,13 @@ MPI_Datatype vec4dataType;
 					auto dy = mid[1] - centroid[1];
 					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
 					
-					//printf("%f, %f, %f, %f\n", mesh.edges[i].q[0][0], mesh.edges[i].q[0][1], mesh.edges[i].q[0][2], mesh.edges[i].q[0][3]);
-					//printf("qM = %f, %f, %f, %f\n", qM[0], qM[1], qM[2], qM[3]);
 					for(uint j = 0; j < dims; j++)
 					{
 						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
 														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
 						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
-/+
-					printf("q[0] = %f, %f, %f, %f\n", mesh.edges[i].q[0][0], mesh.edges[i].q[0][1], mesh.edges[i].q[0][2], mesh.edges[i].q[0][3]);
-					printf("dx = %f, dy = %f\n", dx, dy);
-					printf("grad[0] = %f, %f\n", grad[0][0], grad[0][1]);
-					printf("grad[1] = %f, %f\n", grad[1][0], grad[1][1]);
-					printf("grad[2] = %f, %f\n", grad[2][0], grad[2][1]);
-					printf("grad[3] = %f, %f\n", grad[3][0], grad[3][1]);
-+/
+
 					if(getPressure(mesh.edges[i].q[0]) < 0)
 					{
 						double[2] lim = [1.0, 1.0];
@@ -884,10 +876,6 @@ MPI_Datatype vec4dataType;
 																	mesh.edges[i].normal,
 																	mesh.edges[i].cellIdx[0],
 																	mesh.edges[i].cellIdx[1]));
-
-					//ex.msg = "Got nan on FullState boundary";
-					//ex.file = __FILE__;
-					//ex.line = __LINE__;
 					throw ex;
 				}
 				break;
