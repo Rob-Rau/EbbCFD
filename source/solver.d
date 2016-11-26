@@ -489,7 +489,6 @@ static shared bool interrupted = false;
 	}
 	else
 	{
-		saveFile ~= mesh.mpiRank.to!string ~ ".esln";
 		if(loadSolution(mesh, t, dt, saveFile))
 		{
 			foreach(i; mesh.interiorCells)
@@ -1319,6 +1318,11 @@ int main(string[] args)
 
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
+
+	if(saveFile != "")
+	{
+		saveFile ~= id.to!string ~ ".esln";
+	}
 
 	startComputation(config, saveFile, p, id);
 

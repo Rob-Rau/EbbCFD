@@ -105,9 +105,11 @@ if __name__ == "__main__":
 		sln = eu.importEbbSolution(slnFile)
 		F = pu.getField(sln, state)
 		minVal = np.min(F)
+		print("minVal = "+str(minVal))
 		globalMin = min(globalMin, minVal)
 
 		maxVal = np.max(F)
+		print("maxVal = "+str(maxVal))
 		globalMax = max(globalMax, maxVal)
 
 		slns.append(sln)
@@ -115,6 +117,8 @@ if __name__ == "__main__":
 	globalMin = globalMin - 0.001
 	globalMax = globalMax + 0.001
 
+	print("globalMin = "+str(globalMin))
+	print("globalMax = "+str(globalMax))
 	colors = ['k', 'b', 'g', 'c', 'y', 'm', 'r']
 
 	f = plt.figure(figsize=(12,6))

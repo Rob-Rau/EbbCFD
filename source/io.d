@@ -192,7 +192,7 @@ struct SlnHeader
 	crc.put(buffer[0..4]);
 	uint dataPoints = buffer.peek!uint;
 
-	if(dataPoints != mesh.q.length)
+	if(dataPoints != mesh.interiorCells.length)
 	{
 		return false;
 	}
@@ -204,7 +204,8 @@ struct SlnHeader
 	crc.put(buffer[]);
 	dt = buffer.peek!double;
 
-	for(uint i = 0; i < mesh.q.length; i++)
+	//for(uint i = 0; i < mesh.q.length; i++)
+	foreach(i; mesh.interiorCells)
 	{
 		fread(buffer.ptr, 1, 8, file);
 		crc.put(buffer[]);

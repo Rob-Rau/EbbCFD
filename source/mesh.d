@@ -466,7 +466,7 @@ struct UMesh2
 				}
 				+/
 				auto eDot = v1.dot(edge.normal);
-				//cells[i].fluxMultiplier[j] = eDot/abs(eDot);
+				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
 				if(edge.cellIdx[0] == i)
 				{
