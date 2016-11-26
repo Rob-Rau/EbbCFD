@@ -1043,12 +1043,17 @@ void startComputation(Config config, string saveFile)
 	}
 }
 
+import std.datetime;
+
 void main(string[] args)
 {
 	import std.getopt;
 	string configFile;
 	string saveFile = "";
 
+	StopWatch sw;
+	sw.reset;
+	sw.start;
 	signal(SIGINT, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);
@@ -1057,4 +1062,7 @@ void main(string[] args)
 	auto config = loadConfig(configStr);
 
 	startComputation(config, saveFile);
+
+	sw.stop;
+	writeln("total time: ", sw.peek.msecs/1000.0);
 }
