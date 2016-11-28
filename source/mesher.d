@@ -14,6 +14,7 @@ import numd.linearalgebra.matrix;
 
 import ebb.mesh;
 import ebb.integrators;
+import ebb.io;
 
 void main(string[] args)
 {
@@ -66,11 +67,19 @@ void main(string[] args)
 			writeln("EbbCFD mesh not yet supported lol, exiting");
 			return;
 		}
+		else if(inFile.canFind("mmsh"))
+		{
+			writeln("Loading matlab mesh");
+			mesh = loadMatlabMesh(inFile);
+			return;
+		}
 		else
 		{
 			writeln("Unsupported mesh type, exiting");
 			return;
 		}
+
+		mesh.buildMesh;
 
 		auto dAve = mesh.cells.sum!".d"/mesh.cells.length;
 

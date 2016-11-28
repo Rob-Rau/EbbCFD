@@ -1,9 +1,0 @@
-{
-	"mesh": "../meshes/box.mesh",
-	"dt": 0.01,
-	"tEnd": 10.0,
-	"limiter": "minmodS",
-	"flux": "rusanovFlux",
-	"plotIter": 150,
-	"saveIter": 150
-}

@@ -5,7 +5,7 @@ import core.atomic;
 import core.stdc.stdio : fopen, fwrite, fopen, printf, snprintf;
 import core.sys.posix.signal;
 
-import std.algorithm : canFind, min, max, reduce, sum;
+import std.algorithm : canFind, countUntil, min, max, reduce, sum;
 import std.conv;
 import std.file;
 import std.math;
@@ -21,6 +21,8 @@ import ebb.flux;
 import ebb.integrators;
 import ebb.limiters;
 import ebb.mesh;
+import ebb.io;
+import ebb.mpid;
 
 static shared bool interrupted = false;
 
@@ -30,12 +32,21 @@ static shared bool interrupted = false;
 	atomicStore(interrupted, true);
 }
 
+@nogc void invert(ref Matrix!(2, 2) inv, ref Matrix!(2, 2) mat)
+{
+	inv[0] = mat[3];
+	inv[1] = -mat[1];
+	inv[2] = -mat[2];
+	inv[3] = mat[0];
+	assert(mat.determinant != 0.0);
+	inv *= (1.0/mat.determinant);
+}
+
 @nogc void LP(uint m)(ref Matrix!(m, 2) A, ref Vector!m b, ref Vector!2 c, ref Vector!2 xk)
 {
 	uint[2] Wk = [0, 1];
 	auto AkInv = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
 	auto Ak = Matrix!(2, 2)(A[Wk[0],0], A[Wk[0],1], A[Wk[1],0], A[Wk[1],1]);
-	//auto xk = Vector!2(0);
 	auto pk = Vector!2(0);
 	auto lam = Vector!2(0);
 	auto e = Vector!2(0);
@@ -55,52 +66,31 @@ static shared bool interrupted = false;
 		inv *= (1.0/mat.determinant);
 	}
 
-	@nogc void invert(ref Matrix!(2, 2) inv, ref Matrix!(2, 2) mat)
-	{
-		inv[0] = mat[3];
-		inv[1] = -mat[1];
-		inv[2] = -mat[2];
-		inv[3] = mat[0];
-		assert(mat.determinant != 0.0);
-		inv *= (1.0/mat.determinant);
-	}
-
-	//printf("c = [%.10e, %.10e]\n", c[0], c[1]);
 	while(!done)
 	{
 		// compute lagrange multipliers
 		// lam = (Ak')^-1*c
 		invertTrans(AkInv, Ak);
-		//printf("%.10e, %.10e\n", AkInv[0,0], AkInv[0,1]);
-		//printf("%.10e, %.10e\n", AkInv[1,0], AkInv[1,1]);
 		lam = AkInv*c;
 
-		//printf("lam = [%.10e, %.10e]\n", lam[0], lam[1]);
 		// If all lam >= 0, done = true
 		if((lam[0] >= -10e-9) && (lam[1] >= -10e-9))
-		//if((abs(lam[0]) >= 1e-12) && (abs(lam[1]) >= 1e-12))
 		{
 			done = true;
-			//printf("xk optimal. k = %d\n", k);
 			break;
 		}
 
-		// q = index(min(lam))
 		uint q;
-		//lam[0] < lam[1] ? q = Wk[0] : q = Wk[1];
 		if(lam[0] < lam[1])
 		{
-			//q = 0;
 			q = Wk[0];
 		}
 		else
 		{
-			//q = 1;
 			q = Wk[1];
 		}
 
 		// compute step direction
-		//if(q == 0)
 		if(lam[0] < lam[1])
 		{
 			e[0] = 1;
@@ -121,18 +111,16 @@ static shared bool interrupted = false;
 		Dlen = 0;
 		for(uint i = 0; i < m; i++)
 		{
-			//if(i != q)
-			//{
-				if((i != Wk[0]) && (i != Wk[1]))
+			if((i != Wk[0]) && (i != Wk[1]))
+			{
+				if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -1e-11)
 				{
-					if(A[i, 0]*pk[0] + A[i,1]*pk[1] < -1e-11)
-					{
-						D[Dlen] = i;
-						Dlen++;
-					}
+					D[Dlen] = i;
+					Dlen++;
 				}
-			//}
+			}
 		}
+
 		// ensure D is not the null set. (shouldn't ever happen here)
 		assert(abs(D[].sum) > 1.0e-11);
 
@@ -145,14 +133,10 @@ static shared bool interrupted = false;
 			immutable double aixk = A[D[i],0]*xk[0] + A[D[i],1]*xk[1];
 			immutable double aipk = A[D[i],0]*pk[0] + A[D[i],1]*pk[1];
 			gamma[i] = (aixk - b[D[i]])/(-aipk);
-			//printf("gamma = %.10e\n", gamma[i]);
 			assert(!gamma[i].isNaN);
 			alpha = fmin(alpha, gamma[i]);
 			assert(!alpha.isNaN);
 		}
-
-		//printf("alpha = %.10e\n", alpha);
-		//assert(q < 2);
 
 		uint t = 0;
 		for(uint i = 0; i < Dlen; i++)
@@ -160,13 +144,9 @@ static shared bool interrupted = false;
 			if(gamma[i] == alpha)
 			{
 				t = D[i];
-				//printf("t = %d q = %d, Wk[q] = %d\n", t, q, Wk[q]);
-				//printf("t = %d q = %d\n", t, q);
 				break;
 			}
 		}
-
-		//Wk[q] = t;
 
 		if(q == Wk[0])
 		{
@@ -187,11 +167,7 @@ static shared bool interrupted = false;
 		Ak[1,1] = A[Wk[1],1];
 
 		xk += alpha*pk;
-/+
-		printf("%.10e, %.10e\n", Ak[0,0], Ak[0,1]);
-		printf("%.10e, %.10e\n", Ak[1,0], Ak[1,1]);
-		printf("xk = [%.10e, %.10e]\n", xk[0], xk[1]);
-+/
+
 		assert(!pk[0].isNaN);
 
 		k++;
@@ -202,8 +178,6 @@ static shared bool interrupted = false;
 			break;
 		}
 	}
-
-	//for(uint i = 0; i < 100_000_000; i++){}
 }
 
 @nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, SolverException ex)
@@ -225,7 +199,12 @@ static shared bool interrupted = false;
 
 	immutable uint buffSize = 3*1024*1024*double.sizeof;
 	size_t buffPos = 0;
-	auto forceFile = fopen("boundaryForces.frc", "wb");
+
+	FILE* forceFile;
+	if(mesh.mpiRank == 0)
+	{
+		forceFile = fopen("boundaryForces.frc", "wb");
+	}
 
 	double residRho = 0.0;
 	double residU = 0.0;
@@ -244,6 +223,16 @@ static shared bool interrupted = false;
 	double[] tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 	ubyte[] forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
 	Vector!4[] R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+
+	lastRho[] = 0.0;
+	thisRho[] = 0.0;
+	lastU[] = 0.0;
+	thisU[] = 0.0;
+	lastV[] = 0.0;
+	thisV[] = 0.0;
+	lastE[] = 0.0;
+	thisE[] = 0.0;
+	tmp[] = 0.0;
 
 	Vector!4[] q0;
 	Vector!4[] q1;
@@ -288,7 +277,7 @@ static shared bool interrupted = false;
 
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
-
+	MPI_Barrier(mesh.comm);
 	while((t < config.tEnd) && !atomicLoad(interrupted))
 	{
 		double Rmax = 0;
@@ -301,28 +290,10 @@ static shared bool interrupted = false;
 		else
 		{
 			q0[] = mesh.q[];
-			/+
-			for(uint i = 0; i < mesh.cells.length; i++)
-			{
-				for(uint k = 0; k < 4; k++)
-				{
-					q0[i][k] = mesh.q[i][k];
-				}
-			}
-			+/
 
 			integrator.step!solver(R, q1, mesh, config, newDt, Rmax, ex);
 			newDt = dt;
 			mesh.q[] = q1[];
-			/+
-			for(uint i = 0; i < mesh.cells.length; i++)
-			{
-				for(uint k = 0; k < 4; k++)
-				{
-					mesh.q[i][k] = q1[i][k];
-				}
-			}
-			+/
 
 			integrator.step!solver(R, q2, mesh, config, newDt, Rmax, ex);
 
@@ -331,19 +302,6 @@ static shared bool interrupted = false;
 				for(uint k = 0; k < 4; k++)
 				{
 					printf("%f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k]);
-					/+
-					dem[i][k] = (q2[i][k] - q1[i][k]) - (q1[i][k] - q0[i][k]);
-					if(abs(dem[i][k]) > 10e-16)
-					{/+
-						ex.msg = "Aitken denominator too small";
-						ex.line = __LINE__;
-						ex.file = __FILE__;
-						throw ex;+/
-						mesh.q[i][k] = q2[i][k] - (((q2[i][k] - q1[i][k])^^2.0)/dem[i][k]);
-						printf("%f, %f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k], mesh.q[i][k]);
-					}+/
-					//mesh.q[i][k] = q2[i][k] - (((q2[i][k] - q1[i][k])^^2.0)/dem[i][k]);
-					//printf("%f, %f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k], mesh.q[i][k]);
 				}
 				printf("\n");
 			}
@@ -353,13 +311,8 @@ static shared bool interrupted = false;
 		{
 			dt = newDt;
 		}
-/+
-		if((config.aitkenTol > 0) && (iterations > 0))
-		{
 
-		}
-+/
-		for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			thisRho[i] = mesh.q[i][0];
 			thisU[i] = mesh.q[i][1];
@@ -383,6 +336,23 @@ static shared bool interrupted = false;
 
 		import std.algorithm : sum;
 
+		@nogc double computeResidual(double[] now, double[] last)
+		{
+			tmp[] = (now[] - last[])^^2;
+			double tmpSum = tmp.sum;
+			MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			uint totLen = cast(uint)mesh.interiorCells.length;
+			MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
+			double valSum = now.sum;
+			MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			return sqrt(cast(double)totLen*tmpSum)/valSum;
+		}
+
+		residRho = computeResidual(thisRho, lastRho);
+		residU = computeResidual(thisU, lastU);
+		residV = computeResidual(thisV, lastV);
+		residE = computeResidual(thisE, lastE);
+		/*
 		tmp[] = (thisRho[] - lastRho[])^^2;
 		residRho = sqrt(mesh.cells.length*tmp.sum)/thisRho.sum;
 		tmp[] = (thisU[] - lastU[])^^2;
@@ -391,18 +361,22 @@ static shared bool interrupted = false;
 		residV = sqrt(mesh.cells.length*tmp.sum)/thisV.sum;
 		tmp[] = (thisE[] - lastE[])^^2;
 		residE = sqrt(mesh.cells.length*tmp.sum)/thisE.sum;
-
+		*/
+		//MPI_Allreduce(&residRho, &residRho, 1, MPI_DOUBLE, MPI_)
 		lastRho[] = thisRho[];
 		lastU[] = thisU[];
 		lastV[] = thisV[];
 		lastE[] = thisE[];
 
 		auto f = mesh.computeBoundaryForces(config.forceBoundary);
-		ld = rotMat*f;
+		if(mesh.mpiRank == 0)
+		{
+			ld = rotMat*f;
 
-		forceBuffer.write!double(t, &buffPos);
-		forceBuffer.write!double(ld[0], &buffPos);
-		forceBuffer.write!double(ld[1], &buffPos);
+			forceBuffer.write!double(t, &buffPos);
+			forceBuffer.write!double(ld[0], &buffPos);
+			forceBuffer.write!double(ld[1], &buffPos);
+		}
 
 		if(buffPos == buffSize)
 		{
@@ -421,7 +395,6 @@ static shared bool interrupted = false;
 			{
 				residRhoIncIters--;
 			}
-			//residRhoIncIters = 0;
 		}
 
 		if(residRhoIncIters >= 2000)
@@ -435,8 +408,11 @@ static shared bool interrupted = false;
 
 		if(iterations % config.plotIter == 0)
 		{
-			printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-			printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+			if(mesh.mpiRank == 0)
+			{
+				printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+				printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+			}
 		}
 		
 		if(config.saveIter != -1)
@@ -445,11 +421,10 @@ static shared bool interrupted = false;
 			{
 				char[512] filename;
 				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d.esln", saveItr);
-				//saveMatlabSolution(mesh, filename.ptr);
+				snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
 				saveSolution(mesh, filename.ptr, t, dt);
 				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d.lsln", saveItr);
+				snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
 				saveLimits(mesh, filename.ptr, t, dt);
 				saveItr++;
 			}
@@ -459,18 +434,27 @@ static shared bool interrupted = false;
 		lastRmax = Rmax;
 	}
 
-	if(buffPos != 0)
+	if(mesh.mpiRank == 0)
 	{
-		fwrite(forceBuffer.ptr, ubyte.sizeof, buffPos, forceFile);
-		buffPos = 0;
+		if(buffPos != 0)
+		{
+			fwrite(forceBuffer.ptr, ubyte.sizeof, buffPos, forceFile);
+			buffPos = 0;
+		}
+		fclose(forceFile);
 	}
-	fclose(forceFile);
 
-	saveSolution(mesh, cast(char*)"final.esln", t, dt);
-	saveLimits(mesh, cast(char*)"final.lsln", t, dt);
-	printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-	printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
-
+	char[512] filename;
+	filename[] = 0;
+	snprintf(filename.ptr, 512, "final_%d.esln", mesh.mpiRank);
+	saveSolution(mesh, filename.ptr, t, dt);
+	snprintf(filename.ptr, 512, "final_%d.lsln", mesh.mpiRank);
+	saveLimits(mesh, filename.ptr, t, dt);
+	if(mesh.mpiRank == 0)
+	{
+		printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+		printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
+	}
 }
 
 @nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile, SolverException ex)
@@ -489,7 +473,7 @@ static shared bool interrupted = false;
 	if(saveFile == "")
 	{
 		// Setup initial conditions
-		for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			//mesh.q[i] = buildQ(rho, u, v, p);
 			mesh.q[i][0] = rho;
@@ -507,7 +491,7 @@ static shared bool interrupted = false;
 	{
 		if(loadSolution(mesh, t, dt, saveFile))
 		{
-			for(uint i = 0; i < mesh.cells.length; i++)
+			foreach(i; mesh.interiorCells)
 			{
 				lastRho[i] = mesh.q[i][0];
 				lastU[i] = mesh.q[i][1];
@@ -575,22 +559,106 @@ static shared bool interrupted = false;
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
 				//mesh.edges[mesh.bGroups[i][j]].q[1] = buildQ(rho, u, v, p);
+				//printf("bGroup = %d\n", mesh.bGroups[i][j]);
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+				//printf("i = %d; q0 = %f, %f, %f, %f\n", mesh.bGroups[i][j], mesh.edges[mesh.bGroups[i][j]].q[1][0], mesh.edges[mesh.bGroups[i][j]].q[1][1], mesh.edges[mesh.bGroups[i][j]].q[1][2], mesh.edges[mesh.bGroups[i][j]].q[1][3]);
 			}
 		}
 	}
 }
 
+MPI_Datatype vec4dataType;
+
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
+	//MPI_Barrier(mesh.comm);
+
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i, edge; commEdges)
+		{
+			mesh.stateBuffers[commIdx][i] = q[mesh.edges[edge].cellIdx[0]]; 
+		}
+		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
+	}
+
+	for(uint c = 0; c < mesh.commProc.length; c++)
+	{
+		MPI_Status status;
+		MPI_Probe(MPI_ANY_SOURCE, mesh.meshTag, mesh.comm, &status);
+
+		// determine which proc this is comming from, will be different order
+		// than commProc
+		if(mesh.commProc.canFind(status.MPI_SOURCE))
+		{
+			auto commIdx = mesh.commProc.countUntil(status.MPI_SOURCE);
+			auto commEdges = mesh.commEdgeIdx[commIdx];
+
+			MPI_Recv(mesh.stateBuffers[commIdx].ptr, cast(int)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm, &status);
+
+			foreach(i, edge; commEdges)
+			{
+				q[mesh.edges[edge].cellIdx[1]] = mesh.stateBuffers[commIdx][i];
+			}
+		}
+		else
+		{
+			printf("Unexpected source message from %d\n", status.MPI_SOURCE);
+		}
+	}
+
+	// update ghost cell states before we can compute gradients
+	foreach(i; mesh.ghostCells)
+	{
+		auto edge = mesh.edges[mesh.cells[i].edges[0]];
+		switch(edge.boundaryType)
+			with(BoundaryType)
+		{
+			case FullState:
+				q[edge.cellIdx[1]] = q[edge.cellIdx[0]];
+				break;
+			case InviscidWall:
+				auto cellIdx = edge.cellIdx[0];
+				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
+				immutable double x1 = mesh.nodes[edge.nodeIdx[0]][0];
+				immutable double y1 = mesh.nodes[edge.nodeIdx[0]][1];
+				immutable double x2 = mesh.nodes[edge.nodeIdx[1]][0];
+				immutable double y2 = mesh.nodes[edge.nodeIdx[1]][1];
+				auto newV = Vector!2(0.0);
+				if(x1 != x2)
+				{
+					immutable double m = (y2 - y1)/(x2 - x1);
+					auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
+					newV = reflection*v;
+				}
+				else
+				{
+					newV[0] = -v[0];
+					newV[1] = v[1];
+				}
+
+				auto cellIdx2 = edge.cellIdx[1];
+				q[cellIdx2][0] = q[cellIdx][0];
+				q[cellIdx2][1] = q[cellIdx][0]*newV[0];
+				q[cellIdx2][2] = q[cellIdx][0]*newV[1];
+				q[cellIdx2][3] = q[cellIdx][3];
+
+			 	break;
+
+			default:
+				printf("HIT DEFAULT!!\n");
+				break;
+		}
+	}
+
 	// Build gradients
 	if(config.order > 1)
 	{
-		for(uint i = 0; i < mesh.cells.length; i++)
+		foreach(i; mesh.interiorCells)
 		{
 			Vector!6[4] du;
 			for(uint j = 0; j < 4; j++)
@@ -600,6 +668,7 @@ static shared bool interrupted = false;
 			mesh.cells[i].minQ = q[i];
 			mesh.cells[i].maxQ = q[i];
 			mesh.cells[i].lim[] = Vector!2(1.0);
+
 			for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
 			{
 				uint idx = mesh.cells[i].neighborCells[j];
@@ -725,177 +794,306 @@ static shared bool interrupted = false;
 		}
 	}
 
-	for(uint i = 0; i < mesh.edges.length; i++)
+	// update edge values and compute fluxes on boundary edges.
+	foreach(i; mesh.boundaryEdges)
 	{
-		if(mesh.edges[i].isBoundary)
+		switch(mesh.edges[i].boundaryType)
+			with(BoundaryType)
 		{
-			switch(mesh.edges[i].boundaryType)
-				with(BoundaryType)
-			{
-				case FullState:
-					if(config.order == 1)
-					{
-						mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-					}
-					else
-					{
-						auto qM = q[mesh.edges[i].cellIdx[0]];
-						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
-						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
-						auto mid = mesh.edges[i].mid;
-
-						auto dx = mid[0] - centroid[0];
-						auto dy = mid[1] - centroid[1];
-						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-						
-						for(uint j = 0; j < dims; j++)
-						{
-							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-															mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
-						}
-
-						if(getPressure(mesh.edges[i].q[0]) < 0)
-						{
-							double[2] lim = [1.0, 1.0];
-							for(uint j = 0; j < dims; j++)
-							{
-								lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
-								lim[1] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[1]].lim[j][1]);
-							}
-							for(uint j = 0; j < dims; j++)
-							{
-								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-								mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
-							}
-						}
-					}
-
-					auto qL = mesh.edges[i].q[0];
-					auto qR = mesh.edges[i].q[1];
-
-					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
-					if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-					{
-						ex.msg = "Got nan on FullState boundary";
-						ex.file = __FILE__;
-						ex.line = __LINE__;
-						throw ex;
-					}
-					break;
-				case InviscidWall:
-					if(config.order == 1)
-					{
-						mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-					}
-					else
-					{
-						auto qM = q[mesh.edges[i].cellIdx[0]];
-						auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
-						auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
-						auto mid = mesh.edges[i].mid;
-						auto dx = mid[0] - centroid[0];
-						auto dy = mid[1] - centroid[1];
-						//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-						
-						for(uint j = 0; j < dims; j++)
-						{
-							mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-															mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-							//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
-						}
-
-						if(getPressure(mesh.edges[i].q[0]) < 0)
-						{
-							double[2] lim = [1.0, 1.0];
-							for(uint j = 0; j < dims; j++)
-							{
-								lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
-								lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
-							}
-
-							for(uint j = 0; j < dims; j++)
-							{
-								//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-								mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
-							}
-						}
-					}
-
-					Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
-					auto vel = (velP - (velP.dot(mesh.edges[i].normal))*mesh.edges[i].normal).magnitude;
-					double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel^^2);
-					double a = sqrt(gamma*(p/mesh.edges[i].q[0][0]));
-					if(p < 0)
-					{
-						p = 1.0e-12;
-						//printf("pressure less than 0 at wall\n");
-					}
-					mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
-					mesh.edges[i].sMax = std.math.abs(a);
-
-					if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-					{
-						ex.msg = "Got nan on wall boundary";
-						ex.file = __FILE__;
-						ex.line = __LINE__;
-						throw ex;
-					}
-					break;
-				default:
-					ex.msg = "Unsupported boundary type";
-					ex.file = __FILE__;
-					ex.line = __LINE__;
-					throw ex;
-			}
-		}
-		else
-		{
-			if(config.order == 1)
-			{
-				mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-				mesh.edges[i].q[1] = q[mesh.edges[i].cellIdx[1]];
-			}
-			else
-			{
-				for(uint k = 0; k < 2; k++)
+			case FullState:
+				if(config.order == 1)
 				{
-					auto qM = q[mesh.edges[i].cellIdx[k]];
-					auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
-					auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
 					auto mid = mesh.edges[i].mid;
-					//auto mid = mesh.edges[eIdx].mid;
-					//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(k+1)%2]].centroid;
 
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
-					//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
+					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
 					
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
-														mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
-						//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
 
-					if(getPressure(mesh.edges[i].q[k]) < 0)
+					if(getPressure(mesh.edges[i].q[0]) < 0)
 					{
 						double[2] lim = [1.0, 1.0];
 						for(uint j = 0; j < dims; j++)
 						{
-							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]);
-							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]);
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[1]].lim[j][1]);
+						}
+						for(uint j = 0; j < dims; j++)
+						{
+							//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
+						}
+					}
+				}
+
+				auto qL = mesh.edges[i].q[0];
+				auto qR = mesh.edges[i].q[1];
+
+				//printf("edge = %d\n", i);
+				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
+				{
+					ex.SetException(SolverException.SExceptionType.EdgeException,
+									"Got NaN on fullstate edge",
+									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
+																	getPressure(mesh.edges[i].q[1]),
+																	mesh.edges[i].flux,
+																	mesh.edges[i].q[0],
+																	mesh.edges[i].q[1],
+																	mesh.edges[i].normal,
+																	mesh.edges[i].cellIdx[0],
+																	mesh.edges[i].cellIdx[1]));
+					throw ex;
+				}
+				break;
+			case InviscidWall:
+				if(config.order == 1)
+				{
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+					auto mid = mesh.edges[i].mid;
+					auto dx = mid[0] - centroid[0];
+					auto dy = mid[1] - centroid[1];
+					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
+					
+					for(uint j = 0; j < dims; j++)
+					{
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+					}
+
+					if(getPressure(mesh.edges[i].q[0]) < 0)
+					{
+						double[2] lim = [1.0, 1.0];
+						for(uint j = 0; j < dims; j++)
+						{
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
 						}
 
 						for(uint j = 0; j < dims; j++)
 						{
-							//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
-							mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+							//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 						}
 					}
 				}
-			}
 
+				Vector!2 velP = (1/mesh.edges[i].q[0][0])*Vector!2(mesh.edges[i].q[0][1], mesh.edges[i].q[0][2]);
+				auto vel = (velP - (velP.dot(mesh.edges[i].normal))*mesh.edges[i].normal).magnitude;
+				double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel^^2);
+				double a = sqrt(gamma*(p/mesh.edges[i].q[0][0]));
+				if(p < 0)
+				{
+					p = 1.0e-12;
+					//printf("pressure less than 0 at wall\n");
+				}
+				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
+				mesh.edges[i].sMax = std.math.abs(a);
+				
+				auto qL = mesh.edges[i].q[0];
+				auto qR = q[mesh.edges[i].cellIdx[1]];
+				//mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				
+				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
+				{
+					ex.SetException(SolverException.SExceptionType.EdgeException,
+									"Got NaN on wall edge",
+									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
+																	getPressure(mesh.edges[i].q[1]),
+																	mesh.edges[i].flux,
+																	qL,
+																	qR,
+																	mesh.edges[i].normal,
+																	mesh.edges[i].cellIdx[0],
+																	mesh.edges[i].cellIdx[1]));
+					throw ex;
+				}
+				break;
+			default:
+				ex.msg = "Unsupported boundary type";
+				ex.file = __FILE__;
+				ex.line = __LINE__;
+				throw ex;
+		}
+	}
+
+	// update edge values and compute fluxes on interior edges.
+	foreach(i; mesh.interiorEdges)
+	{
+		if(config.order == 1)
+		{
+			mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+			mesh.edges[i].q[1] = q[mesh.edges[i].cellIdx[1]];
+		}
+		else
+		{
+			for(uint k = 0; k < 2; k++)
+			{
+				auto qM = q[mesh.edges[i].cellIdx[k]];
+				auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
+				auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
+				auto mid = mesh.edges[i].mid;
+				//auto mid = mesh.edges[eIdx].mid;
+				//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(k+1)%2]].centroid;
+
+				auto dx = mid[0] - centroid[0];
+				auto dy = mid[1] - centroid[1];
+				//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
+				
+				for(uint j = 0; j < dims; j++)
+				{
+					mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
+													mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
+					//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+				}
+
+				if(getPressure(mesh.edges[i].q[k]) < 0)
+				{
+					double[2] lim = [1.0, 1.0];
+					for(uint j = 0; j < dims; j++)
+					{
+						lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]);
+						lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]);
+					}
+
+					for(uint j = 0; j < dims; j++)
+					{
+						//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+					}
+				}
+			}
+		}
+
+		auto qL = mesh.edges[i].q[0];
+		auto qR = mesh.edges[i].q[1];
+
+		mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+
+		if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
+		{
+			ex.SetException(SolverException.SExceptionType.EdgeException,
+							"Got NaN on interior edge",
+							SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
+															getPressure(mesh.edges[i].q[1]),
+															mesh.edges[i].flux,
+															mesh.edges[i].q[0],
+															mesh.edges[i].q[1],
+															mesh.edges[i].normal,
+															mesh.edges[i].cellIdx[0],
+															mesh.edges[i].cellIdx[1]));
+			throw ex;
+		}
+	}
+
+	// need to do a half update of comm edges
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i; commEdges)
+		{
+			if(config.order == 1)
+			{
+				mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				//mesh.edges[i].q[1] = q[mesh.edges[i].cellIdx[1]];
+			}
+			else
+			{
+				auto qM = q[mesh.edges[i].cellIdx[0]];
+				auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+				auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+				auto mid = mesh.edges[i].mid;
+				//auto mid = mesh.edges[eIdx].mid;
+				//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(0+1)%2]].centroid;
+
+				auto dx = mid[0] - centroid[0];
+				auto dy = mid[1] - centroid[1];
+				//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
+				
+				for(uint j = 0; j < dims; j++)
+				{
+					mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+													mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+					//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
+				}
+
+				if(getPressure(mesh.edges[i].q[0]) < 0)
+				{
+					double[2] lim = [1.0, 1.0];
+					for(uint j = 0; j < dims; j++)
+					{
+						lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+						lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
+					}
+
+					for(uint j = 0; j < dims; j++)
+					{
+						//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
+						mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+					}
+				}
+			}
+		}
+	}
+
+	MPI_Barrier(mesh.comm);
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i, edge; commEdges)
+		{
+			mesh.stateBuffers[commIdx][i] = mesh.edges[edge].q[0];
+		}
+		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
+	}
+
+	for(uint c = 0; c < mesh.commProc.length; c++)
+	{
+		MPI_Status status;
+		MPI_Probe(MPI_ANY_SOURCE, mesh.meshTag, mesh.comm, &status);
+
+		// determine which proc this is comming from, will be different order
+		// than commProc
+		if(mesh.commProc.canFind(status.MPI_SOURCE))
+		{
+			auto commIdx = mesh.commProc.countUntil(status.MPI_SOURCE);
+			auto commEdges = mesh.commEdgeIdx[commIdx];
+
+			MPI_Recv(mesh.stateBuffers[commIdx].ptr, cast(int)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm, &status);
+
+			foreach(i, edge; commEdges)
+			{
+				mesh.edges[edge].q[1] = mesh.stateBuffers[commIdx][i];
+			}
+		}
+		else
+		{
+			printf("Unexpected source message from %d\n", status.MPI_SOURCE);
+		}
+	}
+
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i; commEdges)
+		{
 			auto qL = mesh.edges[i].q[0];
 			auto qR = mesh.edges[i].q[1];
 
@@ -906,13 +1104,13 @@ static shared bool interrupted = false;
 				ex.SetException(SolverException.SExceptionType.EdgeException,
 								"Got NaN on interior edge",
 								SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-															  getPressure(mesh.edges[i].q[1]),
-															  mesh.edges[i].flux,
-															  mesh.edges[i].q[0],
-															  mesh.edges[i].q[1],
-															  mesh.edges[i].normal,
-															  mesh.edges[i].cellIdx[0],
-															  mesh.edges[i].cellIdx[1]));
+																getPressure(mesh.edges[i].q[1]),
+																mesh.edges[i].flux,
+																mesh.edges[i].q[0],
+																mesh.edges[i].q[1],
+																mesh.edges[i].normal,
+																mesh.edges[i].cellIdx[0],
+																mesh.edges[i].cellIdx[1]));
 				throw ex;
 			}
 		}
@@ -920,7 +1118,7 @@ static shared bool interrupted = false;
 
 	newDt = double.infinity;
 
-	for(uint i = 0; i < mesh.cells.length; i++)
+	foreach(i; mesh.interiorCells)
 	{
 		R[i] = Vector!4(0);
 		double sAve = 0;
@@ -941,6 +1139,7 @@ static shared bool interrupted = false;
 				mesh.cells[i].dt = config.CFL*mesh.cells[i].d/sAve;
 				if(mesh.cells[i].dt.isNaN)
 				{
+					//printf("dt is nan\n");
 					mesh.cells[i].dt = 0;
 					//printf("R = [%.10e, %.10e, %.10e, %.10e]\n", R[0], R[1], R[2], R[3]);
 					/+
@@ -966,28 +1165,52 @@ static shared bool interrupted = false;
 		
 		R[i] *= -(1.0/mesh.cells[i].area);
 	}
+
+	MPI_Allreduce(&newDt, &newDt, 1, MPI_DOUBLE, MPI_MIN, mesh.comm);
+	MPI_Allreduce(&Rmax, &Rmax, 1, MPI_DOUBLE, MPI_MAX, mesh.comm);
 }
 
-void startComputation(Config config, string saveFile)
+void startComputation(Config config, string saveFile, uint p, uint id)
 {
 	try
 	{
-		UMesh2 umesh;
+		auto umesh = UMesh2(MPI_COMM_SELF, id);
 
 		double dt = config.dt;
 		double t = 0;
 
 		auto ex = new SolverException("No error");
 
-		if(config.meshFile.canFind(".gri"))
+		if(id == 0)
 		{
-			umesh = parseXflowMesh(config.meshFile);
+			if(config.meshFile.canFind(".gri"))
+			{
+				umesh = parseXflowMesh(config.meshFile);
+				umesh.comm = MPI_COMM_SELF;
+				umesh.mpiRank = id;
+			}
+			else
+			{
+				writeln("Unsupported mesh format, exiting");
+				return;
+			}
 		}
-		else
+
+		if(p > 1)
 		{
-			writeln("Unsupported mesh format, exiting");
-			return;
+			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+			umesh.comm = MPI_COMM_WORLD;
+			umesh.mpiRank = id;
+			//umesh.buildMesh;
+			
+			//core.stdc.stdlib.abort;
+			//return;
 		}
+
+		umesh.buildMesh;
+
+		import std.array : split;
+		saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 
 		final switch(config.limiter)
 		{
@@ -1040,29 +1263,57 @@ void startComputation(Config config, string saveFile)
 			writeln("normal = ", ex.eExcept.normal);
 		}
 		writeln("exiting");
+		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 }
 
-import std.datetime;
 
-void main(string[] args)
+import mpi;
+import mpi.util;
+
+int main(string[] args)
 {
 	import std.getopt;
+
 	string configFile;
 	string saveFile = "";
 
-	StopWatch sw;
-	sw.reset;
-	sw.start;
+	int argc = cast(int)args.length;
+	auto argv = args.toArgv;
+
+	int p;
+	int id;
+
+	MPI_Init(&argc, &argv);
+
+	MPI_Comm_size(MPI_COMM_WORLD, &p);
+	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+
+	vec4dataType = toMPIType!(Vector!4);
+
+	double startTime = MPI_Wtime();
+
 	signal(SIGINT, &handle);
+	signal(SIGUSR1, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);
 
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
 
-	startComputation(config, saveFile);
+	if(saveFile != "")
+	{
+		saveFile ~= id.to!string ~ ".esln";
+	}
 
-	sw.stop;
-	writeln("total time: ", sw.peek.msecs/1000.0);
+	startComputation(config, saveFile, p, id);
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	double elapsed = MPI_Wtime() - startTime;
+	if(id == 0)
+	{
+		writeln("total time: ", elapsed);
+	}
+	
+	return MPI_Shutdown;
 }

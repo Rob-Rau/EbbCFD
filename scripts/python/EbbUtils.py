@@ -1,6 +1,8 @@
 import sys
+import os
 import struct
 import numpy as np
+from functools import partial
 
 def importEbbSolution(slnFile):
 	print("Importing " + slnFile)
@@ -72,3 +74,23 @@ def importEbbMatlabMesh(meshFile):
 	mesh['BE'] = BE
 
 	return mesh
+	
+def importEbbForces(forceFile):
+
+	print("Importing " + forceFile)
+	forcesF = open(forceFile, 'rb')
+	fileSize = os.path.getsize(forceFile)
+	
+	numEntries = fileSize/(3*8)
+
+	t = np.zeros((numEntries, 1))
+	forces = np.zeros((numEntries, 2))
+	i = 0
+	with open(forceFile, 'rb') as forcesF:
+		for data in iter(partial(forcesF.read, 3*8), ''):
+			if len(data) == 3*8:
+				t[i] = struct.unpack(">d", data[0:8])[0]
+				forces[i,:] = [struct.unpack(">d", data[8:(8+8)])[0], struct.unpack(">d", data[(8+8):(8+8+8)])[0]]
+				i = i+1
+			else:
+				return (t, forces)

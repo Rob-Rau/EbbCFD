@@ -4,19 +4,10 @@
 	"copyright": "Copyright © 2016, Robert F. Rau II",
 	"authors": ["Robert F. Rau II"],
 	"dependencies": {
-		"numd": "~master"
+		"numd": "~master",
+		"mpi": "~master"
 	},
 	"configurations": [
-		{
-			"excludedSourceFiles": [
-				"source/solver.d",
-				"source/plotter.d",
-				"source/post.d"
-			],
-			"name": "mesher",
-			"targetName": "ebb-mesh",
-			"targetType": "executable"
-		},
 		{
 			"excludedSourceFiles": [
 				"source/mesher.d",
@@ -25,6 +16,16 @@
 			],
 			"name": "solver",
 			"targetName": "ebb-solve",
+			"targetType": "executable"
+		},
+		{
+			"excludedSourceFiles": [
+				"source/solver.d",
+				"source/plotter.d",
+				"source/post.d"
+			],
+			"name": "mesher",
+			"targetName": "ebb-mesh",
 			"targetType": "executable"
 		},
 		{
@@ -48,6 +49,7 @@
 			"targetType": "executable"
 		}
 	],
+	"lflags": ["-lparmetis", "-lmetis"],
 	"buildTypes": {
 		"debug": {
 			"buildOptions": ["debugMode", "debugInfo"]
@@ -58,8 +60,8 @@
 		},
 		"flux-release": {
 			"buildOptions": ["releaseMode", "inline"],
-			"dflags": ["-O5"],
-			"lflags": ["-L/usr/lib64", "-L~/ldc2-1.0.0-linux-x86_64/lib"]
+			"dflags": ["-O5", "-I/home/rrau/numd"],
+			"lflags": ["-L/usr/lib64", "-L$HOME/lib", "-L$HOME/ldc2-1.0.0-linux-x86_64/lib", "-L$PARMETIS_LIB", "-L$METIS_LIB", "-L$MPI_HOME/lib"]
 		},
 		"ldc-release-prof": {
 			"buildOptions": ["releaseMode", "inline", "debugInfo"],

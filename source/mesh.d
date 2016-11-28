@@ -5,15 +5,21 @@ import std.algorithm;
 import std.array;
 import std.conv;
 import std.exception;
-import std.file;
 import std.math;
 import std.stdio;
 import std.string;
+import std.typecons : Tuple, tuple;
 
 import numd.linearalgebra.matrix;
 import numd.utility;
 
 import ebb.euler;
+import ebb.mpid;
+
+import mpi;
+import mpi.util;
+
+import parmetis;
 
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
@@ -51,6 +57,12 @@ struct Edge
 	Vector!2 bNormal;
 }
 
+struct CommEdgeNodes
+{
+	uint n1;
+	uint n2;
+}
+
 struct UCell2
 {
 	uint[6] edges;
@@ -80,6 +92,9 @@ struct UCell2
 
 struct UMesh2
 {
+	MPI_Comm comm;
+	uint mpiRank;
+	static const int meshTag = 2000;
 	// Raw mesh data
 	double[][] nodes;
 	uint[][] elements;
@@ -88,14 +103,49 @@ struct UMesh2
 	size_t[] bGroupStart;
 	uint[][] bGroups;
 
+	uint[] commProc;
+	CommEdgeNodes[][] commEdgeLists;
+
+	uint[][] commEdgeIdx;
+	uint[][] commCellIdx;
+
 	// Computed mesh data
+	uint[] interiorCells;
+	uint[] ghostCells;
 	UCell2[] cells;
 	Vector!4[] q;
+
+	uint[] interiorEdges;
+	uint[] boundaryEdges;
 	Edge[] edges;
+
+	MPI_Datatype vec2Type;
+	MPI_Datatype vec4Type;
+
+	Vector!4[][] stateBuffers;
 
 	this(uint nCells)
 	{
+		vec2Type = toMPIType!(Vector!2);
+		vec4Type = toMPIType!(Vector!4);
 		cells = new UCell2[nCells];
+	}
+
+	this(uint nCells, MPI_Comm comm, uint rank)
+	{
+		vec2Type = toMPIType!(Vector!2);
+		vec4Type = toMPIType!(Vector!4);
+		cells = new UCell2[nCells];
+		this.comm = comm;
+		this.mpiRank = rank;
+	}
+
+	this(MPI_Comm, uint rank)
+	{
+		vec2Type = toMPIType!(Vector!2);
+		vec4Type = toMPIType!(Vector!4);
+		this.comm = comm;
+		this.mpiRank = rank;
 	}
 
 	ref UCell2 opIndex(size_t i)
@@ -128,6 +178,20 @@ struct UMesh2
 		return false;
 	}
 
+	private bool isCommEdge(ref Edge edge)
+	{
+		foreach(commEdgeList; commEdgeLists)
+		{
+			auto pred = (CommEdgeNodes a, Edge b) => (((b.nodeIdx[0] == a.n1) && (b.nodeIdx[1] == a.n2)) || ((b.nodeIdx[0] == a.n2) && (b.nodeIdx[1] == a.n1)));
+			if(commEdgeList.canFind!pred(edge))
+			{
+				return true;
+			}
+
+		}
+		return false;
+	}
+
 	private bool isExistingEdge(ref Edge edge, ref UMesh2 mesh, ref uint idx)
 	{
 		for(uint k = 0; k < mesh.edges.length; k++)
@@ -148,6 +212,7 @@ struct UMesh2
 	void buildMesh()
 	{
 		bGroups = new uint[][](bTags.length);
+
 		for(uint i = 0; i < elements.length; i++)
 		{
 			q[i] = Vector!4(0);
@@ -196,6 +261,10 @@ struct UMesh2
 						cells[i].fluxMultiplier[j] = 1.0;
 						edges ~= edge;
 						edgeidx = edges.length.to!uint - 1;
+						if(!isCommEdge(edge))
+						{
+							interiorEdges ~= edgeidx;
+						}
 					}
 				}
 				else
@@ -208,7 +277,7 @@ struct UMesh2
 					edge.tangent = tangent;
 					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
 					edge.boundaryTag = bTags[bGroup];
-					edge.bNormal = (1/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
+					edge.bNormal = (1.0/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
 					double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
 					double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
 					edge.mid = Vector!2(x, y);
@@ -216,6 +285,7 @@ struct UMesh2
 					cells[i].fluxMultiplier[j] = 1.0;
 					edges ~= edge;
 					edgeidx = edges.length.to!uint - 1;
+					boundaryEdges ~= edgeidx;
 				}
 
 				cells[i].edges[j] = edgeidx;
@@ -228,6 +298,7 @@ struct UMesh2
 				cells[i].centroid[1] += (nodes[ni[0]][1] + nodes[ni[1]][1])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 			}
 
+			interiorCells ~= i;
 			cells[i].area *= 0.5;
 			//cells[i].area.writeln;
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
@@ -235,10 +306,147 @@ struct UMesh2
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
 		}
 
-		for(uint i = 0; i < cells.length; i++)
+		foreach(bEdge; boundaryEdges)
+		{
+			UCell2 cell;
+			cell.edges[] = 0;
+			cell.fluxMultiplier[] = -1.0;
+			cell.area = 0.0;
+			cell.d = 0.0;
+			cell.perim = 0;
+			
+			// reflect centroid across edge
+			auto edge = edges[bEdge];
+			auto otherCell = cells[edge.cellIdx[0]];
+			double xr = 0;
+			double yr = 0;
+			if(nodes[edge.nodeIdx[0]][0] != nodes[edge.nodeIdx[1]][0])
+			{
+				double x1 = otherCell.centroid[0];
+				double y1 = otherCell.centroid[1];
+				double m = (nodes[edge.nodeIdx[0]][1] - nodes[edge.nodeIdx[1]][1])/(nodes[edge.nodeIdx[0]][0] - nodes[edge.nodeIdx[1]][0]);
+				
+				double x = nodes[edge.nodeIdx[0]][0];
+				double y = nodes[edge.nodeIdx[0]][1];
+				double c = y - m*x;
+				double d = (x1 + (y1 - c)*m)/(1.0 + m^^2.0);
+				xr = 2.0*d - x1;
+				yr = 2.0*d*m - y1 + 2.0*c;
+			}
+			else
+			{
+				// edge is vertical
+				double x = nodes[edge.nodeIdx[0]][0];
+				double y = nodes[edge.nodeIdx[0]][1];
+				double d = otherCell.centroid[0] - x;
+				double x1 = otherCell.centroid[0];
+				xr = -(2.0*d - x1);
+				yr = otherCell.centroid[1];
+				//logln("xc = ", otherCell.centroid[0], ", x = ", nodes[edge.nodeIdx[0]][0], ", xr = ", xr);
+			}
+			cell.centroid = Vector!2(xr, yr);
+
+			//logln("new cell centroid = ", cell.centroid);
+			//logln("other cell centroid = ", otherCell.centroid, "\n");
+			cell.nNeighborCells = 1;
+			cell.lim[] = Vector!2(1.0);
+			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
+			cell.edges[0] = bEdge;
+
+			auto newq = Vector!4(0);
+			q ~= newq;
+
+			cells ~= cell; 
+			edges[bEdge].cellIdx[1] = cast(uint)(cells.length - 1);
+
+			//logln("Adding ghost cell. Boundary type = ", edges[bEdge].boundaryTag, "\t cell index = ", edges[bEdge].cellIdx[1]);
+			ghostCells ~= edges[bEdge].cellIdx[1];
+		}
+
+		foreach(commEdgeList; commEdgeLists)
+		{
+			commEdgeIdx.length++;
+			commCellIdx.length++;
+			stateBuffers.length++;
+			foreach(commEdge; commEdgeList)
+			{
+				foreach(uint edgeIdx, edge; edges)
+				{
+					// is edge a communication edge
+					if(((edge.nodeIdx[0] == commEdge.n1) && (edge.nodeIdx[1] == commEdge.n2)) ||
+						((edge.nodeIdx[0] == commEdge.n2) && (edge.nodeIdx[1] == commEdge.n1)))
+					{
+						commEdgeIdx[$-1] ~= edgeIdx;
+						UCell2 cell;
+						cell.edges[] = 0;
+						cell.fluxMultiplier[] = -1.0;
+						cell.area = 0.0;
+						cell.d = 0.0;
+						cell.perim = 0;
+						cell.neighborCells[0] = edge.cellIdx[0];
+						cell.centroid = Vector!2(0.0);
+						cell.nNeighborCells = 1;
+						cell.lim[] = Vector!2(1.0);
+						cell.edges[0] = edgeIdx;
+
+						auto newq = Vector!4(0);
+						q ~= newq;
+						cells ~= cell;
+
+						commCellIdx[$-1] ~= cast(uint)(cells.length - 1);
+						edges[edgeIdx].cellIdx[1] = commCellIdx[$-1][$-1];
+					}
+				}
+
+				stateBuffers[$-1] = new Vector!4[commCellIdx[$-1].length];
+			}
+		}
+
+		MPI_Barrier(comm);
+		// We now need to distribute cell centroids to neighboring 
+		// processors so they can set up their ghost cells
+		foreach(commIdx, commEdges; commEdgeIdx)
+		{
+			auto centroids = new Vector!2[commEdges.length];
+			foreach(i, edge; commEdges)
+			{
+				centroids[i] = cells[edges[edge].cellIdx[0]].centroid; 
+			}
+			MPI_Send(centroids.ptr, cast(uint)centroids.length, toMPIType!(Vector!2), commProc[commIdx], meshTag, comm);
+		}
+
+		// recieve cell centroids
+		for(uint c = 0; c < commProc.length; c++)
+		{
+			MPI_Status status;
+			MPI_Probe(MPI_ANY_SOURCE, meshTag, comm, &status);
+
+			// determine which proc this is comming from, will be different order
+			// than commProc
+			if(commProc.canFind(status.MPI_SOURCE))
+			{
+				auto commIdx = commProc.countUntil(status.MPI_SOURCE);
+				auto commEdges = commEdgeIdx[commIdx];
+				auto centroids = new Vector!2[commEdges.length];
+
+				MPI_Recv(centroids.ptr, cast(int)centroids.length, toMPIType!(Vector!2), commProc[commIdx], meshTag, comm, &status);
+
+				foreach(i, edge; commEdges)
+				{
+					cells[edges[edge].cellIdx[1]].centroid = centroids[i];
+				}
+			}
+			else
+			{
+				logln("Unexpected source message from ", status.MPI_SOURCE);
+			}
+		}
+
+		foreach(i; interiorCells)
 		{
 			cells[i].gradMat = Matrix!(2, 6)(0);
 			auto tmpMat = Matrix!(6, 2)(0);
+
 			// Run through the edges and find indecies
 			// of cell neighbors
 			for(uint j = 0; j < cells[i].nEdges; j++)
@@ -246,6 +454,7 @@ struct UMesh2
 				auto edge = edges[cells[i].edges[j]];
 
 				auto v1 = edge.mid - cells[i].centroid;
+				
 				/+
 				if(edge.isBoundary)
 				{
@@ -259,22 +468,19 @@ struct UMesh2
 				auto eDot = v1.dot(edge.normal);
 				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
-				if(!edge.isBoundary)
+				if(edge.cellIdx[0] == i)
 				{
-					if(edge.cellIdx[0] == i)
-					{
-						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[1];
-					}
-					else
-					{
-						cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
-					}
-					uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
-					tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
-					tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
-
-					cells[i].nNeighborCells++;
+					cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[1];
 				}
+				else
+				{
+					cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
+				}
+				uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
+				tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
+				tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
+
+				cells[i].nNeighborCells++;
 			}
 
 			// This cell has a boundary edge and we need to find another
@@ -285,6 +491,7 @@ struct UMesh2
 			{
 				if(cells[i].nNeighborCells != cells[i].nEdges)
 				{
+					logln("Not equal");
 					Edge edge;
 					// find non-boundary edge
 					for(uint j = 0; j < cells[i].nEdges; j++)
@@ -403,604 +610,351 @@ struct UMesh2
 				}
 			}
 		}
-		return f;
+
+		auto globalF = Vector!2(0);
+
+		MPI_Reduce(f.mData.ptr, globalF.mData.ptr, 2, MPI_DOUBLE, MPI_SUM, 0, comm);
+
+		return globalF;
 	}
 }
 
-import core.stdc.stdio;
-
-struct MeshHeader
+idxtype[] buildPartitionMap(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
-	const uint meshMagic = 0xB1371AC7;
-	uint meshVersion;
-	uint dims;
-	uint nNodes;
-	uint nElems;
-	uint nBGroups;
+	idxtype[2] elmdist = [0, bigMesh.elements.length.to!idxtype];
+	idxtype[] eptr;
+	idxtype[] eind;
+	int wgtflag = 0; // un-weighted
+	int numflag = 0; // c style indexing
+	int ncon = 1; // one constraint. still not totally sure what this is.
+	int ncommonnodes = 2; // 2 shared nodes between cells
+	int nparts = p;
+	float[] tpwgts = new float[ncon*nparts];
+	float[] ubvec = new float[ncon];
+	int[4] options;
+	int edgecut;
+	idxtype[] part;
+
+	tpwgts[] = 1.0/cast(double)nparts;
+	ubvec[] = 1.05; // recommended value from the manual
+	options[] = 0; // default options
+
+	uint currIdx = 0;
+	foreach(el; bigMesh.elements)
+	{
+		eptr~= currIdx;
+		foreach(ind; el)
+		{
+			eind ~= (ind - 1);
+		}
+		currIdx += el.length;
+	}
+	eptr~= currIdx;
+
+	logln("eind.length = ", eind.length);
+	logln("eptr.length = ", eptr.length);
+	part = new idxtype[bigMesh.elements.length];
+
+	logln("Partitioning mesh");
+	MPI_Comm tmpComm = comm;
+	comm = MPI_COMM_SELF;
+	ParMETIS_V3_PartMeshKway(elmdist.ptr, eptr.ptr, eind.ptr, null, &wgtflag, &numflag, &ncon, &ncommonnodes, &nparts, tpwgts.ptr, ubvec.ptr, options.ptr, &edgecut, part.ptr, &comm);
+	comm = tmpComm;
+
+	logln("edgecut = ", edgecut);
+
+	return part;
 }
 
-/+
-@nogc void saveMesh(ref UMesh2 mesh, char* filename)
+uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNodes)
 {
-	MeshHeader header = {meshVersion: 1, dims: 2, nNodes: cast(uint)mesh.nodes.length, nElems: cast(uint)mesh.elements.length, nBGroups: cast(uint)mesh.bTags.length};
+	auto idx = localNodes.countUntil(globalNodes[elNode]);
 
-	ulong totSize = MeshHeader.sizeof;
-	totSize += header.nNodes*header.dims*double.sizeof;
-	for(uint i = 0; i < mesh.elements.length; i++)
+	if(idx < 0)
 	{
-		totSize += 
+		idx = localNodes.length;
+		localNodes ~= globalNodes[elNode];
 	}
-}
-+/
 
-struct SlnHeader
-{
-	static const uint slnMagic = 0xEA98E1F5;
-	uint slnVersion;
-	uint dataPoints;
-	double t;
-	double dt;
+	return cast(uint)(idx + 1);
 }
 
-@nogc void saveSolution(ref UMesh2 mesh, char* filename, double t, double dt)
+UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 {
-	import std.experimental.allocator.mallocator : Mallocator;
-	import std.bitmanip : write;
+	int partTag = 2001;
+	auto smallMesh = UMesh2(comm, id);
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.cells.length, t: t, dt: dt};
-
-	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
-
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
-	scope(exit) Mallocator.instance.deallocate(buffer);
-
-	size_t offset = 0;
-	buffer.write!uint(header.slnMagic, &offset);
-	buffer.write!uint(header.slnVersion, &offset);
-	buffer.write!uint(header.dataPoints, &offset);
-	buffer.write!double(header.t, &offset);
-	buffer.write!double(header.dt, &offset);
-
-	for(uint i = 0; i < mesh.cells.length; i++)
+	if(id == 0)
 	{
-		buffer.write!double(mesh.q[i][0], &offset);
-		buffer.write!double(mesh.q[i][1], &offset);
-		buffer.write!double(mesh.q[i][2], &offset);
-		buffer.write!double(mesh.q[i][3], &offset);
-	}
+		bigMesh.buildMesh;
+		
+		auto part = bigMesh.buildPartitionMap(p, id, comm);
 
-	import std.digest.crc : CRC32;
-
-	CRC32 crc;
-	crc.start();
-	crc.put(buffer);
-	auto crc32 = crc.finish();
-
-	buffer.write!ubyte(crc32[0], &offset);
-	buffer.write!ubyte(crc32[1], &offset);
-	buffer.write!ubyte(crc32[2], &offset);
-	buffer.write!ubyte(crc32[3], &offset);
-
-	auto file = fopen(filename, "wb");
-	ulong writeOffset = 0;
-	while(writeOffset < buffer.length)
-	{
-		ulong chunkSize = 1024*1024*1024;
-		if(buffer.length - writeOffset < chunkSize)
+		for(uint i = 0; i < p; i++)
 		{
-			chunkSize = buffer.length - writeOffset;
-		}
-		fwrite(buffer[writeOffset..writeOffset+chunkSize].ptr, ubyte.sizeof, chunkSize, file);
-		writeOffset += chunkSize;
-	}
-	fclose(file);
-}
+			uint nElems = 0;
+			uint[][] localElements;
+			uint[] nodesPerElement;
+			double[][] localNodes;
+			uint[][] localbNodes;
+			uint[][] localbNodesUnsorted;
+			uint[] localbGroupStart;
+			string[] localbTag;
 
-@nogc void saveLimits(ref UMesh2 mesh, char* filename, double t, double dt)
-{
-	import std.experimental.allocator.mallocator : Mallocator;
-	import std.bitmanip : write;
+			uint[][] commEdges;
+			//logln(bigMesh.bGroupStart);
+			uint[] commP;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.cells.length, t: t, dt: dt};
+			// holds the localy mapped edge nodes for comm boundaries.
+			// first dim matches up with commP, aka the proc to send edge data to
+			CommEdgeNodes[][] commEdgeList;
+			Tuple!(size_t, uint)[] bNodeMap;
 
-	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
-
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
-	scope(exit) Mallocator.instance.deallocate(buffer);
-
-	size_t offset = 0;
-	buffer.write!uint(header.slnMagic, &offset);
-	buffer.write!uint(header.slnVersion, &offset);
-	buffer.write!uint(header.dataPoints, &offset);
-	buffer.write!double(header.t, &offset);
-	buffer.write!double(header.dt, &offset);
-
-	for(uint i = 0; i < mesh.cells.length; i++)
-	{
-		buffer.write!double(mesh.cells[i].gradErr[0], &offset);
-		buffer.write!double(mesh.cells[i].gradErr[1], &offset);
-		buffer.write!double(mesh.cells[i].gradErr[2], &offset);
-		buffer.write!double(mesh.cells[i].gradErr[3], &offset);
-	}
-
-	import std.digest.crc : CRC32;
-
-	CRC32 crc;
-	crc.start();
-	crc.put(buffer);
-	auto crc32 = crc.finish();
-
-	buffer.write!ubyte(crc32[0], &offset);
-	buffer.write!ubyte(crc32[1], &offset);
-	buffer.write!ubyte(crc32[2], &offset);
-	buffer.write!ubyte(crc32[3], &offset);
-
-	auto file = fopen(filename, "wb");
-	ulong writeOffset = 0;
-	while(writeOffset < buffer.length)
-	{
-		ulong chunkSize = 1024*1024*1024;
-		if(buffer.length - writeOffset < chunkSize)
-		{
-			chunkSize = buffer.length - writeOffset;
-		}
-		fwrite(buffer[writeOffset..writeOffset+chunkSize].ptr, ubyte.sizeof, chunkSize, file);
-		writeOffset += chunkSize;
-	}
-	fclose(file);
-}
-
-@nogc bool loadSolution(ref UMesh2 mesh, ref double t, ref double dt, string filename)
-{
-	import std.algorithm : canFind;
-	import std.bitmanip : peek;
-	import std.experimental.allocator.mallocator : Mallocator;
-	import std.digest.crc : CRC32;
-	import std.string : toStringz;
-	char[1024] filenamePtr;
-	filenamePtr[] = 0;
-	filenamePtr[0..filename.length] = filename[];
-	auto file = fopen(filenamePtr.ptr, "rb");
-	assert(file != null);
-
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(8);
-	scope(exit) Mallocator.instance.deallocate(buffer);
-
-	CRC32 crc;
-	crc.start();
-
-	fread(buffer.ptr, 1, 4, file);
-	crc.put(buffer[0..4]);
-	uint slnMagic = buffer.peek!uint;
-
-	if(slnMagic != SlnHeader.slnMagic)
-	{
-		return false;
-	}
-
-	fread(buffer.ptr, 1, 4, file);
-	crc.put(buffer[0..4]);
-	uint slnVersion = buffer.peek!uint;
-	fread(buffer.ptr, 1, 4, file);
-	crc.put(buffer[0..4]);
-	uint dataPoints = buffer.peek!uint;
-
-	if(dataPoints != mesh.q.length)
-	{
-		return false;
-	}
-
-	fread(buffer.ptr, 1, 8, file);
-	crc.put(buffer[]);
-	t = buffer.peek!double;
-	fread(buffer.ptr, 1, 8, file);
-	crc.put(buffer[]);
-	dt = buffer.peek!double;
-
-	for(uint i = 0; i < mesh.q.length; i++)
-	{
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][0] = buffer.peek!double;
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][1] = buffer.peek!double;
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][2] = buffer.peek!double;
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][3] = buffer.peek!double;
-	}
-	//ubyte[4] readCrc32;
-	fread(buffer.ptr, 1, 4, file);
-	auto crc32 = crc.finish();
-	bool crcGood = true;
-	/+
-	for(uint i = 0; i < 4; i++)
-	{
-		crcGood &= crc32[i] == buffer[i]; 
-	}
-	
-	printf("%x %x %x %x\n", crc32[0], crc32[1], crc32[2], crc32[3]);
-	printf("%x %x %x %x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
-	+/
-	fclose(file);
-
-	return crcGood;
-}
-
-void loadMatlabSolution(ref UMesh2 mesh, string filename)
-{
-	//UMesh2 mesh;
-	import std.algorithm : canFind;
-	import std.bitmanip : read;
-	import std.conv : to;
-
-	//writeln("Reading file ", filename);
-	auto slnFile = File(filename);
-
-	auto fileSize = slnFile.size;
-
-	auto buffer = slnFile.rawRead(new ubyte[fileSize]);
-	auto nNodes = buffer.read!ulong;
-	if(nNodes != mesh.nodes.length)
-	{
-		throw new Exception("Mesh file has different number of nodes than solution file.");
-	}
-
-	//writeln("nNodes = ", nNodes);
-
-	for(uint i = 0; i < nNodes; i++)
-	{
-		buffer.read!(double);
-		buffer.read!(double);
-	}
-
-	auto nEls = buffer.read!ulong;
-	if(nEls != mesh.cells.length)
-	{
-		throw new Exception("Mesh file has different number of cells than solution file.");
-	}
-	//writeln("nEdges = ", nEls);
-	for(uint i = 0; i < nEls; i++)
-	{
-		buffer.read!(double);
-		buffer.read!(double);
-		buffer.read!(double);
-	}
-
-	auto nIe = buffer.read!ulong;
-	//writeln("nIe = ", nIe);
-	for(uint i = 0; i < nIe; i++)
-	{
-		buffer.read!(double);
-		buffer.read!(double);
-		buffer.read!(double);
-		buffer.read!(double);
-	}
-
-	auto nBe = buffer.read!ulong;
-	//writeln("nBe = ", nBe);
-	for(uint i = 0; i < nBe; i++)
-	{
-		buffer.read!(double);
-		buffer.read!(double);
-		buffer.read!(double);
-		buffer.read!(double);
-	}
-
-	auto nTags = buffer.read!ulong;
-	//writeln("nTags = ", nTags);
-	for(uint i = 0; i < nTags; i++)
-	{
-		auto strLen = buffer.read!uint;
-		for(uint j = 0; j < strLen; j++)
-		{
-			auto str = buffer.read!char;
-		}
-	}
-
-	auto nCells = buffer.read!ulong;
-	//writeln("nCells = ", nCells);
-	if(nEls != mesh.cells.length)
-	{
-		throw new Exception("Mesh file has different number of cells than solution file.");
-	}
-
-	for(uint i = 0; i < nCells; i++)
-	{
-		mesh.q[i][0] = buffer.read!(double);
-		mesh.q[i][1] = buffer.read!(double);
-		mesh.q[i][2] = buffer.read!(double);
-		mesh.q[i][3] = buffer.read!(double);
-	}
-
-}
-
-@nogc void saveMatlabMesh(ref UMesh2 mesh, immutable (string) filename)
-{
-	import std.experimental.allocator.mallocator : Mallocator;
-	import std.bitmanip : write;
-
-	ulong nodesSize = cast(ulong)(2*mesh.nodes.length*double.sizeof);
-	ulong e2nSize = cast(ulong)(3*mesh.elements.length*double.sizeof);
-	ulong ieSize = 0;
-	ulong beSize = 0;
-	for(uint i = 0; i < mesh.edges.length; i++)
-	{
-		if(!mesh.edges[i].isBoundary)
-		{
-			ieSize += 4;
-		}
-		else
-		{
-			beSize += 4;
-		}
-	}
-	
-	ieSize *= double.sizeof;
-	beSize *= double.sizeof;
-
-	ulong bNameSize = 0;
-	for(uint i = 0; i < mesh.bTags.length; i++)
-	{
-		bNameSize += (uint.sizeof + mesh.bTags[i].length);  
-	}
-
-	immutable ulong nodeHeaderSize = ulong.sizeof;
-	immutable ulong e2nHeaderSize = ulong.sizeof;
-	immutable ulong ieHeaderSize = ulong.sizeof;
-	immutable ulong beHeaderSize = ulong.sizeof;
-	immutable ulong tagHeaderSize = ulong.sizeof;
-
-	ulong totSize = nodeHeaderSize + e2nHeaderSize + ieHeaderSize + beHeaderSize + tagHeaderSize;
-	totSize += nodesSize + e2nSize + ieSize + beSize + bNameSize;
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
-	scope(exit) Mallocator.instance.deallocate(buffer);
-
-	size_t offset = 0;
-
-	buffer.write!ulong((nodesSize/(2*double.sizeof)), &offset);
-	for(uint i = 0; i < mesh.nodes.length; i++)
-	{
-		buffer.write!(double)(mesh.nodes[i][0], &offset);
-		buffer.write!(double)(mesh.nodes[i][1], &offset);
-	}
-
-	buffer.write!ulong((e2nSize/(3*double.sizeof)), &offset);
-	for(uint i = 0; i < mesh.elements.length; i++)
-	{
-		buffer.write!(double)(mesh.elements[i][0], &offset);
-		buffer.write!(double)(mesh.elements[i][1], &offset);
-		buffer.write!(double)(mesh.elements[i][2], &offset);
-	}
-
-	buffer.write!ulong((ieSize/(4*double.sizeof)), &offset);
-	for(uint i = 0; i < mesh.edges.length; i++)
-	{
-		if(!mesh.edges[i].isBoundary)
-		{
-			buffer.write!(double)(mesh.edges[i].nodeIdx[0] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].nodeIdx[1] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].cellIdx[0] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].cellIdx[1] + 1, &offset);
-		}
-	}
-
-	buffer.write!ulong((beSize/(4*double.sizeof)), &offset);
-	for(uint i = 0; i < mesh.edges.length; i++)
-	{
-		if(mesh.edges[i].isBoundary)
-		{
-			buffer.write!(double)(mesh.edges[i].nodeIdx[0] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].nodeIdx[1] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].cellIdx[0] + 1, &offset);
-			auto bgIdx = mesh.bTags.countUntil(mesh.edges[i].boundaryTag) + 1;
-			buffer.write!(double)(bgIdx, &offset);
-		}
-	}
-
-	buffer.write!ulong(mesh.bTags.length, &offset);
-	for(uint i = 0; i < mesh.bTags.length; i++)
-	{
-		buffer.write!uint(cast(uint)mesh.bTags[i].length, &offset);
-		for(uint j = 0; j < mesh.bTags[i].length; j++)
-		{
-			buffer.write!char(mesh.bTags[i][j], &offset);
-		}
-	}
-
-	char[1024] filenamePtr;
-	filenamePtr[] = 0;
-	filenamePtr[0..filename.length] = filename[];
-	auto file = fopen(filenamePtr.ptr, "wb");
-	ulong writeOffset = 0;
-	while(writeOffset < buffer.length)
-	{
-		ulong chunkSize = 1024*1024*1024;
-		if(buffer.length - writeOffset < chunkSize)
-		{
-			chunkSize = buffer.length - writeOffset;
-		}
-		fwrite(buffer[writeOffset..writeOffset+chunkSize].ptr, ubyte.sizeof, chunkSize, file);
-		writeOffset += chunkSize;
-	}
-	fclose(file);
-}
-
-char[][] readCleanLine(ref File file)
-{
-	return file.readln.strip.chomp.detab.split(' ').filter!(a => a != "").array;
-}
-
-UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
-{
-	UMesh2 mesh;
-	auto file = File(meshFile);
-
-	auto headerLine = file.readCleanLine;
-	immutable uint nNodes = headerLine[0].to!uint;
-	immutable uint nElems = headerLine[1].to!uint;
-	immutable uint nDims = headerLine[2].to!uint;
-
-	enforce(nDims == 2, new Exception(nDims.to!string~" dimensional meshes not supported"));
-
-	if(chatty)
-	{
-		writeln("Importing XFlow mesh "~meshFile);
-		writeln("    nNodes = ", nNodes);
-		writeln("    nElems = ", nElems);
-		writeln("    nDims = ", nDims);
-	}
-
-	for(uint i = 0; i < nNodes; i++)
-	{
-		mesh.nodes ~= file.readCleanLine.to!(double[]);
-	}
-
-	immutable uint nBoundaryGroups = file.readCleanLine[0].to!uint;
-	if(chatty) writeln("    nBoundaryGroups = ", nBoundaryGroups);
-
-	uint[][] bNodes;
-	size_t[] bGroupStart;
-	string[] bTags;
-	for(uint i = 0; i < nBoundaryGroups; i++)
-	{
-		auto boundaryHeader = file.readCleanLine;
-		immutable uint bFaces = boundaryHeader[0].to!uint;
-		immutable uint nodesPerFace = boundaryHeader[1].to!uint;
-		string faceTag;
-		if(boundaryHeader.length == 3)
-		{
-			faceTag = boundaryHeader[2].to!string;
-			bTags ~= faceTag;
-		}
-
-		if(chatty) writeln("        Boundary group ", i, ": faces = ", bFaces, ", nodes per face = ", nodesPerFace, ", tag = ", faceTag);
-
-		bGroupStart ~= bNodes.length;
-		for(uint j = 0; j < bFaces; j++)
-		{
-			auto bn = file.readCleanLine.to!(uint[]);
-			bNodes ~= [bn[0] - 1, bn[$-1] - 1];
-		}
-	}
-
-	uint[][] elements;
-	uint foundElements;
-	uint faces;
-	uint eGroup;
-	while(foundElements < nElems)
-	{
-		char[][] elementLine = file.readCleanLine;
-		uint q = elementLine[1].to!uint;
-		uint subElements = elementLine[0].to!uint;
-
-		enforce((q < 4) && (q != 0), new Exception("Unsuported q"));
-
-		if(elementLine[2].canFind("Tri"))
-		{
-			faces = 3;
-		}
-		else if(elementLine[2].canFind("Quad"))
-		{
-			faces = 4;
-		}
-		else
-		{
-			throw new Exception("Unsuported cell type");
-		}
-
-		if(chatty) writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);
-
-		for(uint i = 0; i < subElements; i++)
-		{
-			auto els = file.readCleanLine.to!(uint[]);
-
-			if(q == 1)
+			foreach(uint j, pa; part)
 			{
-				elements ~= els;
-			}
-			else if(q == 2)
-			{
-				if(faces == 3)
+				if(pa == i)
 				{
-					elements ~= [els[0], els[2], els[5]];
+					uint[] localEl;
+					nodesPerElement ~= cast(uint)bigMesh.elements[j].length; 
+					foreach(uint k, el; bigMesh.elements[j])
+					{
+						// map global node index to new proc local node index
+						localEl ~= (el - 1).localElementMap(localNodes, bigMesh.nodes);
+
+						// Is this edge a boundary edge
+						size_t bIdx = 0;
+						uint b1 = 0;
+						uint b2 = 0;
+						auto bIdx1 = bigMesh.bNodes.countUntil([el - 1, bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1]);
+						auto bIdx2 = bigMesh.bNodes.countUntil([bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1, el - 1]);
+
+						// map global boundary node indexes to proc local boundary node indexes
+						if(bIdx1 >= 0)
+						{
+							bIdx = bIdx1;
+							b1 = localEl[$-1] - 1;
+							b2 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
+						}
+						else if(bIdx2 >= 0)
+						{
+							bIdx = bIdx2;
+							b2 = localEl[$-1] - 1;
+							b1 = (bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1).localElementMap(localNodes, bigMesh.nodes) - 1;
+						}
+
+						if((bIdx1 >= 0) || (bIdx2 >= 0))
+						{
+							// If boundary edge compute local boundary group
+							localbNodesUnsorted ~= [b1, b2];
+
+							bNodeMap ~= tuple(bIdx, cast(uint)localbNodesUnsorted.length - 1);
+						}
+						nElems++;
+					}
+					localElements ~= localEl;
 				}
-				else
+			}
+
+			auto sortedMap = bNodeMap.sort!"a[0] < b[0]";
+
+			foreach(kvPair; sortedMap)
+			{
+				long bGroup = bigMesh.bGroupStart.countUntil!"b < a"(kvPair[0]) - 1;
+
+				localbNodes ~= localbNodesUnsorted[kvPair[1]];
+				if(bGroup < 0)
 				{
-					elements ~= [els[0], els[2], els[8], els[6]];
+					bGroup = bigMesh.bGroups.length - 1;
+				}
+
+				//logln("bIdx = ", kvPair[0], ", unsortedIdx = ", kvPair[1], ", group = ", bigMesh.bTags[bGroup]);
+
+				if(!localbTag.canFind(bigMesh.bTags[bGroup]))
+				{
+					localbTag ~= bigMesh.bTags[bGroup];
+					localbGroupStart ~= cast(uint)localbNodes.length - 1;
+				}
+			}
+
+			// compute communication edges
+			foreach(uint j, edge; bigMesh.interiorEdges.map!(a => bigMesh.edges[a]).array)
+			{
+				// Is edge comm boundary
+				if(((part[edge.cellIdx[0]] == i) && (part[edge.cellIdx[1]] != i)) ||
+					((part[edge.cellIdx[1]] == i) && (part[edge.cellIdx[0]] != i)))
+				{
+					// map edge nodes
+					uint n1 = edge.nodeIdx[0].localElementMap(localNodes, bigMesh.nodes) - 1;
+					uint n2 = edge.nodeIdx[1].localElementMap(localNodes, bigMesh.nodes) - 1;
+					commEdges ~= [n1, n2];
+
+					uint partIdx = 0;
+					if(part[edge.cellIdx[0]] != i)
+					{
+						partIdx = edge.cellIdx[0];
+					}
+					else if(part[edge.cellIdx[1]] != i)
+					{
+						partIdx = edge.cellIdx[1];
+					}
+
+					// add comm proc to commP if not already in there.
+					auto cIdx = commP.countUntil(part[partIdx]);
+					if(cIdx < 0)
+					{
+						if(!edge.isBoundary)
+						{
+							commP ~= part[partIdx];
+							commEdgeList.length++;
+							cIdx = commP.length - 1;
+						}
+					}
+
+					if(!edge.isBoundary)
+					{
+						commEdgeList[cIdx] ~= CommEdgeNodes(n1, n2);
+					}
+				}
+			}
+
+			logln("Proc ", i, " comm: ", commP);
+
+			uint[] flatElementMap = localElements.joiner.array;
+			double[] flatNodes = localNodes.joiner.array;
+
+			//localbGroupStart ~= cast(uint)localbNodes.length;
+			//localbNodes ~= commEdges;
+			//localbTag ~= "Comm";
+
+			if(i != 0)
+			{
+				comm.send!uint(2, i, partTag);
+				comm.sendArray(flatElementMap, i, partTag);
+				comm.sendArray(nodesPerElement, i, partTag);
+				comm.sendArray(flatNodes, i, partTag);
+				comm.sendArray(localbGroupStart.to!(uint[]), i, partTag);
+
+				uint[] flatBnodes = localbNodes.joiner.array;
+				comm.sendArray(flatBnodes, i, partTag);
+
+				comm.send!uint(cast(uint)localbTag.length, i, partTag);
+				foreach(tag; localbTag)
+				{
+					comm.sendArray!char(tag.to!(char[]), i, partTag);
+				}
+
+				comm.sendArray(commP, i, partTag);
+
+				comm.send!uint(cast(uint)commEdgeList.length, i, partTag);
+				foreach(commEdge; commEdgeList)
+				{
+					comm.sendArray(commEdge, i, partTag);
 				}
 			}
 			else
 			{
-				if(faces == 3)
+				smallMesh = UMesh2(cast(uint)localElements.length);
+				smallMesh.elements = localElements;
+				foreach(uint j, el; smallMesh.elements)
 				{
-					elements ~= [els[0], els[3], els[9]];
+					smallMesh.cells[j].nEdges = cast(uint)el.length;
 				}
-				else
-				{
-					elements ~= [els[0], els[3], els[15], els[12]];
-				}
+				smallMesh.q = new Vector!4[smallMesh.cells.length];
+
+				smallMesh.nodes = localNodes[];
+				smallMesh.bGroupStart = localbGroupStart.to!(size_t[]);
+				smallMesh.bNodes = localbNodes[];
+				smallMesh.bTags = localbTag[];
+				smallMesh.commProc = commP;
+				smallMesh.commEdgeLists = commEdgeList;
+				logln("Local elements: ", smallMesh.elements.length);
+			}
+
+		}
+		logln("Finished partitioning");
+	}
+	else
+	{
+		immutable auto dims = comm.recv!uint(0, partTag);
+		auto flatLocalElements = comm.recvArray!uint(0, partTag);
+		auto nodesPerElement = comm.recvArray!uint(0, partTag);
+		auto flatLocalNodes = comm.recvArray!double(0, partTag);
+		auto bGroupStart = comm.recvArray!uint(0, partTag);
+
+		smallMesh.bGroupStart = bGroupStart.to!(size_t[]);
+
+		auto flatBnodes = comm.recvArray!uint(0, partTag);
+
+		auto nBTags = comm.recv!uint(0, partTag);
+		for(uint i = 0; i < nBTags; i++)
+		{
+			smallMesh.bTags ~= comm.recvArray!(char)(0, partTag).to!string;
+		}
+
+		auto commP = comm.recvArray!uint(0, partTag);
+
+		auto nCommEdges = comm.recv!uint(0, partTag);
+		CommEdgeNodes[][] commEdgeList;
+		for(uint i = 0; i < nCommEdges; i++)
+		{
+			commEdgeList ~= comm.recvArray!CommEdgeNodes(0, partTag);
+		}
+
+		smallMesh.commProc = commP;
+		smallMesh.commEdgeLists = commEdgeList;
+
+		auto nNodes = flatLocalNodes.length/dims;
+
+		// unpack node coords
+		for(uint i = 0; i < flatLocalNodes.length; i += dims)
+		{
+			double[] node;
+			for(uint j = 0; j < dims; j++)
+			{
+				node ~= flatLocalNodes[i + j];
+			}
+			smallMesh.nodes ~= node;
+		}
+		
+		// unpack elements
+		uint npeIdx = 0;
+		for(uint i = 0; i < flatLocalElements.length; i += nodesPerElement[npeIdx])
+		{
+			uint[] element;
+			for(uint j = 0; j < nodesPerElement[npeIdx]; j++)
+			{
+				element ~= flatLocalElements[i + j];
+			}
+			UCell2 cell;
+			cell.nEdges = nodesPerElement[npeIdx];
+			smallMesh.cells ~= cell;
+
+			smallMesh.elements ~= element;
+			npeIdx++;
+			if(npeIdx >= nodesPerElement.length)
+			{
+				npeIdx = cast(uint)nodesPerElement.length - 1;
 			}
 		}
-
-		foundElements += subElements;
-		eGroup++;
-	}
 	
-	mesh.cells = new UCell2[nElems];
-	mesh.q = new Vector!4[nElems];
+		logln("Local elements: ", smallMesh.elements.length);
 
-	for(uint i = 0; i < nElems; i++)
-	{
-		mesh.cells[i].nEdges = faces;
-	}
-	mesh.elements = elements;
-	mesh.bNodes = bNodes;
-	mesh.bGroupStart = bGroupStart;
-	mesh.bTags = bTags;
-	mesh.buildMesh;
+		smallMesh.q = new Vector!4[smallMesh.cells.length];
 
-	return mesh;
-}
-
-UMesh2 parseSu2Mesh(string meshFile)
-{
-	UMesh2 mesh;
-	auto file = File(meshFile);
-	bool readingCells = false;
-	bool readingNodes = false;
-	uint numCells = 0;
-	uint cellIdx = 0;
-	uint numNodes = 0;
-	uint nodeIdx = 0;
-	uint numDims = 0;
-
-	uint[] elements;
-
-	foreach(line; file.byLine)
-	{
-		auto cleanLine = line.strip.chomp;
-		if(cleanLine.indexOf("NDIME") > -1)
+		for(uint i = 0; i < flatBnodes.length; i += dims)
 		{
-			numDims = cleanLine.split("=")[$-1].strip.to!uint;
-			writeln("Number of dimensions = "~numDims.to!string);
-		}
-		else if(cleanLine.indexOf("NELEM") > -1)
-		{
-			numCells = cleanLine.split("=")[$-1].strip.to!uint;
-			readingCells = true;
-			writeln("Number of cells = "~numCells.to!string);
-		}
-		else if(readingCells)
-		{
-
+			uint[] node;
+			for(uint j = 0; j < dims; j++)
+			{
+				node ~= flatBnodes[i + j];
+			}
+			smallMesh.bNodes ~= node;
 		}
 	}
 
-	return mesh;
+	MPI_Barrier(comm);
+
+	return smallMesh;
 }
 
 @nogc Vec buildQ(double rho, double u, double v, double p)
