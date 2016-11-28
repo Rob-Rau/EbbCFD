@@ -619,28 +619,9 @@ MPI_Datatype vec4dataType;
 			with(BoundaryType)
 		{
 			case FullState:
-				//printf("Cell idx 0 = %d\n", edge.cellIdx[0]);
-				//printf("Cell idx 1 = %d\n", edge.cellIdx[1]);
-				//printf("i = %d; q0 = %f, %f, %f, %f\n", i, q[edge.cellIdx[0]][0], q[edge.cellIdx[0]][1], q[edge.cellIdx[0]][2], q[edge.cellIdx[0]][3]);
 				q[edge.cellIdx[1]] = q[edge.cellIdx[0]];
 				break;
 			case InviscidWall:
-				/+
-				auto cellIdx = edge.cellIdx[0];
-				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
-				// rotate velocity into edge frame.
-				auto localV = edge.rotMat*v;
-				// flip normal velocity component;
-				localV[1] = -localV[1];
-				auto inv = Matrix!(2,2)(0);
-				invert(inv, edge.rotMat);
-				// rotate back into global frame
-				auto newV = inv*localV;
-				auto cellIdx2 = edge.cellIdx[1];
-				// update ghost cell
-				q[cellIdx2] = q[cellIdx];
-				// TODO: Fix this for wall boundaries
-				+/
 				auto cellIdx = edge.cellIdx[0];
 				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
 				immutable double x1 = mesh.nodes[edge.nodeIdx[0]][0];
@@ -665,8 +646,7 @@ MPI_Datatype vec4dataType;
 				q[cellIdx2][1] = q[cellIdx][0]*newV[0];
 				q[cellIdx2][2] = q[cellIdx][0]*newV[1];
 				q[cellIdx2][3] = q[cellIdx][3];
-				
-				// reflect
+
 			 	break;
 
 			default:
@@ -1159,6 +1139,7 @@ MPI_Datatype vec4dataType;
 				mesh.cells[i].dt = config.CFL*mesh.cells[i].d/sAve;
 				if(mesh.cells[i].dt.isNaN)
 				{
+					//printf("dt is nan\n");
 					mesh.cells[i].dt = 0;
 					//printf("R = [%.10e, %.10e, %.10e, %.10e]\n", R[0], R[1], R[2], R[3]);
 					/+

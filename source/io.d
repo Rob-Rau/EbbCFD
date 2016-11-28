@@ -7,13 +7,27 @@ import std.array;
 import std.conv;
 import std.exception;
 import std.file;
-import std.stdio;
+import std.meta;
+import std.stdio : File, writeln;
 import std.string;
 
 import numd.linearalgebra.matrix;
 
 import ebb.mesh;
 
+/+
+@nogc writeln(T...)(T args)
+{
+	//string printfCall = "printf(\"\");";
+	char[512] printfCall;
+	foreach(arg; AliasSeq!args)
+	{
+		//printfCall ~= arg.stringof;
+	}
+
+	//mixin(printfCall);
+}
++/
 struct MeshHeader
 {
 	const uint meshMagic = 0xB1371AC7;

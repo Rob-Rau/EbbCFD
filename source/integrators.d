@@ -369,7 +369,7 @@ struct RK2_TVD
 		double newDt = double.infinity;
 
 		//Euler.step!solver(R, qFE, mesh, config, newDt, Rmax, ex);
-		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
+		solver(R, mesh.q, mesh, config, newDt, Rmax, true, config.localTimestep, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
@@ -390,7 +390,7 @@ struct RK2_TVD
 			tmp[i] = mesh.q[i] + (dt*k1[i]);
 		}
 		*/
-		solver(k2, qFE, mesh, config, newDt, Rmax, false, false, ex);
+		solver(k2, qFE, mesh, config, newDt, Rmax, false, !config.localTimestep, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
