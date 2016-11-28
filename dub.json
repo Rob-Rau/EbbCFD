@@ -12,7 +12,8 @@
 			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/plotter.d",
-				"source/post.d"
+				"source/post.d",
+				"source/meshopt.d"
 			],
 			"name": "solver",
 			"targetName": "ebb-solve",
@@ -20,9 +21,21 @@
 		},
 		{
 			"excludedSourceFiles": [
+				"source/mesher.d",
+				"source/plotter.d",
+				"source/post.d",
+				"source/solve.d"
+			],
+			"name": "meshopt",
+			"targetName": "ebb-meshopt",
+			"targetType": "executable"
+		},
+		{
+			"excludedSourceFiles": [
 				"source/solver.d",
 				"source/plotter.d",
-				"source/post.d"
+				"source/post.d",
+				"source/meshopt.d"
 			],
 			"name": "mesher",
 			"targetName": "ebb-mesh",
@@ -32,7 +45,8 @@
 			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/solver.d",
-				"source/post.d"
+				"source/post.d",
+				"source/meshopt.d"
 			],
 			"name": "plotter",
 			"targetName": "ebb-plot",
@@ -42,7 +56,8 @@
 			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/solver.d",
-				"source/plotter.d"
+				"source/plotter.d",
+				"source/meshopt.d"
 			],
 			"name": "post",
 			"targetName": "ebb-post",
