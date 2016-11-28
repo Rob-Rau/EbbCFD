@@ -13,7 +13,6 @@ import ebb.mpid;
 import numd.utility;
 import numd.linearalgebra.matrix;
 
-//alias integratorList = aliasSeqOf!(["BEuler", "Euler", "RK2", "RK2_TVD", "RK4"]);
 alias integratorList = aliasSeqOf!(["Euler", "RK2", "RK2_TVD", "RK4"]);
 
 @nogc Vector!4 abs(Vector!4 data)
@@ -290,29 +289,27 @@ struct RK4
 
 		double newDt = double.infinity;
 
-		//MPI_Barrier(mesh.comm);
-
 		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k1[i]);
 		}
-		//MPI_Barrier(mesh.comm);
+
 		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k2[i]);
 		}
-		//MPI_Barrier(mesh.comm);
+
 		solver(k3, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + (dt*k3[i]);
 		}
-		//MPI_Barrier(mesh.comm);
+
 		solver(k4, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
 
 		foreach(i; mesh.interiorCells)
@@ -367,8 +364,7 @@ struct RK2_TVD
 		import core.stdc.stdio : printf;
 
 		double newDt = double.infinity;
-
-		//Euler.step!solver(R, qFE, mesh, config, newDt, Rmax, ex);
+		
 		solver(R, mesh.q, mesh, config, newDt, Rmax, true, config.localTimestep, ex);
 
 		foreach(i; mesh.interiorCells)
@@ -383,13 +379,6 @@ struct RK2_TVD
 			}
 		}
 
-		//solver(k1, mesh.q, mesh, config, newDt, Rmax, ex);
-		/*
-		for(uint i = 0; i < tmp.length; i++)
-		{
-			tmp[i] = mesh.q[i] + (dt*k1[i]);
-		}
-		*/
 		solver(k2, qFE, mesh, config, newDt, Rmax, false, !config.localTimestep, ex);
 
 		foreach(i; mesh.interiorCells)
@@ -402,7 +391,6 @@ struct RK2_TVD
 			else
 			{
 				q[i] = 0.5*(mesh.q[i] + qFE[i] + mesh.cells[i].dt*k2[i]);
-				//q[i] = mesh.q[i] + (mesh.cells[i].dt/2.0)*(k1[i] + k2[i]);
 			}
 		}
 

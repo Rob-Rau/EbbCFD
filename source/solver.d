@@ -336,7 +336,7 @@ static shared bool interrupted = false;
 
 		import std.algorithm : sum;
 
-		@nogc double computeResidual(double[] now, double[] last)
+		@nogc double computeRMSResidual(double[] now, double[] last)
 		{
 			tmp[] = (now[] - last[])^^2;
 			double tmpSum = tmp.sum;
@@ -348,27 +348,18 @@ static shared bool interrupted = false;
 			return sqrt(cast(double)totLen*tmpSum)/valSum;
 		}
 
-		residRho = computeResidual(thisRho, lastRho);
-		residU = computeResidual(thisU, lastU);
-		residV = computeResidual(thisV, lastV);
-		residE = computeResidual(thisE, lastE);
-		/*
-		tmp[] = (thisRho[] - lastRho[])^^2;
-		residRho = sqrt(mesh.cells.length*tmp.sum)/thisRho.sum;
-		tmp[] = (thisU[] - lastU[])^^2;
-		residU = sqrt(mesh.cells.length*tmp.sum)/thisU.sum;
-		tmp[] = (thisV[] - lastV[])^^2;
-		residV = sqrt(mesh.cells.length*tmp.sum)/thisV.sum;
-		tmp[] = (thisE[] - lastE[])^^2;
-		residE = sqrt(mesh.cells.length*tmp.sum)/thisE.sum;
-		*/
-		//MPI_Allreduce(&residRho, &residRho, 1, MPI_DOUBLE, MPI_)
+		residRho = computeRMSResidual(thisRho, lastRho);
+		residU = computeRMSResidual(thisU, lastU);
+		residV = computeRMSResidual(thisV, lastV);
+		residE = computeRMSResidual(thisE, lastE);
+
 		lastRho[] = thisRho[];
 		lastU[] = thisU[];
 		lastV[] = thisV[];
 		lastE[] = thisE[];
 
 		auto f = mesh.computeBoundaryForces(config.forceBoundary);
+
 		if(mesh.mpiRank == 0)
 		{
 			ld = rotMat*f;
@@ -558,13 +549,10 @@ static shared bool interrupted = false;
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
-				//mesh.edges[mesh.bGroups[i][j]].q[1] = buildQ(rho, u, v, p);
-				//printf("bGroup = %d\n", mesh.bGroups[i][j]);
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-				//printf("i = %d; q0 = %f, %f, %f, %f\n", mesh.bGroups[i][j], mesh.edges[mesh.bGroups[i][j]].q[1][0], mesh.edges[mesh.bGroups[i][j]].q[1][1], mesh.edges[mesh.bGroups[i][j]].q[1][2], mesh.edges[mesh.bGroups[i][j]].q[1][3]);
 			}
 		}
 	}
@@ -575,8 +563,6 @@ MPI_Datatype vec4dataType;
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
-	//MPI_Barrier(mesh.comm);
-
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
 		foreach(i, edge; commEdges)
@@ -814,13 +800,11 @@ MPI_Datatype vec4dataType;
 
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
-					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
 					
 					for(uint j = 0; j < dims; j++)
 					{
 						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
 														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
 
 					if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -833,7 +817,6 @@ MPI_Datatype vec4dataType;
 						}
 						for(uint j = 0; j < dims; j++)
 						{
-							//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
 							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
 						}
 					}
@@ -842,7 +825,6 @@ MPI_Datatype vec4dataType;
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];
 
-				//printf("edge = %d\n", i);
 				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
 				{
@@ -872,13 +854,11 @@ MPI_Datatype vec4dataType;
 					auto mid = mesh.edges[i].mid;
 					auto dx = mid[0] - centroid[0];
 					auto dy = mid[1] - centroid[1];
-					//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
-					
+
 					for(uint j = 0; j < dims; j++)
 					{
 						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
 														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-						//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 					}
 
 					if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -892,7 +872,6 @@ MPI_Datatype vec4dataType;
 
 						for(uint j = 0; j < dims; j++)
 						{
-							//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
 							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 						}
 					}
@@ -912,7 +891,6 @@ MPI_Datatype vec4dataType;
 				
 				auto qL = mesh.edges[i].q[0];
 				auto qR = q[mesh.edges[i].cellIdx[1]];
-				//mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 				
 				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
 				{
@@ -953,18 +931,14 @@ MPI_Datatype vec4dataType;
 				auto grad = mesh.cells[mesh.edges[i].cellIdx[k]].gradient;
 				auto centroid = mesh.cells[mesh.edges[i].cellIdx[k]].centroid;
 				auto mid = mesh.edges[i].mid;
-				//auto mid = mesh.edges[eIdx].mid;
-				//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(k+1)%2]].centroid;
 
 				auto dx = mid[0] - centroid[0];
 				auto dy = mid[1] - centroid[1];
-				//auto lim = mesh.cells[mesh.edges[i].cellIdx[k]].lim;
-				
+
 				for(uint j = 0; j < dims; j++)
 				{
 					mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
 													mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
-					//mesh.edges[i].q[k][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 				}
 
 				if(getPressure(mesh.edges[i].q[k]) < 0)
@@ -978,7 +952,6 @@ MPI_Datatype vec4dataType;
 
 					for(uint j = 0; j < dims; j++)
 					{
-						//mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
 						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 					}
 				}
@@ -1014,7 +987,6 @@ MPI_Datatype vec4dataType;
 			if(config.order == 1)
 			{
 				mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-				//mesh.edges[i].q[1] = q[mesh.edges[i].cellIdx[1]];
 			}
 			else
 			{
@@ -1022,18 +994,14 @@ MPI_Datatype vec4dataType;
 				auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
 				auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
 				auto mid = mesh.edges[i].mid;
-				//auto mid = mesh.edges[eIdx].mid;
-				//Vector!2 mid = mesh.cells[mesh.edges[i].cellIdx[(0+1)%2]].centroid;
-
+				
 				auto dx = mid[0] - centroid[0];
 				auto dy = mid[1] - centroid[1];
-				//auto lim = mesh.cells[mesh.edges[i].cellIdx[0]].lim;
 				
 				for(uint j = 0; j < dims; j++)
 				{
 					mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
 													mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-					//mesh.edges[i].q[0][j] = qM[j] + lim*(grad[j][0]*dx + grad[j][1]*dy);
 				}
 
 				if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -1047,7 +1015,6 @@ MPI_Datatype vec4dataType;
 
 					for(uint j = 0; j < dims; j++)
 					{
-						//mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j]*(grad[j][0]*dx + grad[j][1]*dy);
 						mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 					}
 				}
@@ -1141,16 +1108,6 @@ MPI_Datatype vec4dataType;
 				{
 					//printf("dt is nan\n");
 					mesh.cells[i].dt = 0;
-					//printf("R = [%.10e, %.10e, %.10e, %.10e]\n", R[0], R[1], R[2], R[3]);
-					/+
-					printf("%.10e\n", mesh.cells[i].perim);
-					//printf("%.10e\n", mesh.cells[i].perim);
-					printf("%.10e\n", sAve);
-					ex.msg = "dt is NaN";
-					ex.line = __LINE__;
-					ex.file = __FILE__;
-					throw ex;
-					+/
 				}
 			}
 		}
@@ -1201,10 +1158,6 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
 			umesh.comm = MPI_COMM_WORLD;
 			umesh.mpiRank = id;
-			//umesh.buildMesh;
-			
-			//core.stdc.stdlib.abort;
-			//return;
 		}
 
 		umesh.buildMesh;
