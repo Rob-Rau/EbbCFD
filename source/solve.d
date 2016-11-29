@@ -55,7 +55,7 @@ int main(string[] args)
 		saveFile ~= id.to!string ~ ".esln";
 	}
 
-	startComputation(config, saveFile, p, id);
+	startComputation(config, saveFile, p, -1, id);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	double elapsed = MPI_Wtime() - startTime;

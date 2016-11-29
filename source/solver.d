@@ -186,7 +186,7 @@ static shared bool interrupted = false;
 	}
 }
 
-@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, SolverException ex)
+@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, int runIterations, SolverException ex)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -284,7 +284,8 @@ static shared bool interrupted = false;
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 	MPI_Barrier(mesh.comm);
-	while((t < config.tEnd) && !atomicLoad(interrupted))
+	bool done = false;
+	while(!done && !atomicLoad(interrupted))
 	{
 		double Rmax = 0;
 		double newDt = dt;
@@ -452,7 +453,23 @@ static shared bool interrupted = false;
 		printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
 		printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
 	}
+
+	if(runIterations < 0)
+	{
+		if(t < config.tEnd)
+		{
+			done = true;
+		}
+	}
+	else
+	{
+		if(iterations == runIterations)
+		{
+			done = true;
+		}
+	}
 }
+
 
 @nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile, SolverException ex)
 {
@@ -1133,7 +1150,7 @@ MPI_Datatype vec4dataType;
 	MPI_Allreduce(&Rmax, &Rmax, 1, MPI_DOUBLE, MPI_MAX, mesh.comm);
 }
 
-void startComputation(Config config, string saveFile, uint p, uint id)
+void startComputation(Config config, string saveFile, uint p, int runIterations, uint id)
 {
 	try
 	{
@@ -1194,7 +1211,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 											writeln("-limiter: "~lim);
 											writeln("-flux: "~fl);
 											writeln("-integrator: "~inte);
-											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, ex);
+											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, runIterations, ex);
 											break;
 									}
 								}

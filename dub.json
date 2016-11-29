@@ -4,7 +4,7 @@
 	"copyright": "Copyright © 2016, Robert F. Rau II",
 	"authors": ["Robert F. Rau II"],
 	"dependencies": {
-		"numd": "~master",
+		"numd": "~587_Project",
 		"mpi": "~master"
 	},
 	"configurations": [
