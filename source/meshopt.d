@@ -129,14 +129,120 @@ void startOptimization(Config config, string saveFile, uint p, int runIterations
 
 class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 {
+	import std.experimental.allocator.mallocator : Mallocator;
+	import std.bitmanip : write;
+
+	UMesh2 bigMesh;
+	int mpiRank;
+
+	double residRho = 0.0;
+	double residU = 0.0;
+	double residV = 0.0;
+	double residE = 0.0;
+	double residMax = 0.0;
+
+	double[] lastRho;
+	double[] thisRho;
+	double[] lastU;
+	double[] thisU;
+	double[] lastV;
+	double[] thisV;
+	double[] lastE;
+	double[] thisE;
+	double[] tmp;
+	ubyte[] forceBuffer;
+	Vector!4[] R;
+
+	double lastRmax = 0.0;
+
 	this(Config config)
 	{
 		Constraints = 1;
+		if(mpiRank == 0)
+		{
+			if(config.meshFile.canFind(".gri"))
+			{
+				bigMesh = parseXflowMesh(config.meshFile);
+				bigMesh.comm = MPI_COMM_SELF;
+				bigMesh.mpiRank = mpiRank;
+			}
+			else
+			{
+				writeln("Unsupported mesh format, exiting");
+				return;
+			}
+		}
+
+		double residRhoLast = double.infinity;
+
+		uint residRhoIncIters = 0;
+
+		uint iterations = 0;
+		uint saveItr = 0;
+		double t = 0;
+		double dt = config.dt;
+
+		auto rotMat = Matrix!(2, 2)(cos(config.ic[1] * (PI/180)), -sin(config.ic[1] * (PI/180)), sin(config.ic[1] * (PI/180)), cos(config.ic[1] * (PI/180)));
+		auto ld = Vector!2(0);
+
+/+
+		FILE* forceFile;
+		if(mesh.mpiRank == 0)
+		{
+			forceFile = fopen("boundaryForces.frc", "wb");
+		}
++/
+
+		// Setup IC's and BC's
+		//setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
+		//MPI_Barrier(mesh.comm);
+		bool done = false;
+
 	}
 
 	final override Complex!double Compute(Complex!double[] designVar)
 	{
+		UMesh2 mesh;
+		// let the integrator do any neccessary initialization
+		integrator.init(mesh);
 
+		immutable uint buffSize = 3*1024*1024*double.sizeof;
+		size_t buffPos = 0;
+		
+		lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		lastU = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		thisU = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		lastV = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		thisV = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		lastE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		thisE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+		forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
+		R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+		
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastRho);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisRho);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastU);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisU);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastV);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisV);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastE);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisE);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])tmp);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])forceBuffer);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])R);
+		
+		
+		lastRho[] = 0.0;
+		thisRho[] = 0.0;
+		lastU[] = 0.0;
+		thisU[] = 0.0;
+		lastV[] = 0.0;
+		thisV[] = 0.0;
+		lastE[] = 0.0;
+		thisE[] = 0.0;
+		tmp[] = 0.0;
 
 		return complex(0.0, 0.0);
 	}
@@ -200,5 +306,5 @@ int main(string[] args)
 	
 	return MPI_Shutdown;
 	+/
-	return 0;
+	return MPI_Shutdown;
 }
