@@ -7,13 +7,27 @@ import std.array;
 import std.conv;
 import std.exception;
 import std.file;
-import std.stdio;
+import std.meta;
+import std.stdio : File, writeln;
 import std.string;
 
 import numd.linearalgebra.matrix;
 
 import ebb.mesh;
 
+/+
+@nogc writeln(T...)(T args)
+{
+	//string printfCall = "printf(\"\");";
+	char[512] printfCall;
+	foreach(arg; AliasSeq!args)
+	{
+		//printfCall ~= arg.stringof;
+	}
+
+	//mixin(printfCall);
+}
++/
 struct MeshHeader
 {
 	const uint meshMagic = 0xB1371AC7;
@@ -192,7 +206,7 @@ struct SlnHeader
 	crc.put(buffer[0..4]);
 	uint dataPoints = buffer.peek!uint;
 
-	if(dataPoints != mesh.q.length)
+	if(dataPoints != mesh.interiorCells.length)
 	{
 		return false;
 	}
@@ -204,7 +218,8 @@ struct SlnHeader
 	crc.put(buffer[]);
 	dt = buffer.peek!double;
 
-	for(uint i = 0; i < mesh.q.length; i++)
+	//for(uint i = 0; i < mesh.q.length; i++)
+	foreach(i; mesh.interiorCells)
 	{
 		fread(buffer.ptr, 1, 8, file);
 		crc.put(buffer[]);
