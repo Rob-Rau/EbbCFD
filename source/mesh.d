@@ -402,7 +402,7 @@ struct UMesh2
 			}
 		}
 
-		MPI_Barrier(comm);
+		//MPI_Barrier(comm);
 		// We now need to distribute cell centroids to neighboring 
 		// processors so they can set up their ghost cells
 		foreach(commIdx, commEdges; commEdgeIdx)
@@ -952,7 +952,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 		}
 	}
 
-	MPI_Barrier(comm);
+	//MPI_Barrier(comm);
 
 	return smallMesh;
 }
