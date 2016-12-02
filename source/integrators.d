@@ -86,6 +86,30 @@ struct BEuler
 		}
 	}
 
+	@nogc static void reinit(ref UMesh2 mesh)
+	{
+		import std.experimental.allocator.mallocator : Mallocator;
+		if(initialized)
+		{
+			Mallocator.instance.deallocate(tmp);
+			Mallocator.instance.deallocate(f1);
+			Mallocator.instance.deallocate(f2);
+			Mallocator.instance.deallocate(qLast);
+			Mallocator.instance.deallocate(qNext);
+			initialized = false;
+		}
+
+		if(!initialized)
+		{
+			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			f1 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			f2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			qNext = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			qLast = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			initialized = true;
+		}
+	}
+
 	@nogc static ~this()
 	{
 		if(initialized)
@@ -221,6 +245,11 @@ struct Euler
 
 	}
 
+	@nogc static void reinit(ref UMesh2 mesh)
+	{
+
+	}
+
 	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
 	{
 		double newDt = double.infinity;
@@ -258,6 +287,30 @@ struct RK4
 	@nogc static void init(ref UMesh2 mesh)
 	{
 		import std.experimental.allocator.mallocator : Mallocator;
+		if(!initialized)
+		{
+			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k1 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k3 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k4 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			initialized = true;
+		}
+	}
+
+	@nogc static void reinit(ref UMesh2 mesh)
+	{
+		import std.experimental.allocator.mallocator : Mallocator;
+		if(initialized)
+		{
+			Mallocator.instance.deallocate(tmp);
+			Mallocator.instance.deallocate(k1);
+			Mallocator.instance.deallocate(k2);
+			Mallocator.instance.deallocate(k3);
+			Mallocator.instance.deallocate(k4);
+			initialized = false;
+		}
+
 		if(!initialized)
 		{
 			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
@@ -347,6 +400,26 @@ struct RK2_TVD
 		}
 	}
 
+	@nogc static void reinit(ref UMesh2 mesh)
+	{
+		import std.experimental.allocator.mallocator : Mallocator;
+		if(initialized)
+		{
+			Mallocator.instance.deallocate(tmp);
+			Mallocator.instance.deallocate(qFE);
+			Mallocator.instance.deallocate(k2);
+			initialized = false;
+		}
+
+		if(!initialized)
+		{
+			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			qFE = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			initialized = true;
+		}
+	}
+
 	@nogc static ~this()
 	{
 		if(initialized)
@@ -411,6 +484,26 @@ struct RK2
 	@nogc static void init(ref UMesh2 mesh)
 	{
 		import std.experimental.allocator.mallocator : Mallocator;
+		if(!initialized)
+		{
+			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k1 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			k2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+			initialized = true;
+		}
+	}
+
+	@nogc static void reinit(ref UMesh2 mesh)
+	{
+		import std.experimental.allocator.mallocator : Mallocator;
+		if(initialized)
+		{
+			Mallocator.instance.deallocate(tmp);
+			Mallocator.instance.deallocate(k1);
+			Mallocator.instance.deallocate(k2);
+			initialized = false;
+		}
+
 		if(!initialized)
 		{
 			tmp = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
