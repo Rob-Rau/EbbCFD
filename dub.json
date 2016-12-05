@@ -60,11 +60,11 @@
 		},
 		"flux-release": {
 			"buildOptions": ["releaseMode", "inline"],
-			"dflags": ["-O5", "-I/home/rrau/numd", "-profile"],
+			"dflags": ["-O5", "-I/home/rrau/numd"],
 			"lflags": ["-L/usr/lib64", "-L$HOME/lib", "-L$HOME/ldc2-1.0.0-linux-x86_64/lib", "-L$PARMETIS_LIB", "-L$METIS_LIB", "-L$MPI_HOME/lib"]
 		},
                 "prof-release": {
-                        "buildOptions": ["releaseMode", "inline"],
+                        "buildOptions": ["releaseMode", "inline", "optimize"],
                         "dflags": ["-I/home/rrau/numd", "-profile"],
                         "lflags": ["-L/usr/lib64", "-L$HOME/lib", "-L$HOME/ldc2-1.0.0-linux-x86_64/lib", "-L$PARMETIS_LIB", "-L$METIS_LIB", "-L$MPI_HOME/lib"]
                 },
