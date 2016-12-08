@@ -13,6 +13,7 @@ import std.stdio;
 
 import numd.utility;
 import numd.linearalgebra.matrix;
+import numd.optimization.ArrayOps;
 import numd.optimization.ObjectiveFunction;
 import numd.optimization.Optimizer;
 import numd.optimization.Gradient;
@@ -70,7 +71,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		//import std.array : split;
 		//saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 
-		ObjectiveFunction meshOpt;
+		AbstractMeshOpt meshOpt;
 		final switch(config.limiter)
 		{
 			foreach(lim; limiterList)
@@ -111,14 +112,19 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 
 		auto sqp = new SQP;
 
-		meshOpt.DerivativeType = "numd.optimization.FiniteDifference.FiniteDifference";
-		meshOpt.StepSize = 1.0e-2;
+		meshOpt.DerivativeType = "numd.optimization.FiniteDifference.FiniteDifferenceEqualized";
+		meshOpt.StepSize = 5.0e-2;
+		meshOpt.runIterations = 30;
 
+		sqp.DebugMode = true;
 		sqp.InitialGuess = new double[p];
 		sqp.InitialGuess[] = 1.0/(cast(double)p);
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
 		sqp.FileOutput = false;
+		sqp.Tolerance = 1.0e-3;
+		sqp.id = id;
+		//sqp.Eta = 0.001;
 		logln("Starting optimization");
 		MPI_Barrier(MPI_COMM_WORLD);
 		Result result = sqp.Optimize(meshOpt);
@@ -149,7 +155,12 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 	}
 }
 
-class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
+abstract class AbstractMeshOpt : ObjectiveFunction
+{
+	uint runIterations;
+}
+
+class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -193,6 +204,9 @@ class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 	uint totalIterations;
 	uint saveItr;
 	int p;
+
+	double minTime = double.infinity;
+	double[] bestWeights;
 
 	this(Config config, int p, int rank)
 	{
@@ -245,23 +259,52 @@ class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 		//setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
 		//MPI_Barrier(mesh.comm);
 		bool done = false;
+		bestWeights = new double[p];
 	}
 
 	final override Complex!double Compute(Complex!double[] designVar)
 	{
+		return doCompute(designVar, 0);
+	}
+
+	Complex!double doCompute(Complex!double[] designVar, int depth)
+	{
 		MPI_Barrier(MPI_COMM_WORLD);
-		logln("in compute");
+		//logln("in compute");
 		UMesh2 mesh;
 
-		logln("paritioning mesh");
-		mesh = partitionMesh(bigMesh, p, mpiRank, MPI_COMM_WORLD);
+		//logln("paritioning mesh");
+		double[] w = new double[p];
+		w[] = 1.0/(cast(double)p);
+
+		double equalTime = 1.0;
+		if(depth == 0)
+		{
+			//equalTime = doCompute(w.complex, 1).re;
+		}
+
+		foreach(uint i, dv; designVar)
+		{
+			w[i] = dv.re;
+		}
+
+		if(mpiRank == 0)
+		{
+			//if(depth == 0) logln("w = ", w);
+		}
+		
+		//logln("partSum = ", designVar.sum!".re");
+		mesh = partitionMesh(bigMesh, p, mpiRank, MPI_COMM_WORLD, w);
+		MPI_Barrier(MPI_COMM_WORLD);
 		mesh.comm = MPI_COMM_WORLD;
 		mesh.mpiRank = mpiRank;
 
-		logln("building mesh");
+		//logln("building mesh");
 		mesh.buildMesh;
+		MPI_Barrier(MPI_COMM_WORLD);
+		//logln("mesh cells = ", mesh.interiorCells.length);
 		// let the integrator do any neccessary initialization
-		logln("Re initing integrator");
+		//logln("Re initing integrator");
 		integrator.reinit(mesh);
 
 		immutable uint buffSize = 3*1024*1024*double.sizeof;
@@ -301,11 +344,18 @@ class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 		thisE[] = 0.0;
 		tmp[] = 0.0;
 
+		// TODO: Redo this so that it doesn't always start the sim again
+		setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, "", ex);
+
+		import core.memory: GC;
+
+		GC.disable;
+
 		MPI_Barrier(mesh.comm);
 		double startTime = MPI_Wtime;
 		uint iterations;
 
-		while((iterations < 10) && !atomicLoad(interrupted))
+		while((iterations < runIterations) && !atomicLoad(interrupted))
 		{
 			double Rmax = 0;
 			double newDt = dt;
@@ -382,15 +432,17 @@ class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 
 			residMax = max(residRho, residU, residV, residE);
 
-			if(totalIterations % config.plotIter == 0)
+			if(config.plotIter >= 0)
 			{
-				if(mesh.mpiRank == 0)
+				if(totalIterations % config.plotIter == 0)
 				{
-					printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-					printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+					if(mesh.mpiRank == 0)
+					{
+						printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+						printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+					}
 				}
 			}
-			
 			if(config.saveIter != -1)
 			{
 				if(totalIterations % config.saveIter == 0)
@@ -410,9 +462,101 @@ class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 			totalIterations++;
 			lastRmax = Rmax;
 		}
+		MPI_Barrier(mesh.comm);
 		double elapsed = MPI_Wtime - startTime;
-		writeln("10 iterations took ", elapsed, " seconds");
-		return complex(elapsed, 0.0);
+
+		GC.enable;
+		GC.collect;
+
+		//logln(runIterations, " iterations took ", elapsed, " seconds");
+		MPI_Barrier(mesh.comm);
+		if(((elapsed/equalTime) < minTime) && (depth == 0))
+		{
+			minTime = elapsed/equalTime;
+			bestWeights[] = w[];
+			//if(mpiRank == 0) logln("new minimum time: ", minTime, " seconds");
+			//if(mpiRank == 0) logln("	optimal weights: ", bestWeights);
+		}
+
+		if(mpiRank == 0)
+		{
+			//if(depth == 0) logln(runIterations, " iterations took ", elapsed, " seconds");
+			//if(depth == 0) logln(runIterations, " iterations took ", elapsed/equalTime, " normalized seconds; equal partition time: ", equalTime, " seconds; w = ", w);
+		}
+
+		MPI_Barrier(mesh.comm);
+
+		return complex(elapsed/equalTime, 0.0);
+		//return complex(elapsed, 0.0);
+	}
+
+	alias double delegate(double x) ActiveConstraint;
+
+	import std.container.dlist : DList;
+	import std.typecons : tuple, Tuple;
+
+	DList!(Tuple!(int, ActiveConstraint, string)) constraints;
+
+	final override void UpdateActiveSet(double[] designVars)
+	{
+		import std.algorithm : find;
+		foreach(int i, designVar; designVars)
+		{
+			if((designVar >= 0.0) && (designVar <= 1.0))
+			{
+				import std.range : array;
+				// remove designVar constraint if it exists
+				auto c = constraints[].find!("a[0] == b")(i);
+				if(!c.empty)
+				{
+					constraints.remove(c);
+				}
+			}
+			else if(designVar > 1.0)
+			{
+				// Add 0 = 1 - designVar constraint
+				auto foundConstraints = constraints[].find!("a[0] == b")(i);
+				if(foundConstraints.empty)
+				{
+					ActiveConstraint ac = (double x) => 1.0 - x;
+					constraints.stableInsertBack(tuple(i, ac, "g1"));
+				}
+				else
+				{
+					foundConstraints = constraints[].find!("((a[0] == b) && (a[2] != \"g1\"))")(i);
+					if(!foundConstraints.empty)
+					{
+						constraints.remove(foundConstraints);
+						ActiveConstraint ac = (double x) => 1.0 - x;
+						constraints.stableInsertBack(tuple(i, ac, "g1"));
+					}
+				}
+			}
+			else if(designVar < 0.0)
+			{
+				// Add 0 = designVar constraint
+				auto foundConstraints = constraints[].find!("a[0] == b")(i);
+				if(foundConstraints.empty)
+				{
+					ActiveConstraint ac = (double x) => x;
+					constraints.stableInsertBack(tuple(i, ac, "l0"));
+				}
+				else
+				{
+					foundConstraints = constraints[].find!("((a[0] == b) && (a[2] != \"l0\"))")(i);
+					if(!foundConstraints.empty)
+					{
+						constraints.remove(foundConstraints);
+						ActiveConstraint ac = (double x) => x;
+						constraints.stableInsertBack(tuple(i, ac, "l0"));
+					}
+				}
+			}
+			else
+			{
+				if(mpiRank == 0) writeln("Unkown condition, designVar = ", designVar);
+			}
+		}
 	}
 
 	final override Complex!double[] Constraint(Complex!double[] designVar)
@@ -422,6 +566,16 @@ class MeshOpt(alias setup, alias solver, alias integrator) : ObjectiveFunction
 		double partSum = designVar.sum!".re";
 		c[0].re = 1 - partSum;
 		c[0].im = 0;
+
+		foreach(constraint; constraints)
+		{
+			Complex!double co;
+			co.re = constraint[1](designVar[constraint[0]].re);
+			co.im = 0.0;
+			c ~= co;
+		}
+		//if((mpiRank == 0) && (c.length > 1)) writeln;
+		Constraints = cast(int)c.length;
 		return c;
 	}
 }

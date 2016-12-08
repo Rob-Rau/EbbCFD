@@ -467,7 +467,7 @@ static shared bool interrupted = false;
 	double u = U*cos(aoa);
 	double v = U*sin(aoa);
 
-	printf("M = %f\tU = %f\n", M, U);
+	//printf("M = %f\tU = %f\n", M, U);
 
 	if(saveFile == "")
 	{
@@ -602,6 +602,15 @@ MPI_Datatype vec4dataType;
 		else
 		{
 			printf("Unexpected source message from %d\n", status.MPI_SOURCE);
+		}
+	}
+
+	shared bool bullshit;
+	if(mesh.mpiRank == 1)
+	{
+		for(uint i = 0; i < 200000; i++)
+		{
+			atomicStore(bullshit, true);
 		}
 	}
 
@@ -1163,7 +1172,9 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 
 		if(p > 1)
 		{
-			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+			double[] w = new double[p];
+			w[] = 1.0/(cast(double)p);
+			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD, w);
 			umesh.comm = MPI_COMM_WORLD;
 			umesh.mpiRank = id;
 		}
