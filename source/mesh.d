@@ -104,13 +104,19 @@ struct UMesh2
 	uint[][] bGroups;
 
 	uint[] commProc;
+	MPI_Request[] sendRequests;
+	MPI_Request[] recvRequests;
+	MPI_Status[] statuses;
 	CommEdgeNodes[][] commEdgeLists;
 
 	uint[][] commEdgeIdx;
-	uint[][] commCellIdx;
+	uint[][] commCellSendIdx;
+	uint[][] commCellRecvIdx;
 
 	// Computed mesh data
 	uint[] interiorCells;
+	uint[] nonCommCells; // interior cells that DON'T have a comm ghost neighbor
+	uint[] needCommCells; // interior cells that DO have a comm ghost neighbor
 	uint[] ghostCells;
 	UCell2[] cells;
 	Vector!4[] q;
@@ -122,7 +128,8 @@ struct UMesh2
 	MPI_Datatype vec2Type;
 	MPI_Datatype vec4Type;
 
-	Vector!4[][] stateBuffers;
+	Vector!4[][] sendStateBuffers;
+	Vector!4[][] recvStateBuffers;
 
 	this(uint nCells)
 	{
@@ -187,7 +194,6 @@ struct UMesh2
 			{
 				return true;
 			}
-
 		}
 		return false;
 	}
@@ -291,16 +297,13 @@ struct UMesh2
 				cells[i].edges[j] = edgeidx;
 				cells[i].perim += edges[edgeidx].len;
 				auto mat = Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]);
-				//mat.writeln;
 				cells[i].area += mat.determinant;
-				//cells[i].area.writeln;
 				cells[i].centroid[0] += (nodes[ni[0]][0] + nodes[ni[1]][0])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 				cells[i].centroid[1] += (nodes[ni[0]][1] + nodes[ni[1]][1])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 			}
 
 			interiorCells ~= i;
 			cells[i].area *= 0.5;
-			//cells[i].area.writeln;
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
 			cells[i].centroid[0] *= 1/(6*cells[i].area);
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
@@ -342,12 +345,9 @@ struct UMesh2
 				double x1 = otherCell.centroid[0];
 				xr = -(2.0*d - x1);
 				yr = otherCell.centroid[1];
-				//logln("xc = ", otherCell.centroid[0], ", x = ", nodes[edge.nodeIdx[0]][0], ", xr = ", xr);
 			}
 			cell.centroid = Vector!2(xr, yr);
 
-			//logln("new cell centroid = ", cell.centroid);
-			//logln("other cell centroid = ", otherCell.centroid, "\n");
 			cell.nNeighborCells = 1;
 			cell.lim[] = Vector!2(1.0);
 			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
@@ -359,15 +359,19 @@ struct UMesh2
 			cells ~= cell; 
 			edges[bEdge].cellIdx[1] = cast(uint)(cells.length - 1);
 
-			//logln("Adding ghost cell. Boundary type = ", edges[bEdge].boundaryTag, "\t cell index = ", edges[bEdge].cellIdx[1]);
 			ghostCells ~= edges[bEdge].cellIdx[1];
 		}
 
 		foreach(commEdgeList; commEdgeLists)
 		{
 			commEdgeIdx.length++;
-			commCellIdx.length++;
-			stateBuffers.length++;
+			commCellRecvIdx.length++;
+			commCellSendIdx.length++;
+			sendStateBuffers.length++;
+			recvStateBuffers.length++;
+			sendRequests.length++;
+			recvRequests.length++;
+			statuses.length++;
 			foreach(commEdge; commEdgeList)
 			{
 				foreach(uint edgeIdx, edge; edges)
@@ -393,16 +397,27 @@ struct UMesh2
 						q ~= newq;
 						cells ~= cell;
 
-						commCellIdx[$-1] ~= cast(uint)(cells.length - 1);
-						edges[edgeIdx].cellIdx[1] = commCellIdx[$-1][$-1];
+						commCellSendIdx[$-1] ~= cell.neighborCells[0];
+						commCellRecvIdx[$-1] ~= cast(uint)(cells.length - 1);
+						edges[edgeIdx].cellIdx[1] = commCellRecvIdx[$-1][$-1];
 					}
 				}
 
-				stateBuffers[$-1] = new Vector!4[commCellIdx[$-1].length];
+				sendStateBuffers[$-1] = new Vector!4[commCellRecvIdx[$-1].length];
+				recvStateBuffers[$-1] = new Vector!4[commCellRecvIdx[$-1].length];
 			}
 		}
 
-		//MPI_Barrier(comm);
+		for(uint commIdx = 0; commIdx < sendRequests.length; commIdx++)
+		{
+			MPI_Send_init(sendStateBuffers[commIdx].ptr, cast(int)sendStateBuffers[commIdx].length, toMPIType!(Vector!4), commProc[commIdx], meshTag, comm, &sendRequests[commIdx]);
+		}
+
+		for(uint commIdx = 0; commIdx < recvRequests.length; commIdx++)
+		{
+			MPI_Recv_init(recvStateBuffers[commIdx].ptr, cast(int)recvStateBuffers[commIdx].length, toMPIType!(Vector!4), commProc[commIdx], meshTag, comm, &recvRequests[commIdx]);
+		}
+
 		// We now need to distribute cell centroids to neighboring 
 		// processors so they can set up their ghost cells
 		foreach(commIdx, commEdges; commEdgeIdx)
@@ -454,17 +469,7 @@ struct UMesh2
 				auto edge = edges[cells[i].edges[j]];
 
 				auto v1 = edge.mid - cells[i].centroid;
-				
-				/+
-				if(edge.isBoundary)
-				{
-					auto bDot = v1.dot(edge.bNormal);
-					if(bDot > 0.0)
-					{
-						edges[cells[i].edges[j]].bNormal *= -1.0;
-					}
-				}
-				+/
+
 				auto eDot = v1.dot(edge.normal);
 				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
@@ -477,16 +482,40 @@ struct UMesh2
 					cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
 				}
 				uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
+
 				tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
 				tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
 
 				cells[i].nNeighborCells++;
 			}
 
+			for(uint j = 0; j < cells[i].nNeighborCells; j++)
+			{
+				uint idx = cells[i].neighborCells[j];
+				bool hasCommNeighbor = false;
+				foreach(commCells; commCellRecvIdx)
+				{
+					if(commCells.canFind(idx))
+					{
+						hasCommNeighbor = true;
+					}
+				}
+
+				//uint[] nonCommCells; // interior cells that DON'T have a comm ghost neighbor
+				//uint[] needCommCells; // interior cells that DO have a comm ghost neighbor
+
+				if(hasCommNeighbor)
+				{
+					needCommCells ~= i;
+				}
+				else
+				{
+					nonCommCells ~= i;
+				}
+			}
 			// This cell has a boundary edge and we need to find another
 			// cell close by (sharing a node with) to reconstruct the
 			// cell gradient
-			// TODO: This
 			if(cells[i].nEdges == 3)
 			{
 				if(cells[i].nNeighborCells != cells[i].nEdges)
@@ -613,7 +642,8 @@ struct UMesh2
 
 		auto globalF = Vector!2(0);
 
-		MPI_Reduce(f.mData.ptr, globalF.mData.ptr, 2, MPI_DOUBLE, MPI_SUM, 0, comm);
+		//MPI_Reduce(f.mData.ptr, globalF.mData.ptr, 2, MPI_DOUBLE, MPI_SUM, 0, comm);
+		MPI_Reduce(f[].ptr, globalF[].ptr, 2, MPI_DOUBLE, MPI_SUM, 0, comm);
 
 		return globalF;
 	}
