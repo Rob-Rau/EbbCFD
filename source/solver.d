@@ -571,37 +571,151 @@ MPI_Datatype vec4dataType;
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
 {
-	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	@nogc void buildGradients(uint[] cellList)
 	{
-		foreach(i, edge; commEdges)
+		// Build gradients
+		if(config.order > 1)
 		{
-			mesh.stateBuffers[commIdx][i] = q[mesh.edges[edge].cellIdx[0]]; 
-		}
-		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
-	}
-
-	for(uint c = 0; c < mesh.commProc.length; c++)
-	{
-		MPI_Status status;
-		MPI_Probe(MPI_ANY_SOURCE, mesh.meshTag, mesh.comm, &status);
-
-		// determine which proc this is comming from, will be different order
-		// than commProc
-		if(mesh.commProc.canFind(status.MPI_SOURCE))
-		{
-			auto commIdx = mesh.commProc.countUntil(status.MPI_SOURCE);
-			auto commEdges = mesh.commEdgeIdx[commIdx];
-
-			MPI_Recv(mesh.stateBuffers[commIdx].ptr, cast(int)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm, &status);
-
-			foreach(i, edge; commEdges)
+			foreach(i; cellList)
 			{
-				q[mesh.edges[edge].cellIdx[1]] = mesh.stateBuffers[commIdx][i];
+				Vector!6[4] du;
+				for(uint j = 0; j < 4; j++)
+				{
+					du[j] = Vector!6(0); 
+				}
+				mesh.cells[i].minQ = q[i];
+				mesh.cells[i].maxQ = q[i];
+				mesh.cells[i].lim[] = Vector!2(1.0);
+
+				for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
+				{
+					uint idx = mesh.cells[i].neighborCells[j];
+					
+					for(uint k = 0; k < 4; k++)
+					{
+						mesh.cells[i].minQ[k] = fmin(mesh.cells[i].minQ[k], q[idx][k]);
+						mesh.cells[i].maxQ[k] = fmax(mesh.cells[i].maxQ[k], q[idx][k]);
+
+						du[k][j] = q[idx][k] - q[i][k];
+					}
+				}
+
+				for(uint j = 0; j < 4; j++)
+				{
+					mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
+				}
+
+				if(config.limited && limit)
+				{
+					for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
+					{
+						auto qM = q[i];
+						auto grad = mesh.cells[i].gradient;
+						auto centroid = mesh.cells[i].centroid;
+						auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
+
+						auto dx = mid[0] - centroid[0];
+						auto dy = mid[1] - centroid[1];
+						auto minQ = mesh.cells[i].minQ;
+						auto maxQ = mesh.cells[i].maxQ;
+						
+						auto qE = Vector!4(0);
+						for(uint k = 0; k < dims; k++)
+						{
+							double s = 1.0;
+							qE[k] = qM[k] + (grad[k][0]*dx + grad[k][1]*dy);
+
+							if(qE[k] < minQ[k])
+							{
+								s = (minQ[k] - qM[k])/(grad[k][0]*dx + grad[k][1]*dy);
+							}
+							else if(qE[k] > maxQ[k])
+							{
+								s = (maxQ[k] - qM[k])/(grad[k][0]*dx + grad[k][1]*dy);
+							}
+
+							if(s < 0)
+							{
+								printf("computed negative limiter\n");
+							}
+
+							if(s > 1.0)
+							{
+								printf("computed limiter greater than 1.0\n");
+							}
+
+							mesh.cells[i].lim[k][0] = fmin(mesh.cells[i].lim[k][0], s);
+							mesh.cells[i].lim[k][1] = mesh.cells[i].lim[k][0];
+						}
+					}
+
+					if(config.lpThresh > 0)
+					{
+						for(uint k = 0; k < dims; k++)
+						{
+							if(mesh.cells[i].lim[k][0] < config.lpThresh)
+							{
+								//printf("Using LP limiter\n");
+								auto A = Matrix!(10,2)(0);
+								auto b = Vector!10(0);
+								auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
+								//auto xk = Vector!2(mesh.cells[i].lim[k][0], mesh.cells[i].lim[k][1]);
+								auto xk = Vector!2(0);
+								A[0,0] = 1;
+								A[0,1] = 0;
+								A[1,0] = 0;
+								A[1,1] = 1;
+								A[2,0] = -1;
+								A[2,1] = 0;
+								A[3,0] = 0;
+								A[3,1] = -1;
+								b[0] = 0;
+								b[1] = 0;
+								b[2] = -1;
+								b[3] = -1;
+
+								for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
+								{
+									immutable uint cellIdx = mesh.cells[i].neighborCells[j];
+
+									A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
+									A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
+
+									A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
+									A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
+								}
+
+								LP!10(A, b, c, xk);
+
+								//printf("xk = [%.10e, %.10e], lim = %.10e\n\n", xk[0], xk[1], mesh.cells[i].lim[k][0]);
+								mesh.cells[i].lim[k][0] = xk[0];
+								mesh.cells[i].lim[k][1] = xk[1];
+
+								assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
+								assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
+							}
+						}
+					}
+				
+					for(uint j = 0; j < 4; j++)
+					{
+						mesh.cells[i].gradErr[j] = -abs(mesh.cells[i].gradient[j][0])*mesh.cells[i].lim[j][0] +
+												-abs(mesh.cells[i].gradient[j][1])*mesh.cells[i].lim[j][1] + 
+													abs(mesh.cells[i].gradient[j][0]) + abs(mesh.cells[i].gradient[j][1]);
+					}
+				}
 			}
 		}
-		else
+	}
+
+	foreach(commIdx, commCells; mesh.commCellSendIdx)
+	{
+		foreach(i, cell; commCells)
 		{
-			printf("Unexpected source message from %d\n", status.MPI_SOURCE);
+			//printf("cell = %d;\tq.length = %d\n", cell, q.length);
+			mesh.sendStateBuffers[commIdx][i] = q[cell];
 		}
 	}
 
@@ -613,6 +727,9 @@ MPI_Datatype vec4dataType;
 			atomicStore(bullshit, true);
 		}
 	}
+
+	MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
+	MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 
 	// update ghost cell states before we can compute gradients
 	foreach(i; mesh.ghostCells)
@@ -658,144 +775,80 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	// Build gradients
-	if(config.order > 1)
+	buildGradients(mesh.nonCommCells);
+
+	bool allRecvFinished = false;
+	while(!allRecvFinished)
 	{
-		foreach(i; mesh.interiorCells)
+		int flag;
+		MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
+		allRecvFinished = cast(bool)flag;
+	}
+
+	foreach(commIdx, commCells; mesh.commCellRecvIdx)
+	{
+		foreach(i, cell; commCells)
 		{
-			Vector!6[4] du;
-			for(uint j = 0; j < 4; j++)
-			{
-				du[j] = Vector!6(0); 
-			}
-			mesh.cells[i].minQ = q[i];
-			mesh.cells[i].maxQ = q[i];
-			mesh.cells[i].lim[] = Vector!2(1.0);
+			q[cell] = mesh.recvStateBuffers[commIdx][i];
+		}
+	}
 
-			for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
+	buildGradients(mesh.needCommCells);
+
+	// need to do a half update of comm edges
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i; commEdges)
+		{
+			if(config.order == 1)
 			{
-				uint idx = mesh.cells[i].neighborCells[j];
+				mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+			}
+			else
+			{
+				auto qM = q[mesh.edges[i].cellIdx[0]];
+				auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+				auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+				auto mid = mesh.edges[i].mid;
 				
-				for(uint k = 0; k < 4; k++)
+				auto dx = mid[0] - centroid[0];
+				auto dy = mid[1] - centroid[1];
+				
+				for(uint j = 0; j < dims; j++)
 				{
-					mesh.cells[i].minQ[k] = fmin(mesh.cells[i].minQ[k], q[idx][k]);
-					mesh.cells[i].maxQ[k] = fmax(mesh.cells[i].maxQ[k], q[idx][k]);
-
-					du[k][j] = q[idx][k] - q[i][k];
+					mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+													mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
 				}
-			}
 
-			for(uint j = 0; j < 4; j++)
-			{
-				mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
-			}
-
-			if(config.limited && limit)
-			{
-				//for(uint j = 0; j < mesh.cells[i].nEdges; j++)
-				for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
+				if(getPressure(mesh.edges[i].q[0]) < 0)
 				{
-					//uint eIdx = mesh.cells[i].edges[j];
-					auto qM = q[i];
-					auto grad = mesh.cells[i].gradient;
-					auto centroid = mesh.cells[i].centroid;
-					//auto mid = mesh.edges[eIdx].mid;
-					auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
-
-					auto dx = mid[0] - centroid[0];
-					auto dy = mid[1] - centroid[1];
-					auto minQ = mesh.cells[i].minQ;
-					auto maxQ = mesh.cells[i].maxQ;
-					
-					auto qE = Vector!4(0);
-					for(uint k = 0; k < dims; k++)
+					double[2] lim = [1.0, 1.0];
+					for(uint j = 0; j < dims; j++)
 					{
-						double s = 1.0;
-						qE[k] = qM[k] + (grad[k][0]*dx + grad[k][1]*dy);
-
-						if(qE[k] < minQ[k])
-						{
-							s = (minQ[k] - qM[k])/(grad[k][0]*dx + grad[k][1]*dy);
-						}
-						else if(qE[k] > maxQ[k])
-						{
-							s = (maxQ[k] - qM[k])/(grad[k][0]*dx + grad[k][1]*dy);
-						}
-
-						if(s < 0)
-						{
-							printf("computed negative limiter\n");
-						}
-
-						if(s > 1.0)
-						{
-							printf("computed limiter greater than 1.0\n");
-						}
-
-						mesh.cells[i].lim[k][0] = fmin(mesh.cells[i].lim[k][0], s);
-						mesh.cells[i].lim[k][1] = mesh.cells[i].lim[k][0];
+						lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+						lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
 					}
-				}
 
-				if(config.lpThresh > 0)
-				{
-					for(uint k = 0; k < dims; k++)
+					for(uint j = 0; j < dims; j++)
 					{
-						if(mesh.cells[i].lim[k][0] < config.lpThresh)
-						{
-							//printf("Using LP limiter\n");
-							auto A = Matrix!(10,2)(0);
-							auto b = Vector!10(0);
-							auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
-							//auto xk = Vector!2(mesh.cells[i].lim[k][0], mesh.cells[i].lim[k][1]);
-							auto xk = Vector!2(0);
-							A[0,0] = 1;
-							A[0,1] = 0;
-							A[1,0] = 0;
-							A[1,1] = 1;
-							A[2,0] = -1;
-							A[2,1] = 0;
-							A[3,0] = 0;
-							A[3,1] = -1;
-							b[0] = 0;
-							b[1] = 0;
-							b[2] = -1;
-							b[3] = -1;
-
-							for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
-							{
-								immutable uint cellIdx = mesh.cells[i].neighborCells[j];
-
-								A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
-								A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
-								b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
-
-								A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
-								A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
-								b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
-							}
-
-							LP!10(A, b, c, xk);
-
-							//printf("xk = [%.10e, %.10e], lim = %.10e\n\n", xk[0], xk[1], mesh.cells[i].lim[k][0]);
-							mesh.cells[i].lim[k][0] = xk[0];
-							mesh.cells[i].lim[k][1] = xk[1];
-
-							assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
-							assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
-						}
+						mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 					}
-				}
-			
-				for(uint j = 0; j < 4; j++)
-				{
-					mesh.cells[i].gradErr[j] = -abs(mesh.cells[i].gradient[j][0])*mesh.cells[i].lim[j][0] +
-											   -abs(mesh.cells[i].gradient[j][1])*mesh.cells[i].lim[j][1] + 
-											    abs(mesh.cells[i].gradient[j][0]) + abs(mesh.cells[i].gradient[j][1]);
 				}
 			}
 		}
 	}
+
+	//MPI_Barrier(mesh.comm);
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	{
+		foreach(i, edge; commEdges)
+		{
+			mesh.sendStateBuffers[commIdx][i] = mesh.edges[edge].q[0];
+		}
+	}
+
+	MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
+	MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 
 	// update edge values and compute fluxes on boundary edges.
 	foreach(i; mesh.boundaryEdges)
@@ -996,83 +1049,22 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	// need to do a half update of comm edges
-	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	allRecvFinished = false;
+	while(!allRecvFinished)
 	{
-		foreach(i; commEdges)
-		{
-			if(config.order == 1)
-			{
-				mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
-			}
-			else
-			{
-				auto qM = q[mesh.edges[i].cellIdx[0]];
-				auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
-				auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
-				auto mid = mesh.edges[i].mid;
-				
-				auto dx = mid[0] - centroid[0];
-				auto dy = mid[1] - centroid[1];
-				
-				for(uint j = 0; j < dims; j++)
-				{
-					mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-													mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
-				}
-
-				if(getPressure(mesh.edges[i].q[0]) < 0)
-				{
-					double[2] lim = [1.0, 1.0];
-					for(uint j = 0; j < dims; j++)
-					{
-						lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
-						lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
-					}
-
-					for(uint j = 0; j < dims; j++)
-					{
-						mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
-					}
-				}
-			}
-		}
+		int flag;
+		MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
+		allRecvFinished = cast(bool)flag;
 	}
 
-	MPI_Barrier(mesh.comm);
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
 		foreach(i, edge; commEdges)
 		{
-			mesh.stateBuffers[commIdx][i] = mesh.edges[edge].q[0];
-		}
-		MPI_Send(mesh.stateBuffers[commIdx].ptr, cast(uint)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm);
-	}
-
-	for(uint c = 0; c < mesh.commProc.length; c++)
-	{
-		MPI_Status status;
-		MPI_Probe(MPI_ANY_SOURCE, mesh.meshTag, mesh.comm, &status);
-
-		// determine which proc this is comming from, will be different order
-		// than commProc
-		if(mesh.commProc.canFind(status.MPI_SOURCE))
-		{
-			auto commIdx = mesh.commProc.countUntil(status.MPI_SOURCE);
-			auto commEdges = mesh.commEdgeIdx[commIdx];
-
-			MPI_Recv(mesh.stateBuffers[commIdx].ptr, cast(int)mesh.stateBuffers[commIdx].length, vec4dataType, mesh.commProc[commIdx], mesh.meshTag, mesh.comm, &status);
-
-			foreach(i, edge; commEdges)
-			{
-				mesh.edges[edge].q[1] = mesh.stateBuffers[commIdx][i];
-			}
-		}
-		else
-		{
-			printf("Unexpected source message from %d\n", status.MPI_SOURCE);
+			mesh.edges[edge].q[1] = mesh.recvStateBuffers[commIdx][i];
 		}
 	}
+
 
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
