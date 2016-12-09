@@ -489,10 +489,10 @@ struct UMesh2
 				cells[i].nNeighborCells++;
 			}
 
+			bool hasCommNeighbor = false;
 			for(uint j = 0; j < cells[i].nNeighborCells; j++)
 			{
 				uint idx = cells[i].neighborCells[j];
-				bool hasCommNeighbor = false;
 				foreach(commCells; commCellRecvIdx)
 				{
 					if(commCells.canFind(idx))
@@ -500,19 +500,17 @@ struct UMesh2
 						hasCommNeighbor = true;
 					}
 				}
-
-				//uint[] nonCommCells; // interior cells that DON'T have a comm ghost neighbor
-				//uint[] needCommCells; // interior cells that DO have a comm ghost neighbor
-
-				if(hasCommNeighbor)
-				{
-					needCommCells ~= i;
-				}
-				else
-				{
-					nonCommCells ~= i;
-				}
 			}
+
+			if(hasCommNeighbor)
+			{
+				needCommCells ~= i;
+			}
+			else
+			{
+				nonCommCells ~= i;
+			}
+
 			// This cell has a boundary edge and we need to find another
 			// cell close by (sharing a node with) to reconstruct the
 			// cell gradient
@@ -618,7 +616,7 @@ struct UMesh2
 			auto a = tmpMat.transpose;
 			auto b = a*tmpMat;
 			cells[i].gradMat = b.Inverse*tmpMat.transpose;
-		}
+		}		
 	}
 
 	@nogc Vector!2 computeBoundaryForces(string[] tags)

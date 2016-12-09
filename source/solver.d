@@ -599,14 +599,11 @@ MPI_Datatype vec4dataType;
 
 				if(config.limited && limit)
 				{
-					//for(uint j = 0; j < mesh.cells[i].nEdges; j++)
 					for(uint j = 0; j < mesh.cells[i].nNeighborCells; j++)
 					{
-						//uint eIdx = mesh.cells[i].edges[j];
 						auto qM = q[i];
 						auto grad = mesh.cells[i].gradient;
 						auto centroid = mesh.cells[i].centroid;
-						//auto mid = mesh.edges[eIdx].mid;
 						auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
 
 						auto dx = mid[0] - centroid[0];
@@ -709,6 +706,7 @@ MPI_Datatype vec4dataType;
 	{
 		foreach(i, cell; commCells)
 		{
+			//printf("cell = %d;\tq.length = %d\n", cell, q.length);
 			mesh.sendStateBuffers[commIdx][i] = q[cell];
 		}
 	}
@@ -760,8 +758,8 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	//buildGradients(mesh.nonCommCells);
-	//double startTime = MPI_Wtime;
+	buildGradients(mesh.nonCommCells);
+
 	bool allRecvFinished = false;
 	while(!allRecvFinished)
 	{
@@ -777,11 +775,8 @@ MPI_Datatype vec4dataType;
 			q[cell] = mesh.recvStateBuffers[commIdx][i];
 		}
 	}
-	//double elapsed = MPI_Wtime - startTime;
-	//if(mesh.mpiRank == 0) printf("recv time = %f\n", elapsed);
 
-	//buildGradients(mesh.needCommCells);
-	buildGradients(mesh.interiorCells);
+	buildGradients(mesh.needCommCells);
 
 	// need to do a half update of comm edges
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
