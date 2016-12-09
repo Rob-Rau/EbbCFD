@@ -280,7 +280,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		double equalTime = 1.0;
 		if(depth == 0)
 		{
-			//equalTime = doCompute(w.complex, 1).re;
+			equalTime = doCompute(w.complex, 1).re;
 		}
 
 		foreach(uint i, dv; designVar)
@@ -349,7 +349,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		import core.memory: GC;
 
-		GC.disable;
+		//GC.disable;
 
 		MPI_Barrier(mesh.comm);
 		double startTime = MPI_Wtime;
@@ -361,7 +361,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			double newDt = dt;
 
 			integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
-
 			if(config.dynamicDt)
 			{
 				dt = newDt;
@@ -465,8 +464,8 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		MPI_Barrier(mesh.comm);
 		double elapsed = MPI_Wtime - startTime;
 
-		GC.enable;
-		GC.collect;
+		//GC.enable;
+		//GC.collect;
 
 		//logln(runIterations, " iterations took ", elapsed, " seconds");
 		MPI_Barrier(mesh.comm);

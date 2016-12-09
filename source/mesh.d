@@ -133,6 +133,18 @@ struct UMesh2
 
 	bool meshBuilt;
 
+	~this()
+	{
+		for(uint i = 0; i < sendRequests.length; i++)
+		{
+			MPI_Request_free(&sendRequests[i]);
+		}
+
+		for(uint i = 0; i < recvRequests.length; i++)
+		{
+			MPI_Request_free(&recvRequests[i]);
+		}
+	}
 	this(uint nCells)
 	{
 		vec2Type = toMPIType!(Vector!2);

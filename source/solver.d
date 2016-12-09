@@ -710,13 +710,19 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	foreach(commIdx, commCells; mesh.commCellSendIdx)
+	if(mesh.sendRequests.length > 0)
 	{
-		foreach(i, cell; commCells)
+		foreach(commIdx, commCells; mesh.commCellSendIdx)
 		{
-			//printf("cell = %d;\tq.length = %d\n", cell, q.length);
-			mesh.sendStateBuffers[commIdx][i] = q[cell];
+			foreach(i, cell; commCells)
+			{
+				//printf("cell = %d;\tq.length = %d\n", cell, q.length);
+				mesh.sendStateBuffers[commIdx][i] = q[cell];
+			}
 		}
+
+		MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
+		MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 	}
 
 	shared bool bullshit;
@@ -727,9 +733,6 @@ MPI_Datatype vec4dataType;
 			atomicStore(bullshit, true);
 		}
 	}
-
-	MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
-	MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 
 	// update ghost cell states before we can compute gradients
 	foreach(i; mesh.ghostCells)
@@ -777,19 +780,22 @@ MPI_Datatype vec4dataType;
 
 	buildGradients(mesh.nonCommCells);
 
-	bool allRecvFinished = false;
-	while(!allRecvFinished)
+	if(mesh.recvRequests.length > 0)
 	{
-		int flag;
-		MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
-		allRecvFinished = cast(bool)flag;
-	}
-
-	foreach(commIdx, commCells; mesh.commCellRecvIdx)
-	{
-		foreach(i, cell; commCells)
+		bool allRecvFinished = false;
+		while(!allRecvFinished)
 		{
-			q[cell] = mesh.recvStateBuffers[commIdx][i];
+			int flag;
+			MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
+			allRecvFinished = cast(bool)flag;
+		}
+
+		foreach(commIdx, commCells; mesh.commCellRecvIdx)
+		{
+			foreach(i, cell; commCells)
+			{
+				q[cell] = mesh.recvStateBuffers[commIdx][i];
+			}
 		}
 	}
 
@@ -839,17 +845,19 @@ MPI_Datatype vec4dataType;
 	}
 
 	//MPI_Barrier(mesh.comm);
-	foreach(commIdx, commEdges; mesh.commEdgeIdx)
+	if(mesh.sendRequests.length > 0)
 	{
-		foreach(i, edge; commEdges)
+		foreach(commIdx, commEdges; mesh.commEdgeIdx)
 		{
-			mesh.sendStateBuffers[commIdx][i] = mesh.edges[edge].q[0];
+			foreach(i, edge; commEdges)
+			{
+				mesh.sendStateBuffers[commIdx][i] = mesh.edges[edge].q[0];
+			}
 		}
+
+		MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
+		MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 	}
-
-	MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
-	MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
-
 	// update edge values and compute fluxes on boundary edges.
 	foreach(i; mesh.boundaryEdges)
 	{
@@ -1049,22 +1057,24 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	allRecvFinished = false;
-	while(!allRecvFinished)
+	if(mesh.recvRequests.length > 0)
 	{
-		int flag;
-		MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
-		allRecvFinished = cast(bool)flag;
-	}
-
-	foreach(commIdx, commEdges; mesh.commEdgeIdx)
-	{
-		foreach(i, edge; commEdges)
+		bool allRecvFinished = false;
+		while(!allRecvFinished)
 		{
-			mesh.edges[edge].q[1] = mesh.recvStateBuffers[commIdx][i];
+			int flag;
+			MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
+			allRecvFinished = cast(bool)flag;
+		}
+
+		foreach(commIdx, commEdges; mesh.commEdgeIdx)
+		{
+			foreach(i, edge; commEdges)
+			{
+				mesh.edges[edge].q[1] = mesh.recvStateBuffers[commIdx][i];
+			}
 		}
 	}
-
 
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
