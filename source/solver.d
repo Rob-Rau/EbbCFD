@@ -728,7 +728,18 @@ MPI_Datatype vec4dataType;
 	shared bool bullshit;
 	if(mesh.mpiRank == 1)
 	{
-		for(uint i = 0; i < 200000; i++)
+		double startTime = MPI_Wtime();
+		for(uint i = 0; i < 100000; i++)
+		{
+			atomicStore(bullshit, true);
+		}
+		double elapsed = MPI_Wtime() - startTime;
+		//printf("bullshit took %f seconds\n", elapsed);
+	}
+
+	if(mesh.mpiRank == 3)
+	{
+		for(uint i = 0; i < 100000; i++)
 		{
 			atomicStore(bullshit, true);
 		}

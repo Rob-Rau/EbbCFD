@@ -113,7 +113,10 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		auto sqp = new SQP;
 
 		meshOpt.DerivativeType = "numd.optimization.FiniteDifference.FiniteDifferenceEqualized";
-		meshOpt.StepSize = 5.0e-2;
+		//meshOpt.StepSize = 5.0e-3;
+		double stepSize = 100.0/meshOpt.bigMesh.cells.length.to!double;
+		MPI_Bcast(&stepSize, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		meshOpt.StepSize = stepSize;
 		meshOpt.runIterations = 30;
 
 		sqp.DebugMode = true;
@@ -122,9 +125,9 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
 		sqp.FileOutput = false;
-		sqp.Tolerance = 1.0e-3;
+		sqp.Tolerance = 1.0e-8;
 		sqp.id = id;
-		//sqp.Eta = 0.001;
+		//sqp.Eta = 0.05;
 		logln("Starting optimization");
 		MPI_Barrier(MPI_COMM_WORLD);
 		Result result = sqp.Optimize(meshOpt);
@@ -158,6 +161,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 abstract class AbstractMeshOpt : ObjectiveFunction
 {
 	uint runIterations;
+	UMesh2 bigMesh;
 }
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
@@ -165,7 +169,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	UMesh2 bigMesh;
 	int mpiRank;
 
 	double residRho = 0.0;
@@ -275,14 +278,16 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		//logln("paritioning mesh");
 		double[] w = new double[p];
+		/+
 		w[] = 1.0/(cast(double)p);
 
 		double equalTime = 1.0;
-		if(depth == 0)
+		if(depth == 0)21770105
 		{
 			equalTime = doCompute(w.complex, 1).re;
 		}
-
+		+/
+		double equalTime = 1.0;
 		foreach(uint i, dv; designVar)
 		{
 			w[i] = dv.re;
@@ -303,6 +308,30 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		mesh.buildMesh;
 		MPI_Barrier(MPI_COMM_WORLD);
 		//logln("mesh cells = ", mesh.interiorCells.length);
+		size_t[] meshSizes = new size_t[p];
+		if(mpiRank == 0)
+		{
+			meshSizes[0] = mesh.interiorCells.length;
+			for(int i = 1; i < p; i++)
+			{
+				meshSizes[i] = mesh.comm.recv!size_t(i, mesh.meshTag);
+			}
+			//logln(meshSizes);
+		}
+		else
+		{
+			mesh.comm.send(mesh.interiorCells.length, 0, mesh.meshTag);
+		}
+
+		if(mesh.interiorCells.length != bigMesh.interiorCells.length)
+		{
+			w[] = 1.0/(cast(double)p);
+
+			if(depth == 0)
+			{
+				equalTime = doCompute(w.complex, 1).re;
+			}
+		}
 		// let the integrator do any neccessary initialization
 		//logln("Re initing integrator");
 		integrator.reinit(mesh);
@@ -349,130 +378,141 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		import core.memory: GC;
 
-		//GC.disable;
+		GC.disable;
 
 		MPI_Barrier(mesh.comm);
 		double startTime = MPI_Wtime;
+		double elapsed;
 		uint iterations;
 
-		while((iterations < runIterations) && !atomicLoad(interrupted))
+		if(mesh.interiorCells.length != bigMesh.interiorCells.length)
 		{
-			double Rmax = 0;
-			double newDt = dt;
-
-			integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
-			if(config.dynamicDt)
+			while((iterations < runIterations) && !atomicLoad(interrupted))
 			{
-				dt = newDt;
-			}
+				double startTime2 = MPI_Wtime;
+				double Rmax = 0;
+				double newDt = dt;
 
-			foreach(i; mesh.interiorCells)
-			{
-				thisRho[i] = mesh.q[i][0];
-				thisU[i] = mesh.q[i][1];
-				thisV[i] = mesh.q[i][2];
-				thisE[i] = mesh.q[i][3];
-				
-				if(mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN)
+				integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
+				if(config.dynamicDt)
 				{
-					printf("p = %f\n", getPressure(mesh.q[i]));
-					printf("q = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
-					printf("cell = %d\n", i);
-					printf("iteration = %d\n", iterations);
-					printf("dt = %f\n", dt);
-					printf("t = %f\n", t);
-					ex.msg = "Got nan on cell average value";
-					ex.file = __FILE__;
-					ex.line = __LINE__;
-					throw ex;
+					dt = newDt;
 				}
-			}
 
-			import std.algorithm : sum;
-
-			@nogc double computeRMSResidual(double[] now, double[] last)
-			{
-				tmp[] = (now[] - last[])^^2;
-				double tmpSum = tmp.sum;
-				MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
-				uint totLen = cast(uint)mesh.interiorCells.length;
-				MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
-				double valSum = now.sum;
-				MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
-				return sqrt(cast(double)totLen*tmpSum)/valSum;
-			}
-
-			residRho = computeRMSResidual(thisRho, lastRho);
-			residU = computeRMSResidual(thisU, lastU);
-			residV = computeRMSResidual(thisV, lastV);
-			residE = computeRMSResidual(thisE, lastE);
-
-			lastRho[] = thisRho[];
-			lastU[] = thisU[];
-			lastV[] = thisV[];
-			lastE[] = thisE[];
-
-			auto f = mesh.computeBoundaryForces(config.forceBoundary);
-
-			if(mesh.mpiRank == 0)
-			{
-				ld = rotMat*f;
-
-				forceBuffer.write!double(t, &buffPos);
-				forceBuffer.write!double(ld[0], &buffPos);
-				forceBuffer.write!double(ld[1], &buffPos);
-			}
-
-			if(buffPos == buffSize)
-			{
-				fwrite(forceBuffer.ptr, ubyte.sizeof, buffSize, forceFile);
-				buffPos = 0;
-			}
-
-			residMax = max(residRho, residU, residV, residE);
-
-			if(config.plotIter >= 0)
-			{
-				if(totalIterations % config.plotIter == 0)
+				foreach(i; mesh.interiorCells)
 				{
-					if(mesh.mpiRank == 0)
+					thisRho[i] = mesh.q[i][0];
+					thisU[i] = mesh.q[i][1];
+					thisV[i] = mesh.q[i][2];
+					thisE[i] = mesh.q[i][3];
+					
+					if(mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN)
 					{
-						printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-						printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+						printf("p = %f\n", getPressure(mesh.q[i]));
+						printf("q = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
+						printf("cell = %d\n", i);
+						printf("iteration = %d\n", iterations);
+						printf("dt = %f\n", dt);
+						printf("t = %f\n", t);
+						ex.msg = "Got nan on cell average value";
+						ex.file = __FILE__;
+						ex.line = __LINE__;
+						throw ex;
 					}
 				}
-			}
-			if(config.saveIter != -1)
-			{
-				if(totalIterations % config.saveIter == 0)
-				{
-					char[512] filename;
-					filename[] = 0;
-					snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
-					saveSolution(mesh, filename.ptr, t, dt);
-					filename[] = 0;
-					snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
-					saveLimits(mesh, filename.ptr, t, dt);
-					saveItr++;
-				}
-			}
-			t += dt;
-			iterations++;
-			totalIterations++;
-			lastRmax = Rmax;
-		}
-		MPI_Barrier(mesh.comm);
-		double elapsed = MPI_Wtime - startTime;
 
-		//GC.enable;
-		//GC.collect;
+				import std.algorithm : sum;
+
+				@nogc double computeRMSResidual(double[] now, double[] last)
+				{
+					tmp[] = (now[] - last[])^^2;
+					double tmpSum = tmp.sum;
+					MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+					uint totLen = cast(uint)mesh.interiorCells.length;
+					MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
+					double valSum = now.sum;
+					MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+					return sqrt(cast(double)totLen*tmpSum)/valSum;
+				}
+
+				residRho = computeRMSResidual(thisRho, lastRho);
+				residU = computeRMSResidual(thisU, lastU);
+				residV = computeRMSResidual(thisV, lastV);
+				residE = computeRMSResidual(thisE, lastE);
+
+				lastRho[] = thisRho[];
+				lastU[] = thisU[];
+				lastV[] = thisV[];
+				lastE[] = thisE[];
+
+				auto f = mesh.computeBoundaryForces(config.forceBoundary);
+
+				if(mesh.mpiRank == 0)
+				{
+					ld = rotMat*f;
+
+					forceBuffer.write!double(t, &buffPos);
+					forceBuffer.write!double(ld[0], &buffPos);
+					forceBuffer.write!double(ld[1], &buffPos);
+				}
+
+				if(buffPos == buffSize)
+				{
+					fwrite(forceBuffer.ptr, ubyte.sizeof, buffSize, forceFile);
+					buffPos = 0;
+				}
+
+				residMax = max(residRho, residU, residV, residE);
+
+				if(config.plotIter >= 0)
+				{
+					if(totalIterations % config.plotIter == 0)
+					{
+						if(mesh.mpiRank == 0)
+						{
+							printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+							printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+						}
+					}
+				}
+				if(config.saveIter != -1)
+				{
+					if(totalIterations % config.saveIter == 0)
+					{
+						char[512] filename;
+						filename[] = 0;
+						snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
+						saveSolution(mesh, filename.ptr, t, dt);
+						filename[] = 0;
+						snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
+						saveLimits(mesh, filename.ptr, t, dt);
+						saveItr++;
+					}
+				}
+				t += dt;
+				iterations++;
+				totalIterations++;
+				lastRmax = Rmax;
+				//if(mpiRank == 0) logln("current elapsed: ", MPI_Wtime - startTime2);
+			}
+			MPI_Barrier(mesh.comm);
+			elapsed = MPI_Wtime - startTime;
+		}
+		else
+		{
+			MPI_Barrier(mesh.comm);
+			elapsed = 4*equalTime*p;
+		}
+
+		GC.enable;
+		GC.collect;
 
 		//logln(runIterations, " iterations took ", elapsed, " seconds");
 		MPI_Barrier(mesh.comm);
 		if(((elapsed/equalTime) < minTime) && (depth == 0))
 		{
 			minTime = elapsed/equalTime;
-			bestWeights[] = w[];
+			//bestWeights[] = w[];
 			//if(mpiRank == 0) logln("new minimum time: ", minTime, " seconds");
 			//if(mpiRank == 0) logln("	optimal weights: ", bestWeights);
 		}
@@ -481,12 +521,20 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		{
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed, " seconds");
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed/equalTime, " normalized seconds; equal partition time: ", equalTime, " seconds; w = ", w);
+			if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed/runIterations.to!double)/(equalTime/runIterations.to!double), " normalized seconds; elapsed time: ", elapsed/runIterations.to!double);
 		}
 
 		MPI_Barrier(mesh.comm);
 
-		return complex(elapsed/equalTime, 0.0);
-		//return complex(elapsed, 0.0);
+		if(depth == 1)
+		{
+			return complex(elapsed, 0.0);
+		}
+		else
+		{
+			return complex((elapsed/runIterations.to!double)/(equalTime/runIterations.to!double), 0.0);
+			//return complex(elapsed/runIterations.to!double, 0.0);
+		}
 	}
 
 	alias double delegate(double x) ActiveConstraint;
