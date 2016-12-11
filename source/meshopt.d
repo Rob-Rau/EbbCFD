@@ -124,9 +124,9 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
 		sqp.FileOutput = false;
-		sqp.Tolerance = 2.0e-1;
+		sqp.Tolerance = 2.0e-3;
 		sqp.id = id;
-		//sqp.Eta = 0.05;
+		sqp.Eta = 0.05;
 		logln("Starting optimization");
 		MPI_Barrier(MPI_COMM_WORLD);
 
