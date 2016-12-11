@@ -133,6 +133,8 @@ struct UMesh2
 
 	bool meshBuilt;
 
+	uint[][] localToGlobalMaps;
+
 	~this()
 	{
 		for(uint i = 0; i < sendRequests.length; i++)
@@ -742,6 +744,8 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[
 		
 		auto part = bigMesh.buildPartitionMap(p, id, comm, partWeights);
 
+		bigMesh.localToGlobalMaps = new uint[][](p);
+
 		for(uint i = 0; i < p; i++)
 		{
 			uint nElems = 0;
@@ -762,17 +766,19 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[
 			CommEdgeNodes[][] commEdgeList;
 			Tuple!(size_t, uint)[] bNodeMap;
 
+			//uint[][] localToGlobalMap;
 			foreach(uint j, pa; part)
 			{
 				if(pa == i)
 				{
 					uint[] localEl;
-					nodesPerElement ~= cast(uint)bigMesh.elements[j].length; 
+					nodesPerElement ~= cast(uint)bigMesh.elements[j].length;
+					bigMesh.localToGlobalMaps[i] ~= j;
 					foreach(uint k, el; bigMesh.elements[j])
 					{
 						// map global node index to new proc local node index
 						localEl ~= (el - 1).localElementMap(localNodes, bigMesh.nodes);
-
+						
 						// Is this edge a boundary edge
 						size_t bIdx = 0;
 						uint b1 = 0;

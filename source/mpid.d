@@ -136,9 +136,12 @@ T[] recvArray(T)(MPI_Comm comm, uint from, const int tag)
 	MPI_Recv(&nElems, 1, MPI_UINT32_T, from, tag, comm, &status);
 	data = new T[nElems];
 	
-	enforce(status.MPI_ERROR == MPI_SUCCESS, "Error receiving array length. MPI Error: "~status.MPI_ERROR.to!string);
 	
-	MPI_Recv(data.ptr, nElems, toMPIType!T, 0, tag + 1, comm, &status);
+	enforce(status.MPI_ERROR == MPI_SUCCESS, "Error receiving array length. MPI Error: "~status.MPI_ERROR.to!string);
+	//logln("recving array of ", nElems, " size");
 
+	MPI_Recv(data.ptr, nElems, toMPIType!T, from, tag + 1, comm, &status);
+
+	//logln("got array");
 	return data;
 }

@@ -72,6 +72,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		//saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 
 		AbstractMeshOpt meshOpt;
+		auto sqp = new SQP;
 		final switch(config.limiter)
 		{
 			foreach(lim; limiterList)
@@ -95,7 +96,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 											writeln("-limiter: "~lim);
 											writeln("-flux: "~fl);
 											writeln("-integrator: "~inte);
-											meshOpt = new MeshOpt!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(config, p, id);
+											meshOpt = new MeshOpt!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(config, p, id, sqp);
 											MPI_Barrier(MPI_COMM_WORLD);
 											//runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, runIterations, ex);
 											break;
@@ -110,8 +111,6 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			}
 		}
 
-		auto sqp = new SQP;
-
 		meshOpt.DerivativeType = "numd.optimization.FiniteDifference.FiniteDifferenceEqualized";
 		//meshOpt.StepSize = 5.0e-3;
 		double stepSize = 300.0/meshOpt.bigMesh.cells.length.to!double;
@@ -125,19 +124,29 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
 		sqp.FileOutput = false;
-		sqp.Tolerance = 2.0e-3;
+		sqp.Tolerance = 2.0e-5;
 		sqp.id = id;
 		//sqp.Eta = 0.05;
 		logln("Starting optimization");
 		MPI_Barrier(MPI_COMM_WORLD);
-		Result result = sqp.Optimize(meshOpt);
-		writeln();
-		writeln("SQP:");
-		writefln("\tOptimal Point =  [%(%20.20f, %)]", result.DesignVariables);
-		writefln("\tDrag = %20.20f", result.ObjectiveFunctionValue);
-		writeln("\tConverged in ", result.Iterations, " iterations.");
-		writeln("\tComputation time: ", result.ComputationTime, " usecs.");
-		writeln("\tMinor iterations: ", result.MinorIterations);
+
+		while(meshOpt.t < config.tEnd)
+		{
+			Result result = sqp.Optimize(meshOpt);
+
+			writeln();
+			writeln("SQP:");
+			writefln("\tOptimal Point =  [%(%20.20f, %)]", result.DesignVariables);
+			writefln("\tDrag = %20.20f", result.ObjectiveFunctionValue);
+			writeln("\tConverged in ", result.Iterations, " iterations.");
+			writeln("\tComputation time: ", result.ComputationTime, " usecs.");
+			writeln("\tMinor iterations: ", result.MinorIterations);
+		}
+		if(id == 0)
+		{
+			saveSolution(meshOpt.bigMesh, cast(char*)"final.esln".ptr, meshOpt.t, meshOpt.dt);
+		}
+
 	}
 	catch(SolverException ex)
 	{
@@ -162,6 +171,8 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 {
 	uint runIterations;
 	UMesh2 bigMesh;
+	double t = 0;
+	double dt;
 }
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
@@ -191,9 +202,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 	double lastRmax = 0.0;
 
-	double t;
-	double dt;
-
 	double residRhoLast;
 
 	Matrix!(2, 2) rotMat;
@@ -211,8 +219,13 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	double minTime = double.infinity;
 	double[] bestWeights;
 
-	this(Config config, int p, int rank)
+	immutable uint buffSize = 3*1024*1024*double.sizeof;
+	size_t buffPos = 0;
+
+	SQP sqp;
+	this(Config config, int p, int rank, SQP sqp)
 	{
+		this.sqp = sqp;
 		this.p = p;
 		mpiRank = rank;
 
@@ -230,7 +243,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 				bigMesh.comm = MPI_COMM_SELF;
 				bigMesh.mpiRank = mpiRank;
 				logln("big mesh build");
-				//bigMesh.buildMesh;
+				bigMesh.buildMesh;
 			}
 			else
 			{
@@ -263,6 +276,31 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		//MPI_Barrier(mesh.comm);
 		bool done = false;
 		bestWeights = new double[p];
+		
+
+		lastRho = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		thisRho = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		lastU = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		thisU = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		lastV = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		thisV = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		lastE = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		thisE = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		tmp = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
+		R = cast(Vector!4[])Mallocator.instance.allocate(bigMesh.cells.length*Vector!4.sizeof);
+		
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastRho);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisRho);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastU);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisU);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastV);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisV);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])lastE);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])thisE);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])tmp);
+		scope(exit) Mallocator.instance.deallocate(cast(void[])R);
+
+		setup(bigMesh, config, lastRho, lastU, lastV, lastE, t, dt, "", ex);
 	}
 
 	final override Complex!double Compute(Complex!double[] designVar)
@@ -270,9 +308,118 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		return doCompute(designVar, 0);
 	}
 
+	void solverIteration(ref UMesh2 mesh)
+	{
+		double startTime2 = MPI_Wtime;
+		double Rmax = 0;
+		double newDt = dt;
+
+		//if(mpiRank == 0) logln(iterations, ": Stepping");
+		integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
+		if(config.dynamicDt)
+		{
+			dt = newDt;
+		}
+
+		foreach(i; mesh.interiorCells)
+		{
+			thisRho[i] = mesh.q[i][0];
+			thisU[i] = mesh.q[i][1];
+			thisV[i] = mesh.q[i][2];
+			thisE[i] = mesh.q[i][3];
+			
+			if(mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN)
+			{
+				printf("p = %f\n", getPressure(mesh.q[i]));
+				printf("q = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
+				printf("cell = %d\n", i);
+				//printf("iteration = %d\n", iterations);
+				printf("dt = %f\n", dt);
+				printf("t = %f\n", t);
+				ex.msg = "Got nan on cell average value";
+				ex.file = __FILE__;
+				ex.line = __LINE__;
+				throw ex;
+			}
+		}
+
+		import std.algorithm : sum;
+
+		@nogc double computeRMSResidual(double[] now, double[] last)
+		{
+			tmp[] = (now[] - last[])^^2;
+			double tmpSum = tmp.sum;
+			MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			uint totLen = cast(uint)mesh.interiorCells.length;
+			MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
+			double valSum = now.sum;
+			MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			return sqrt(cast(double)totLen*tmpSum)/valSum;
+		}
+
+		residRho = computeRMSResidual(thisRho, lastRho);
+		residU = computeRMSResidual(thisU, lastU);
+		residV = computeRMSResidual(thisV, lastV);
+		residE = computeRMSResidual(thisE, lastE);
+
+		lastRho[] = thisRho[];
+		lastU[] = thisU[];
+		lastV[] = thisV[];
+		lastE[] = thisE[];
+
+		auto f = mesh.computeBoundaryForces(config.forceBoundary);
+
+		if(mesh.mpiRank == 0)
+		{
+			ld = rotMat*f;
+
+			forceBuffer.write!double(t, &buffPos);
+			forceBuffer.write!double(ld[0], &buffPos);
+			forceBuffer.write!double(ld[1], &buffPos);
+		}
+
+		if(buffPos == buffSize)
+		{
+			fwrite(forceBuffer.ptr, ubyte.sizeof, buffSize, forceFile);
+			buffPos = 0;
+		}
+
+		residMax = max(residRho, residU, residV, residE);
+
+		if(config.plotIter >= 0)
+		{
+			if(totalIterations % config.plotIter == 0)
+			{
+				if(mesh.mpiRank == 0)
+				{
+					printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+					printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+				}
+			}
+		}
+		if(config.saveIter != -1)
+		{
+			if(totalIterations % config.saveIter == 0)
+			{
+				char[512] filename;
+				filename[] = 0;
+				snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
+				saveSolution(mesh, filename.ptr, t, dt);
+				filename[] = 0;
+				snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
+				saveLimits(mesh, filename.ptr, t, dt);
+				saveItr++;
+			}
+		}
+		t += dt;
+		totalIterations++;
+		lastRmax = Rmax;
+	}
+
 	Complex!double doCompute(Complex!double[] designVar, int depth)
 	{
 		MPI_Barrier(MPI_COMM_WORLD);
+		sqp.stop = atomicLoad(interrupted);
 		//logln("in compute");
 		UMesh2 mesh;
 
@@ -342,9 +489,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		//logln("Re initing integrator");
 		integrator.reinit(mesh);
 
-		immutable uint buffSize = 3*1024*1024*double.sizeof;
-		size_t buffPos = 0;
-
 		lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 		thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 		lastU = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
@@ -381,7 +525,41 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		// TODO: Redo this so that it doesn't always start the sim again
 		setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, "", ex);
+		if(mpiRank == 0)
+		{
+			foreach(int proc, localToGlobalMap; bigMesh.localToGlobalMaps)
+			{
+				if(proc != 0)
+				{
+					//logln("Sending to proc ", proc);
+					auto localState = new Vector!4[localToGlobalMap.length];
 
+					foreach(i, globalIdx; localToGlobalMap)
+					{
+						localState[i] = bigMesh.q[globalIdx];
+					} 
+					MPI_COMM_WORLD.sendArray(localState, proc, mesh.meshTag);
+				}
+				else
+				{
+					foreach(j, i; mesh.interiorCells)
+					{
+						mesh.q[i] = bigMesh.q[localToGlobalMap[j]];
+					}
+				}
+			}
+		}
+		else
+		{
+			auto localState = MPI_COMM_WORLD.recvArray!(Vector!4)(0, mesh.meshTag);
+
+			foreach(j, i; mesh.interiorCells)
+			{
+				mesh.q[i] = localState[j];
+			}
+		}
+
+		//logln("Going");
 		import core.memory: GC;
 
 		GC.disable;
@@ -393,125 +571,57 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		if(mesh.interiorCells.length != bigMesh.interiorCells.length)
 		{
-			while((iterations < runIterations) && !atomicLoad(interrupted))
+			while((iterations < runIterations))
 			{
-				double startTime2 = MPI_Wtime;
-				double Rmax = 0;
-				double newDt = dt;
-
-				integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
-				if(config.dynamicDt)
-				{
-					dt = newDt;
-				}
-
-				foreach(i; mesh.interiorCells)
-				{
-					thisRho[i] = mesh.q[i][0];
-					thisU[i] = mesh.q[i][1];
-					thisV[i] = mesh.q[i][2];
-					thisE[i] = mesh.q[i][3];
-					
-					if(mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN)
-					{
-						printf("p = %f\n", getPressure(mesh.q[i]));
-						printf("q = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
-						printf("cell = %d\n", i);
-						printf("iteration = %d\n", iterations);
-						printf("dt = %f\n", dt);
-						printf("t = %f\n", t);
-						ex.msg = "Got nan on cell average value";
-						ex.file = __FILE__;
-						ex.line = __LINE__;
-						throw ex;
-					}
-				}
-
-				import std.algorithm : sum;
-
-				@nogc double computeRMSResidual(double[] now, double[] last)
-				{
-					tmp[] = (now[] - last[])^^2;
-					double tmpSum = tmp.sum;
-					MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
-					uint totLen = cast(uint)mesh.interiorCells.length;
-					MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
-					double valSum = now.sum;
-					MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
-					return sqrt(cast(double)totLen*tmpSum)/valSum;
-				}
-
-				residRho = computeRMSResidual(thisRho, lastRho);
-				residU = computeRMSResidual(thisU, lastU);
-				residV = computeRMSResidual(thisV, lastV);
-				residE = computeRMSResidual(thisE, lastE);
-
-				lastRho[] = thisRho[];
-				lastU[] = thisU[];
-				lastV[] = thisV[];
-				lastE[] = thisE[];
-
-				auto f = mesh.computeBoundaryForces(config.forceBoundary);
-
-				if(mesh.mpiRank == 0)
-				{
-					ld = rotMat*f;
-
-					forceBuffer.write!double(t, &buffPos);
-					forceBuffer.write!double(ld[0], &buffPos);
-					forceBuffer.write!double(ld[1], &buffPos);
-				}
-
-				if(buffPos == buffSize)
-				{
-					fwrite(forceBuffer.ptr, ubyte.sizeof, buffSize, forceFile);
-					buffPos = 0;
-				}
-
-				residMax = max(residRho, residU, residV, residE);
-
-				if(config.plotIter >= 0)
-				{
-					if(totalIterations % config.plotIter == 0)
-					{
-						if(mesh.mpiRank == 0)
-						{
-							printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-							printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
-						}
-					}
-				}
-				if(config.saveIter != -1)
-				{
-					if(totalIterations % config.saveIter == 0)
-					{
-						char[512] filename;
-						filename[] = 0;
-						snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
-						saveSolution(mesh, filename.ptr, t, dt);
-						filename[] = 0;
-						snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
-						saveLimits(mesh, filename.ptr, t, dt);
-						saveItr++;
-					}
-				}
-				t += dt;
+				solverIteration(mesh);
 				iterations++;
-				totalIterations++;
-				lastRmax = Rmax;
 				//if(mpiRank == 0) logln("current elapsed: ", MPI_Wtime - startTime2);
 			}
 			MPI_Barrier(mesh.comm);
 			elapsed = MPI_Wtime - startTime;
+
+			GC.enable;
+			GC.collect;
+			if(mpiRank != 0)
+			{
+				auto localState = new Vector!4[mesh.interiorCells.length];
+				foreach(i; mesh.interiorCells)
+				{
+					localState[i] = mesh.q[i];
+				}
+
+				MPI_COMM_WORLD.sendArray(localState, 0, mesh.meshTag);
+			}
+			else
+			{
+				foreach(int proc, localToGlobalMap; bigMesh.localToGlobalMaps)
+				{
+					if(proc != 0)
+					{
+						auto localState = MPI_COMM_WORLD.recvArray!(Vector!4)(proc, mesh.meshTag);
+						foreach(localIdx, globalIdx; localToGlobalMap)
+						{
+							bigMesh.q[globalIdx] = localState[localIdx];
+						}
+					}
+					else
+					{
+						foreach(localIdx, globalIdx; localToGlobalMap)
+						{
+							bigMesh.q[globalIdx] = mesh.q[localIdx];
+						}
+					}
+				}
+			}
 		}
 		else
 		{
 			MPI_Barrier(mesh.comm);
 			elapsed = 100*equalTime*p;
+			GC.enable;
+			GC.collect;
 		}
 
-		GC.enable;
-		GC.collect;
 
 		//logln(runIterations, " iterations took ", elapsed, " seconds");
 		MPI_Barrier(mesh.comm);

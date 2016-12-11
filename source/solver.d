@@ -30,7 +30,7 @@ import ebb.mesh;
 import ebb.io;
 import ebb.mpid;
 
-static shared bool interrupted = false;
+public shared bool interrupted = false;
 
 @nogc @system nothrow extern(C) void handle(int sig)
 {
