@@ -213,7 +213,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 					elapsed = MPI_Wtime - startTime;
 					MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
 
-					if(id == 0) logln("Average solver iteration time: ", elapsed/meshOpt.runIterations.to!double);
+					if(id == 0) logln("weights: ", meshOpt.bestWeights, ";  Average solver iteration time: ", elapsed/meshOpt.runIterations.to!double);
 					if(elapsed > 1.10*meshOpt.minTime)
 					{
 						if(id == 0) logln("weights: ", meshOpt.bestWeights, ";  elapsed time jumped up by 10%, restarting optimization");
