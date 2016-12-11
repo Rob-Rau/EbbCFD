@@ -763,9 +763,9 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		MPI_Barrier(mesh.comm);
 		MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
 
-		if(((elapsed/equalTime) < minTime) && (depth == 0))
+		if(((elapsed/runIterations.to!double) < minTime) && (depth == 0))
 		{
-			minTime = elapsed/equalTime;
+			minTime = elapsed/runIterations.to!double;
 			bestWeights[] = w[];
 			//if(mpiRank == 0) logln("new minimum time: ", minTime, " seconds");
 			//if(mpiRank == 0) logln("	optimal weights: ", bestWeights);
