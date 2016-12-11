@@ -134,13 +134,17 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		{
 			Result result = sqp.Optimize(meshOpt);
 
-			writeln();
-			writeln("SQP:");
-			writefln("\tOptimal Point =  [%(%20.20f, %)]", result.DesignVariables);
-			writefln("\tDrag = %20.20f", result.ObjectiveFunctionValue);
-			writeln("\tConverged in ", result.Iterations, " iterations.");
-			writeln("\tComputation time: ", result.ComputationTime, " usecs.");
-			writeln("\tMinor iterations: ", result.MinorIterations);
+			if(id == 0)
+			{
+				writeln();
+				writeln("SQP:");
+				writefln("\tOptimal Point =  [%(%20.20f, %)]", result.DesignVariables);
+				writefln("\tDrag = %20.20f", result.ObjectiveFunctionValue);
+				writeln("\tConverged in ", result.Iterations, " iterations.");
+				writeln("\tComputation time: ", result.ComputationTime, " usecs.");
+				writeln("\tMinor iterations: ", result.MinorIterations, "\n");
+				writeln("Mesh partitions optimized, running and monitoring simulation");
+			}
 
 			//UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[] partWeights)
 			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, meshOpt.bestWeights);
