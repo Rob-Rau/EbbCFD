@@ -181,6 +181,7 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	double t = 0;
 	double dt;
 	void solverIteration(ref UMesh2 mesh);
+	double[] bestWeights;
 }
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
@@ -225,7 +226,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	int p;
 
 	double minTime = double.infinity;
-	double[] bestWeights;
 
 	immutable uint buffSize = 3*1024*1024*double.sizeof;
 	size_t buffPos = 0;
@@ -636,7 +636,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		if(((elapsed/equalTime) < minTime) && (depth == 0))
 		{
 			minTime = elapsed/equalTime;
-			//bestWeights[] = w[];
+			bestWeights[] = w[];
 			//if(mpiRank == 0) logln("new minimum time: ", minTime, " seconds");
 			//if(mpiRank == 0) logln("	optimal weights: ", bestWeights);
 		}
