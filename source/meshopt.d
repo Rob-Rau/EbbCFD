@@ -124,13 +124,13 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
 		sqp.FileOutput = false;
-		sqp.Tolerance = 2.0e-5;
+		sqp.Tolerance = 2.0e-3;
 		sqp.id = id;
 		//sqp.Eta = 0.05;
 		logln("Starting optimization");
 		MPI_Barrier(MPI_COMM_WORLD);
 
-		while(meshOpt.t < config.tEnd)
+		while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
 		{
 			Result result = sqp.Optimize(meshOpt);
 
@@ -141,6 +141,13 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			writeln("\tConverged in ", result.Iterations, " iterations.");
 			writeln("\tComputation time: ", result.ComputationTime, " usecs.");
 			writeln("\tMinor iterations: ", result.MinorIterations);
+
+			//UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[] partWeights)
+			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, result.DesignVariables);
+			while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
+			{
+				meshOpt.solverIteration(mesh);
+			}
 		}
 		if(id == 0)
 		{
@@ -173,6 +180,7 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	UMesh2 bigMesh;
 	double t = 0;
 	double dt;
+	void solverIteration(ref UMesh2 mesh);
 }
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
@@ -308,7 +316,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		return doCompute(designVar, 0);
 	}
 
-	void solverIteration(ref UMesh2 mesh)
+	override void solverIteration(ref UMesh2 mesh)
 	{
 		double startTime2 = MPI_Wtime;
 		double Rmax = 0;
@@ -637,7 +645,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		{
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed, " seconds");
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed/equalTime, " normalized seconds; equal partition time: ", equalTime, " seconds; w = ", w);
-			if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed), " seconds; average iteration time: ", elapsed/runIterations.to!double);
+			//if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed), " seconds; average iteration time: ", elapsed/runIterations.to!double);
 		}
 
 		MPI_Barrier(mesh.comm);
