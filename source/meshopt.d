@@ -150,8 +150,6 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			mesh.comm = MPI_COMM_WORLD;
 			mesh.mpiRank = id;
 
-			meshOpt.reinitIntegrator(mesh);
-
 			import std.experimental.allocator.mallocator : Mallocator;
 			meshOpt.lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 			meshOpt.thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
@@ -163,6 +161,44 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			meshOpt.thisE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 			meshOpt.tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 			meshOpt.R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+
+			// Scatter bigMesh to smaller meshes
+			ufvmSetup(mesh, config, meshOpt.lastRho, meshOpt.lastU, meshOpt.lastV, meshOpt.lastE, meshOpt.t, meshOpt.dt, "", meshOpt.ex);
+			if(id == 0)
+			{
+				foreach(int proc, localToGlobalMap; meshOpt.bigMesh.localToGlobalMaps)
+				{
+					if(proc != 0)
+					{
+						//logln("Sending to proc ", proc);
+						auto localState = new Vector!4[localToGlobalMap.length];
+
+						foreach(i, globalIdx; localToGlobalMap)
+						{
+							localState[i] = meshOpt.bigMesh.q[globalIdx];
+						} 
+						MPI_COMM_WORLD.sendArray(localState, proc, mesh.meshTag);
+					}
+					else
+					{
+						foreach(j, i; mesh.interiorCells)
+						{
+							mesh.q[i] = meshOpt.bigMesh.q[localToGlobalMap[j]];
+						}
+					}
+				}
+			}
+			else
+			{
+				auto localState = MPI_COMM_WORLD.recvArray!(Vector!4)(0, mesh.meshTag);
+
+				foreach(j, i; mesh.interiorCells)
+				{
+					mesh.q[i] = localState[j];
+				}
+			}
+
+			meshOpt.reinitIntegrator(mesh);
 
 			uint iterations = 0;
 			double startTime = MPI_Wtime;
@@ -186,6 +222,40 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 					startTime = MPI_Wtime;
 				}
 			}
+
+			// Gather results and put it in bigMesh
+			if(id != 0)
+			{
+				auto localState = new Vector!4[mesh.interiorCells.length];
+				foreach(i; mesh.interiorCells)
+				{
+					localState[i] = mesh.q[i];
+				}
+
+				MPI_COMM_WORLD.sendArray(localState, 0, mesh.meshTag);
+			}
+			else
+			{
+				foreach(int proc, localToGlobalMap; meshOpt.bigMesh.localToGlobalMaps)
+				{
+					if(proc != 0)
+					{
+						auto localState = MPI_COMM_WORLD.recvArray!(Vector!4)(proc, mesh.meshTag);
+						foreach(localIdx, globalIdx; localToGlobalMap)
+						{
+							meshOpt.bigMesh.q[globalIdx] = localState[localIdx];
+						}
+					}
+					else
+					{
+						foreach(localIdx, globalIdx; localToGlobalMap)
+						{
+							meshOpt.bigMesh.q[globalIdx] = mesh.q[localIdx];
+						}
+					}
+				}
+			}
+
 
 			Mallocator.instance.deallocate(cast(void[])meshOpt.lastRho);
 			Mallocator.instance.deallocate(cast(void[])meshOpt.thisRho);
@@ -246,6 +316,7 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	double[] tmp;
 	ubyte[] forceBuffer;
 	Vector!4[] R;
+	SolverException ex;
 }
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
@@ -268,8 +339,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	Vector!2 ld;
 
 	Config config;
-
-	SolverException ex;
 
 	FILE* forceFile;
 	uint totalIterations;
