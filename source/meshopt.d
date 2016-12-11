@@ -115,23 +115,23 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		//meshOpt.StepSize = 5.0e-3;
 		double stepSize = 300.0/meshOpt.bigMesh.cells.length.to!double;
 		MPI_Bcast(&stepSize, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		meshOpt.StepSize = stepSize;
-		meshOpt.runIterations = 270;
-
-		sqp.DebugMode = true;
-		sqp.InitialGuess = new double[p];
-		sqp.InitialGuess[] = 1.0/(cast(double)p);
-		sqp.PointFilename = "SQPpoints.csv";
-		sqp.ErrorFilename = "SQPerror.csv";
-		sqp.FileOutput = true;
-		sqp.Tolerance = 2.0e-3;
-		sqp.id = id;
-		sqp.Eta = 0.05;
-		logln("Starting optimization");
-		MPI_Barrier(MPI_COMM_WORLD);
 
 		while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
 		{
+			meshOpt.StepSize = stepSize;
+			meshOpt.runIterations = 270;
+
+			sqp.DebugMode = true;
+			sqp.InitialGuess = new double[p];
+			sqp.InitialGuess[] = 1.0/(cast(double)p);
+			sqp.PointFilename = "SQPpoints.csv";
+			sqp.ErrorFilename = "SQPerror.csv";
+			sqp.FileOutput = true;
+			sqp.Tolerance = 2.0e-3;
+			sqp.id = id;
+			sqp.Eta = 0.05;
+			logln("Starting optimization");
+			MPI_Barrier(MPI_COMM_WORLD);
 			Result result = sqp.Optimize(meshOpt);
 
 			if(id == 0)
