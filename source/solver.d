@@ -729,7 +729,7 @@ MPI_Datatype vec4dataType;
 	if(mesh.mpiRank == 1)
 	{
 		double startTime = MPI_Wtime();
-		for(uint i = 0; i < 100000; i++)
+		for(uint i = 0; i < 600000; i++)
 		{
 			atomicStore(bullshit, true);
 		}
@@ -739,7 +739,7 @@ MPI_Datatype vec4dataType;
 
 	if(mesh.mpiRank == 3)
 	{
-		for(uint i = 0; i < 100000; i++)
+		for(uint i = 0; i < 600000; i++)
 		{
 			atomicStore(bullshit, true);
 		}

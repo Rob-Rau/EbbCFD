@@ -114,10 +114,10 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 
 		meshOpt.DerivativeType = "numd.optimization.FiniteDifference.FiniteDifferenceEqualized";
 		//meshOpt.StepSize = 5.0e-3;
-		double stepSize = 100.0/meshOpt.bigMesh.cells.length.to!double;
+		double stepSize = 300.0/meshOpt.bigMesh.cells.length.to!double;
 		MPI_Bcast(&stepSize, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 		meshOpt.StepSize = stepSize;
-		meshOpt.runIterations = 30;
+		meshOpt.runIterations = 270;
 
 		sqp.DebugMode = true;
 		sqp.InitialGuess = new double[p];
@@ -125,7 +125,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
 		sqp.FileOutput = false;
-		sqp.Tolerance = 1.0e-8;
+		sqp.Tolerance = 2.0e-3;
 		sqp.id = id;
 		//sqp.Eta = 0.05;
 		logln("Starting optimization");
@@ -293,6 +293,12 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			w[i] = dv.re;
 		}
 
+		
+		auto down = 1.0/p.to!double * 0.85;
+		//w[] = (1.0 - 2.0*down)/((p - 2).to!double);
+		//w[1] = down;
+		//w[3] = down;
+		//w[] = 1.0/p.to!double;
 		if(mpiRank == 0)
 		{
 			//if(depth == 0) logln("w = ", w);
@@ -329,7 +335,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 			if(depth == 0)
 			{
-				equalTime = doCompute(w.complex, 1).re;
+				//equalTime = doCompute(w.complex, 1).re;
 			}
 		}
 		// let the integrator do any neccessary initialization
@@ -501,7 +507,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		else
 		{
 			MPI_Barrier(mesh.comm);
-			elapsed = 4*equalTime*p;
+			elapsed = 100*equalTime*p;
 		}
 
 		GC.enable;
@@ -521,10 +527,12 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		{
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed, " seconds");
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed/equalTime, " normalized seconds; equal partition time: ", equalTime, " seconds; w = ", w);
-			if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed/runIterations.to!double)/(equalTime/runIterations.to!double), " normalized seconds; elapsed time: ", elapsed/runIterations.to!double);
+			if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed), " seconds; average iteration time: ", elapsed/runIterations.to!double);
 		}
 
 		MPI_Barrier(mesh.comm);
+
+		MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
 
 		if(depth == 1)
 		{
@@ -532,8 +540,8 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		}
 		else
 		{
-			return complex((elapsed/runIterations.to!double)/(equalTime/runIterations.to!double), 0.0);
-			//return complex(elapsed/runIterations.to!double, 0.0);
+			//return complex((elapsed/runIterations.to!double)/(equalTime/runIterations.to!double), 0.0);
+			return complex(elapsed/runIterations.to!double, 0.0);
 		}
 	}
 
