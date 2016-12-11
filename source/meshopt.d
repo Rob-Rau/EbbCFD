@@ -120,7 +120,8 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		{
 			meshOpt.StepSize = stepSize;
 			meshOpt.runIterations = 270;
-
+			sqp = new SQP;
+			meshOpt.sqp = sqp;
 			sqp.DebugMode = true;
 			sqp.InitialGuess = new double[p];
 			sqp.InitialGuess[] = 1.0/(cast(double)p);
@@ -323,7 +324,9 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	ubyte[] forceBuffer;
 	Vector!4[] R;
 	SolverException ex;
-}
+
+	SQP sqp;
+}	
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
 {
@@ -354,7 +357,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	immutable uint buffSize = 3*1024*1024*double.sizeof;
 	size_t buffPos = 0;
 
-	SQP sqp;
 	this(Config config, int p, int rank, SQP sqp)
 	{
 		this.sqp = sqp;
