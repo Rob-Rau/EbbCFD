@@ -163,9 +163,27 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			meshOpt.tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 			meshOpt.R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
 
+			uint iterations = 0;
+			double startTime = MPI_Wtime;
+			double elapsed;
 			while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
 			{
 				meshOpt.solverIteration(mesh);
+				iterations++;
+				
+				if((iterations % meshOpt.runIterations) == 0)
+				{
+					elapsed = MPI_Wtime - startTime;
+					MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
+
+					if(id == 0) logln("Average solver iteration time: ", elapsed/meshOpt.runIterations.to!double);
+					if(elapsed > 1.10*meshOpt.minTime)
+					{
+						if(id == 0) logln("elapsed time jumped up by 10%, restarting optimization");
+						break;
+					}
+					startTime = MPI_Wtime;
+				}
 			}
 
 			Mallocator.instance.deallocate(cast(void[])meshOpt.lastRho);
@@ -212,7 +230,10 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	double t = 0;
 	double dt;
 	void solverIteration(ref UMesh2 mesh);
+
+	double minTime = double.infinity;
 	double[] bestWeights;
+
 	double[] lastRho;
 	double[] thisRho;
 	double[] lastU;
@@ -238,9 +259,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	double residV = 0.0;
 	double residE = 0.0;
 	double residMax = 0.0;
-
-	
-
 	double lastRmax = 0.0;
 
 	double residRhoLast;
@@ -256,8 +274,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	uint totalIterations;
 	uint saveItr;
 	int p;
-
-	double minTime = double.infinity;
 
 	immutable uint buffSize = 3*1024*1024*double.sizeof;
 	size_t buffPos = 0;
@@ -670,6 +686,8 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		//logln(runIterations, " iterations took ", elapsed, " seconds");
 		MPI_Barrier(mesh.comm);
+		MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
+
 		if(((elapsed/equalTime) < minTime) && (depth == 0))
 		{
 			minTime = elapsed/equalTime;
@@ -686,8 +704,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		}
 
 		MPI_Barrier(mesh.comm);
-
-		MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
 
 		if(depth == 1)
 		{
