@@ -583,6 +583,11 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			//if(depth == 0) logln("w = ", w);
 		}
 		
+		foreach(uint i, dv; designVar)
+		{
+			w[i] = dv.re;
+		}
+
 		//logln("partSum = ", designVar.sum!".re");
 		mesh = partitionMesh(bigMesh, p, mpiRank, MPI_COMM_WORLD, w);
 		MPI_Barrier(MPI_COMM_WORLD);
@@ -590,7 +595,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		mesh.mpiRank = mpiRank;
 
 		double equalTime = 1.0;
-		
+
 		//logln("building mesh");
 		mesh.buildMesh;
 		MPI_Barrier(MPI_COMM_WORLD);
@@ -612,7 +617,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 		if(mesh.interiorCells.length != bigMesh.interiorCells.length)
 		{
-			w[] = 1.0/(cast(double)p);
+			//w[] = 1.0/(cast(double)p);
 
 			if(depth == 0)
 			{
@@ -620,11 +625,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			}
 		}
 
-		
-		foreach(uint i, dv; designVar)
-		{
-			w[i] = dv.re;
-		}
 		// let the integrator do any neccessary initialization
 		//logln("Re initing integrator");
 		integrator.reinit(mesh);
