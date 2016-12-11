@@ -571,11 +571,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			equalTime = doCompute(w.complex, 1).re;
 		}
 		+/
-		double equalTime = 1.0;
-		foreach(uint i, dv; designVar)
-		{
-			w[i] = dv.re;
-		}
 
 		
 		auto down = 1.0/p.to!double * 0.85;
@@ -594,6 +589,8 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		mesh.comm = MPI_COMM_WORLD;
 		mesh.mpiRank = mpiRank;
 
+		double equalTime = 1.0;
+		
 		//logln("building mesh");
 		mesh.buildMesh;
 		MPI_Barrier(MPI_COMM_WORLD);
@@ -621,6 +618,12 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			{
 				//equalTime = doCompute(w.complex, 1).re;
 			}
+		}
+
+		
+		foreach(uint i, dv; designVar)
+		{
+			w[i] = dv.re;
 		}
 		// let the integrator do any neccessary initialization
 		//logln("Re initing integrator");
