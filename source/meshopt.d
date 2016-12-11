@@ -146,11 +146,12 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 
 			//UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[] partWeights)
 			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, meshOpt.bestWeights);
+			mesh.buildMesh;
 			mesh.comm = MPI_COMM_WORLD;
 			mesh.mpiRank = id;
 
 			meshOpt.reinitIntegrator(mesh);
-			
+
 			import std.experimental.allocator.mallocator : Mallocator;
 			meshOpt.lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 			meshOpt.thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
