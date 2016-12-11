@@ -137,12 +137,10 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			if(id == 0)
 			{
 				writeln();
-				writeln("SQP:");
-				writefln("\tOptimal Point =  [%(%20.20f, %)]", result.DesignVariables);
-				writefln("\tDrag = %20.20f", result.ObjectiveFunctionValue);
+				writefln("\tOptimal weights =  [%(%20.20f, %)]", result.DesignVariables);
+				writefln("\tAverage iteration time = %20.20f", result.ObjectiveFunctionValue);
 				writeln("\tConverged in ", result.Iterations, " iterations.");
-				writeln("\tComputation time: ", result.ComputationTime, " usecs.");
-				writeln("\tMinor iterations: ", result.MinorIterations, "\n");
+				writeln("\tComputation time: ", result.ComputationTime/(1000.0*1000.0), " secs.\n");
 				writeln("Mesh partitions optimized, running and monitoring simulation");
 			}
 
@@ -151,6 +149,8 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			mesh.comm = MPI_COMM_WORLD;
 			mesh.mpiRank = id;
 
+			meshOpt.reinitIntegrator(mesh);
+			
 			import std.experimental.allocator.mallocator : Mallocator;
 			meshOpt.lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 			meshOpt.thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
@@ -230,7 +230,7 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	double t = 0;
 	double dt;
 	void solverIteration(ref UMesh2 mesh);
-
+	void reinitIntegrator(ref UMesh2 mesh);
 	double minTime = double.infinity;
 	double[] bestWeights;
 
@@ -368,6 +368,11 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	final override Complex!double Compute(Complex!double[] designVar)
 	{
 		return doCompute(designVar, 0);
+	}
+
+	override void reinitIntegrator(ref UMesh2 mesh)
+	{
+		integrator.reinit(mesh);
 	}
 
 	override void solverIteration(ref UMesh2 mesh)
