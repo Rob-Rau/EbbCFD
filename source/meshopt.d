@@ -775,7 +775,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		{
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed, " seconds");
 			//if(depth == 0) logln(runIterations, " iterations took ", elapsed/equalTime, " normalized seconds; equal partition time: ", equalTime, " seconds; w = ", w);
-			//if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed), " seconds; average iteration time: ", elapsed/runIterations.to!double);
+			if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed), " seconds; average iteration time: ", elapsed/runIterations.to!double);
 		}
 
 		MPI_Barrier(mesh.comm);
