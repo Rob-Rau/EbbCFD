@@ -145,7 +145,8 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			}
 
 			//UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[] partWeights)
-			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, meshOpt.bestWeights);
+			//auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, meshOpt.bestWeights);
+			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, result.DesignVariables);
 			mesh.comm = MPI_COMM_WORLD;
 			mesh.mpiRank = id;
 			mesh.buildMesh;
@@ -214,7 +215,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 					MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
 
 					if(id == 0) logln("weights: ", meshOpt.bestWeights, ";  Average solver iteration time: ", elapsed/meshOpt.runIterations.to!double);
-					if((elapsed/meshOpt.runIterations.to!double) > 1.10*meshOpt.minTime)
+					if((elapsed/meshOpt.runIterations.to!double) > 1.10*(result.ObjectiveFunctionValue))
 					{
 						if(id == 0) logln("weights: ", meshOpt.bestWeights, ";  elapsed time jumped up by 10%, restarting optimization; minTime: ", meshOpt.minTime);
 						break;
