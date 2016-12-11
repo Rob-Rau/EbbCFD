@@ -28,7 +28,8 @@
 			],
 			"name": "meshopt",
 			"targetName": "ebb-meshopt",
-			"targetType": "executable"
+			"targetType": "executable",
+			"versions": ["meshopt"]
 		},
 		{
 			"excludedSourceFiles": [

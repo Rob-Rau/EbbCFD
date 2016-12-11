@@ -725,26 +725,28 @@ MPI_Datatype vec4dataType;
 		MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 	}
 
-	shared bool bullshit;
-	if(mesh.mpiRank == 1)
+	version(meshopt)
 	{
-		double startTime = MPI_Wtime();
-		for(uint i = 0; i < 600000; i++)
+		shared bool bullshit;
+		if(mesh.mpiRank == 1)
 		{
-			atomicStore(bullshit, true);
+			double startTime = MPI_Wtime();
+			for(uint i = 0; i < 600000; i++)
+			{
+				atomicStore(bullshit, true);
+			}
+			double elapsed = MPI_Wtime() - startTime;
+			//printf("bullshit took %f seconds\n", elapsed);
 		}
-		double elapsed = MPI_Wtime() - startTime;
-		//printf("bullshit took %f seconds\n", elapsed);
-	}
-
-	if(mesh.mpiRank == 3)
-	{
-		for(uint i = 0; i < 600000; i++)
+	
+		if(mesh.mpiRank == 3)
 		{
-			atomicStore(bullshit, true);
+			for(uint i = 0; i < 600000; i++)
+			{
+				atomicStore(bullshit, true);
+			}
 		}
 	}
-
 	// update ghost cell states before we can compute gradients
 	foreach(i; mesh.ghostCells)
 	{
