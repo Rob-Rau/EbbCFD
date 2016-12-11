@@ -123,7 +123,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		sqp.InitialGuess[] = 1.0/(cast(double)p);
 		sqp.PointFilename = "SQPpoints.csv";
 		sqp.ErrorFilename = "SQPerror.csv";
-		sqp.FileOutput = false;
+		sqp.FileOutput = true;
 		sqp.Tolerance = 2.0e-3;
 		sqp.id = id;
 		sqp.Eta = 0.05;
