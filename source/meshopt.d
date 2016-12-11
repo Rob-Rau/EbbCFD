@@ -220,6 +220,11 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 						if(id == 0) logln("weights: ", meshOpt.bestWeights, ";  elapsed time jumped up by 10%, restarting optimization; minTime: ", meshOpt.minTime);
 						break;
 					}
+
+					if((iterations % 4*meshOpt.runIterations) == 0)
+					{
+						setSlowdownIds(4, 0);
+					}
 					startTime = MPI_Wtime;
 				}
 			}

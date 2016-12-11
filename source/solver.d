@@ -566,6 +566,15 @@ public shared bool interrupted = false;
 	}
 }
 
+uint sid1 = 1;
+uint sid2 = 3;
+
+void setSlowdownIds(uint id1, uint id2)
+{
+	sid1 = id1;
+	sid2 = id2; 
+}
+
 MPI_Datatype vec4dataType;
 
 // Unstructured finite volume solver
@@ -728,7 +737,7 @@ MPI_Datatype vec4dataType;
 	version(meshopt)
 	{
 		shared bool bullshit;
-		if(mesh.mpiRank == 1)
+		if(mesh.mpiRank == sid1)
 		{
 			double startTime = MPI_Wtime();
 			for(uint i = 0; i < 400000; i++)
@@ -739,7 +748,7 @@ MPI_Datatype vec4dataType;
 			//printf("bullshit took %f seconds\n", elapsed);
 		}
 	
-		if(mesh.mpiRank == 3)
+		if(mesh.mpiRank == sid1)
 		{
 			for(uint i = 0; i < 600000; i++)
 			{
