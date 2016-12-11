@@ -143,11 +143,38 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			writeln("\tMinor iterations: ", result.MinorIterations);
 
 			//UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm, double[] partWeights)
-			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, result.DesignVariables);
+			auto mesh = partitionMesh(meshOpt.bigMesh, p, id, MPI_COMM_WORLD, meshOpt.bestWeights);
+			mesh.comm = MPI_COMM_WORLD;
+			mesh.mpiRank = id;
+
+			import std.experimental.allocator.mallocator : Mallocator;
+			meshOpt.lastRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.thisRho = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.lastU = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.thisU = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.lastV = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.thisV = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.lastE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.thisE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
+			meshOpt.R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+
 			while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
 			{
 				meshOpt.solverIteration(mesh);
 			}
+
+			Mallocator.instance.deallocate(cast(void[])meshOpt.lastRho);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.thisRho);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.lastU);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.thisU);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.lastV);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.thisV);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.lastE);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.thisE);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.tmp);
+			Mallocator.instance.deallocate(cast(void[])meshOpt.R);
+
 		}
 		if(id == 0)
 		{
@@ -182,6 +209,17 @@ abstract class AbstractMeshOpt : ObjectiveFunction
 	double dt;
 	void solverIteration(ref UMesh2 mesh);
 	double[] bestWeights;
+	double[] lastRho;
+	double[] thisRho;
+	double[] lastU;
+	double[] thisU;
+	double[] lastV;
+	double[] thisV;
+	double[] lastE;
+	double[] thisE;
+	double[] tmp;
+	ubyte[] forceBuffer;
+	Vector!4[] R;
 }
 
 class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt 
@@ -197,17 +235,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 	double residE = 0.0;
 	double residMax = 0.0;
 
-	double[] lastRho;
-	double[] thisRho;
-	double[] lastU;
-	double[] thisU;
-	double[] lastV;
-	double[] thisV;
-	double[] lastE;
-	double[] thisE;
-	double[] tmp;
-	ubyte[] forceBuffer;
-	Vector!4[] R;
+	
 
 	double lastRmax = 0.0;
 
@@ -296,6 +324,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		thisE = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
 		tmp = cast(double[])Mallocator.instance.allocate(bigMesh.cells.length*double.sizeof);
 		R = cast(Vector!4[])Mallocator.instance.allocate(bigMesh.cells.length*Vector!4.sizeof);
+		forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
 		
 		scope(exit) Mallocator.instance.deallocate(cast(void[])lastRho);
 		scope(exit) Mallocator.instance.deallocate(cast(void[])thisRho);
@@ -307,10 +336,15 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		scope(exit) Mallocator.instance.deallocate(cast(void[])thisE);
 		scope(exit) Mallocator.instance.deallocate(cast(void[])tmp);
 		scope(exit) Mallocator.instance.deallocate(cast(void[])R);
-
+		
 		setup(bigMesh, config, lastRho, lastU, lastV, lastE, t, dt, "", ex);
 	}
 
+	~this()
+	{
+		scope(exit) Mallocator.instance.deallocate(cast(void[])forceBuffer);
+	}
+	
 	final override Complex!double Compute(Complex!double[] designVar)
 	{
 		return doCompute(designVar, 0);
@@ -506,7 +540,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		lastE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 		thisE = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 		tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
-		forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
+		
 		R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
 		
 		scope(exit) Mallocator.instance.deallocate(cast(void[])lastRho);
@@ -518,7 +552,6 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		scope(exit) Mallocator.instance.deallocate(cast(void[])lastE);
 		scope(exit) Mallocator.instance.deallocate(cast(void[])thisE);
 		scope(exit) Mallocator.instance.deallocate(cast(void[])tmp);
-		scope(exit) Mallocator.instance.deallocate(cast(void[])forceBuffer);
 		scope(exit) Mallocator.instance.deallocate(cast(void[])R);
 		
 		lastRho[] = 0.0;
