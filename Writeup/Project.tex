@@ -125,13 +125,67 @@
 
 		To reduce the overhead of the two comunication steps in the core of my solver, I resorted to using non blocking communications,
 		which CFD lends itself to relativly well. Typically only a small portion of what needs to be computed relies on communicated data.
-		So to address this, sends and receives are started with MPI_Startall, work is done on other parts of the mesh, and when we
-		need the data, we block until MPI_Testall tells us that our communications have arrived. Switching to this method improved scaling
+		So to address this, sends and receives are started with \verb|MPI_Startall|, work is done on other parts of the mesh, and when we
+		need the data, we block until \verb|MPI_Testall| tells us that our communications have arrived. Switching to this method improved scaling
 		on high latency networks like ethernet.
 		% show those scalling results 
 
 	\section{Optimization}
+		My approach to load balancing was through mathmatical optimization. Basically solving the following problem
+		\begin{eqnarray}
+			\mathrm{minimize} f(x) \\
+			\mathrm{subject to} c_j(x) = 0, c_k(x) >= 0
+		\end{eqnarray}
+		where $f(x)$ is the average computational time for one timestep of the simulation and $c_j(x)$ are the equality constraints and 
+		$c_k(x)$ are the inequality constraints. The constraints for this problem are determined by metis, the mesh partition library used.
+		Metis requires that each weight satisfy $0 \le w_i \le 1$ and that
+		\begin{equation}
+			0 = 1 - \sum{w_i} \quad i = 1,..,p
+		\end{equation}
+		
+		The thing with mathmatical optimization is that it assumes smooth continuous functions. The thing with computers is that they
+		typically aren't smooth continouos devices. Interestingly enough, for this problem at least, this can be spoofed to be the case.
+		I found that by taking long enough runtime samples of my code, the average iteration time, measured in seconds, stayed stable.
+		Typically to about 4 significant figures. This, coupled with the fact that, for a two dimensional mesh, computation time scales
+		as expected with $O(N^2)$, we have a potential recipe for mathmatical optimization. 
 		% talk about mathmatical optimization
+
+		There are many different algorithms that solve optimization problems, but most fall into two catagories: gradient based optimization,
+		and gradient free optimization. Gradient free approaches vary wildly in their fundamental concepts. Genetic algorithms in a way
+		attempt to emulate evolution, simplex methods compute the objective function at the points of an $n + 1$ dimensional simplex, and
+		find search directions using that, and the partical swarm optimizer emulates particles in a feild, traveling towards a minimum point.
+		In my past research with various optimization methods, I typically found that gradient free approaches, while work, usually converge
+		slower, and can require more computations of the objective function that their gradient based counterparts.
+
+		For this reason I decided to use a quasi-newton gradient based optimizer. In gradient based optimization, the gradient of the objective
+		function $\nabla f(x)$ needs to be know as well as the Hessian matrix, defined by
+		\begin{equation}
+			\nabla^2 f(x) = H(x) = \begin{bmatrix}
+				\frac{\partial^2 f}{\partial^2 x_1} & \dots & \frac{\partial^2 f}{\partial x_1 \partial x_n} \\
+				\vdots & \ddots & \vdots \\
+				\frac{\partial^2 f}{\partial x_n \partial x_1} & \dots & \frac{\partial^2 f}{\partial^2 x_n}
+			\end{bmatrix}
+		\end{equation}
+
+		Unfortunatly the gradient needs to be computed at each $x$ visited. However, using the quasi-newton method BFGS (Broyden-Fletcher-Goldfarb-Shanno),
+		the Hessian matrix is is not computed at each iteration, but it is estimated and updated as the optimizer moves through the design space. This saves
+		us from needing to compute $n^2$ second derivatives, and only computing $n$ derivatives. Using a central difference scheme, this ends up 
+		computing the objective function $2n + 1$ times per iteration. The BFGS method is formulated for unconstrained optimization, but we clearly
+		have constraints that need to satisfied, so in comes Sequentail Quadratic Programming (SQP). SQP is a modification on top of BFGS to
+		allow for equality constraints, that basically solves the problem
+		\begin{equation}
+			\mathrm{minimize} \phi(x) = f(x) + \frac{1}{\mu}||c||_1
+		\end{equation}
+		where
+		\begin{equation}
+			||c||_1 = \sum{|c_j|}
+		\end{equation}
+
+		Metis requires us to have inequality constraints as well. Fortunatly a relatively minor modification can be made to SQP to allow for this.
+		It becomes what we call an active set method. Basically every iteration we test where the solution is and where it want't to go and
+		update inequality constraints to equality constraints if they are going to be violated.
+
+
 		% talk about SQP optimizer
 
 	\section{Results}

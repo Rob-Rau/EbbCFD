@@ -607,43 +607,69 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			w[i] = dv.re;
 		}
 
+		double partSum = 1.0 - std.algorithm.sum(w);
 		//logln("partSum = ", designVar.sum!".re");
-		mesh = partitionMesh(bigMesh, p, mpiRank, MPI_COMM_WORLD, w);
-		MPI_Barrier(MPI_COMM_WORLD);
-		mesh.comm = MPI_COMM_WORLD;
-		mesh.mpiRank = mpiRank;
+		bool skip = false;
+		if(abs(partSum) > 1.0e-5)
+		{
+			if(mpiRank == 0) logln("partSum = ", partSum);
+			skip = true;
+		}
 
+		foreach(i, dv; designVar)
+		{
+			if(dv.re > 1.0)
+			{
+				if(mpiRank == 0) logln("skipping design variable ", i, ": ", dv.re, " > 1.0");
+				skip = true;
+			}
+			else if(dv.re < 0.0)
+			{
+				if(mpiRank == 0) logln("skipping design variable ", i, ": ", dv.re, " < 0.0");
+				skip = true;
+			}
+		}
+		//skip = false;
 		double equalTime = 1.0;
-
-		//logln("building mesh");
-		mesh.buildMesh;
-		MPI_Barrier(MPI_COMM_WORLD);
-		//logln("mesh cells = ", mesh.interiorCells.length);
 		size_t[] meshSizes = new size_t[p];
-		if(mpiRank == 0)
+		if(!skip)
 		{
-			meshSizes[0] = mesh.interiorCells.length;
-			for(int i = 1; i < p; i++)
+			mesh = partitionMesh(bigMesh, p, mpiRank, MPI_COMM_WORLD, w);
+			
+			MPI_Barrier(MPI_COMM_WORLD);
+			mesh.comm = MPI_COMM_WORLD;
+			mesh.mpiRank = mpiRank;
+
+			//logln("building mesh");
+			mesh.buildMesh;
+		
+			MPI_Barrier(MPI_COMM_WORLD);
+			//logln("mesh cells = ", mesh.interiorCells.length);
+			
+			if(mpiRank == 0)
 			{
-				meshSizes[i] = mesh.comm.recv!size_t(i, mesh.meshTag);
+				meshSizes[0] = mesh.interiorCells.length;
+				for(int i = 1; i < p; i++)
+				{
+					meshSizes[i] = mesh.comm.recv!size_t(i, mesh.meshTag);
+				}
+				//logln(meshSizes);
 			}
-			//logln(meshSizes);
-		}
-		else
-		{
-			mesh.comm.send(mesh.interiorCells.length, 0, mesh.meshTag);
-		}
-
-		if(mesh.interiorCells.length != bigMesh.interiorCells.length)
-		{
-			//w[] = 1.0/(cast(double)p);
-
-			if(depth == 0)
+			else
 			{
-				//equalTime = doCompute(w.complex, 1).re;
+				mesh.comm.send(mesh.interiorCells.length, 0, mesh.meshTag);
+			}
+
+			if(mesh.interiorCells.length != bigMesh.interiorCells.length)
+			{
+				//w[] = 1.0/(cast(double)p);
+
+				if(depth == 0)
+				{
+					//equalTime = doCompute(w.complex, 1).re;
+				}
 			}
 		}
-
 		// let the integrator do any neccessary initialization
 		//logln("Re initing integrator");
 		integrator.reinit(mesh);
@@ -681,53 +707,54 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		thisE[] = 0.0;
 		tmp[] = 0.0;
 
-		// TODO: Redo this so that it doesn't always start the sim again
-		setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, "", ex);
-		if(mpiRank == 0)
+		if(!skip)
 		{
-			foreach(int proc, localToGlobalMap; bigMesh.localToGlobalMaps)
+			setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, "", ex);
+			if(mpiRank == 0)
 			{
-				if(proc != 0)
+				foreach(int proc, localToGlobalMap; bigMesh.localToGlobalMaps)
 				{
-					//logln("Sending to proc ", proc);
-					auto localState = new Vector!4[localToGlobalMap.length];
+					if(proc != 0)
+					{
+						//logln("Sending to proc ", proc);
+						auto localState = new Vector!4[localToGlobalMap.length];
 
-					foreach(i, globalIdx; localToGlobalMap)
+						foreach(i, globalIdx; localToGlobalMap)
+						{
+							localState[i] = bigMesh.q[globalIdx];
+						} 
+						MPI_COMM_WORLD.sendArray(localState, proc, mesh.meshTag);
+					}
+					else
 					{
-						localState[i] = bigMesh.q[globalIdx];
-					} 
-					MPI_COMM_WORLD.sendArray(localState, proc, mesh.meshTag);
-				}
-				else
-				{
-					foreach(j, i; mesh.interiorCells)
-					{
-						mesh.q[i] = bigMesh.q[localToGlobalMap[j]];
+						foreach(j, i; mesh.interiorCells)
+						{
+							mesh.q[i] = bigMesh.q[localToGlobalMap[j]];
+						}
 					}
 				}
 			}
-		}
-		else
-		{
-			auto localState = MPI_COMM_WORLD.recvArray!(Vector!4)(0, mesh.meshTag);
-
-			foreach(j, i; mesh.interiorCells)
+			else
 			{
-				mesh.q[i] = localState[j];
+				auto localState = MPI_COMM_WORLD.recvArray!(Vector!4)(0, mesh.meshTag);
+
+				foreach(j, i; mesh.interiorCells)
+				{
+					mesh.q[i] = localState[j];
+				}
 			}
 		}
-
 		//logln("Going");
 		import core.memory: GC;
 
 		GC.disable;
 
-		MPI_Barrier(mesh.comm);
+		MPI_Barrier(MPI_COMM_WORLD);
 		double startTime = MPI_Wtime;
 		double elapsed;
 		uint iterations;
 
-		if(mesh.interiorCells.length != bigMesh.interiorCells.length)
+		if((mesh.interiorCells.length != bigMesh.interiorCells.length) && !skip)
 		{
 			while((iterations < runIterations))
 			{
@@ -774,7 +801,8 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 		}
 		else
 		{
-			MPI_Barrier(mesh.comm);
+			//MPI_Barrier(mesh.comm);
+			MPI_Barrier(MPI_COMM_WORLD);
 			elapsed = 100*equalTime*p;
 			GC.enable;
 			GC.collect;
@@ -782,8 +810,8 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 
 
 		//logln(runIterations, " iterations took ", elapsed, " seconds");
-		MPI_Barrier(mesh.comm);
-		MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, mesh.comm);
+		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Bcast(&elapsed, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 		if(((elapsed/runIterations.to!double) < minTime) && (depth == 0))
 		{
@@ -800,7 +828,7 @@ class MeshOpt(alias setup, alias solver, alias integrator) : AbstractMeshOpt
 			if(depth == 0) logln("mesh sizes: ", meshSizes, ";   ", runIterations, " iterations took ", (elapsed), " seconds; average iteration time: ", elapsed/runIterations.to!double);
 		}
 
-		MPI_Barrier(mesh.comm);
+		MPI_Barrier(MPI_COMM_WORLD);
 
 		if(depth == 1)
 		{
