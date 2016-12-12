@@ -748,7 +748,7 @@ MPI_Datatype vec4dataType;
 			//printf("bullshit took %f seconds\n", elapsed);
 		}
 	
-		if(mesh.mpiRank == sid1)
+		if(mesh.mpiRank == sid2)
 		{
 			for(uint i = 0; i < 600000; i++)
 			{
