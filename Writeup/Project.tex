@@ -95,7 +95,7 @@
 		load balancing, and present results for both simulated heterogenous networks and a real heterogenous network. 
 
 	\section{CFD}
-		The first step the needed to be completed in this project was to parallelize my computational fluid dynamics code, EbbCFD.
+		The first step that needed to be completed in this project was to parallelize my computational fluid dynamics code, EbbCFD.
 		EbbCFD is a 2 dimensional second order finite volume code that currently only solves the Euler equations. It operates on a
 		mesh consisting of triangles, where each triangle represents a finite volume (or area in 2D) that we use to approximate the
 		solution state in. A finite volume code works by computing the flux between two cells and using those fluxes to update the
@@ -115,8 +115,7 @@
 		submesh that represent the relevent cells of its neighbors, typically called halo cells. In the first communication step these
 		cells are populated with average state information. That information is then used to compute gradients and edge values. The
 		second communication step then sends the computed edge values so neighbor processors can compute the necessary fluxes.
-		This constitutes the bulk of the communication that needs to happen, but it doesn't account for all. 
-		% show partitioned mesh
+		This constitutes the bulk of the communication that needs to happen, but it doesn't account for all.
 
 		\begin{figure}[H]
 			\centering
@@ -135,11 +134,21 @@
 		To reduce the overhead of the two comunication steps in the core of my solver, I resorted to using non blocking communications,
 		which CFD lends itself to relativly well. Typically only a small portion of what needs to be computed relies on communicated data.
 		So to address this, sends and receives are started with \verb|MPI_Startall|, work is done on other parts of the mesh, and when we
-		need the data, we block until \verb|MPI_Testall| tells us that our communications have arrived. Switching to this method improved scaling
-		on high latency networks like ethernet.
+		need the data, we block until \verb|MPI_Testall| tells us that our communications have arrived. Switching to this method improved
+		performance on high latency networks like ethernet.
+
+		\begin{table}
+			\centering
+			\begin{tabular}{ c | c | c}
+				Comm type & 8 processors & 16 processors \\ \hline
+				blocking & 135.79 & 137.49 \\
+				Non-blocking & 117.57 & 123.96 \\ 
+			\end{tabular}
+			\caption{Performance improvements. This mesh wasn't big enough to gain any speed increase with 16 processors on ethernet}
+		\end{table}
 		% show those scalling results 
 
-		EbbCFD scaled fairly well to ~200 elements per processor. I tested both a ~6400 element mesh and a ~11000 element mesh. The following
+		EbbCFD scaled fairly well to ~200 elements per processor on Flux. I tested both a ~6400 element mesh and a ~11000 element mesh. The following
 		plot shows that with more elements, more processors are more effective, indicating communication overhead being the
 		bottle neck. Of course this makes sense, the fewer elements per processor, the less time it takes to compute those elements,
 		and communication time takes a higher percentage of the total iteration time. Non-blocking communications helps with this
@@ -169,11 +178,10 @@
 		\end{equation}
 		
 		The thing with mathmatical optimization is that it assumes smooth continuous functions. The thing with computers is that they
-		typically aren't smooth continouos devices. Interestingly enough, for this problem at least, this can be spoofed to be the case.
-		I found that by taking long enough runtime samples of my code, the average iteration time, measured in seconds, stayed stable.
+		typically aren't smooth continuous devices. Interestingly enough, for this problem at least, this can be spoofed to be the case.
+		I found that by taking long enough runtime samples of my code the average iteration time, measured in seconds, stayed stable.
 		Typically to about 4 significant figures. This, coupled with the fact that, for a two dimensional mesh, computation time scales
 		as expected with $O(N^2)$, we have a potential recipe for mathmatical optimization. 
-		% talk about mathmatical optimization
 
 		There are many different algorithms that solve optimization problems, but most fall into two catagories: gradient based optimization,
 		and gradient free optimization. Gradient free approaches vary wildly in their fundamental concepts. Genetic algorithms in a way
@@ -199,7 +207,7 @@
 		have constraints that need to satisfied, so in comes Sequentail Quadratic Programming (SQP). SQP is a modification on top of BFGS to
 		allow for equality constraints, that basically solves the problem
 		\begin{equation}
-			\mathrm{minimize} \phi(x) = f(x) + \frac{1}{\mu}||c||_1
+			\mathrm{minimize \ } \phi(x) = f(x) + \frac{1}{\mu}||c||_1
 		\end{equation}
 		where
 		\begin{equation}
@@ -224,9 +232,19 @@
 		I also tested on a live ethernet network between computers of varying capabilities without any artificial slowdowns.
 
 		Running on Flux, without simulating a network change, it the optimizer finds its way to an optimal mesh distribution in relatively few iterations,
-		yeilding a \% increase in computation speed.
-		% put figures here and also proper numbers
+		yeilding a 25.422\% increase in computation speed.
 
+		% put figures here and also proper numbers
+		\begin{figure}[H]
+			\centering
+			\includegraphics[width=\textwidth]{6Pevenslow.pdf}
+		\end{figure}
+
+		Of course the optimizer does fine when the slow downs are uneven. It still yeilded a 29.28\% speedup.
+		\begin{figure}[H]
+			\centering
+			\includegraphics[width=\textwidth]{6Punevenslow.pdf}
+		\end{figure}
 
 		The following results come from a simulated network change. The code monitors the running time of the core solver and if it detects a significant
 		change in run time, it will trigger the optimizer to run again. Whether the optimizer starts at an even mesh distribution or the last optimal mesh
@@ -259,7 +277,7 @@
 		\end{centering}
 
 		The following results where from a 6 processor run, with each machine running 2 processors. Even on a high latency/low bandwidth (relative to 
-		InfinaBand) network the optimizer managed to distribute the mesh in a way one would expect, and yeild a \% increas in computation speed.
+		InfinaBand) network the optimizer managed to distribute the mesh in a way one would expect, and yeild a 12.6\% increas in computation speed.
 		\begin{figure}[H]
 			\centering
 			\begin{subfigure}[H]{0.9\textwidth}
@@ -271,21 +289,14 @@
 				\caption{6 processors on a less quiet ethernet network with various other computational activity}
 			\end{subfigure}
 		\end{figure}
-		% put figure in here and also proper numbers
-
-		% show plots of mesh weights vs time (optimization iteration)
-		% show plots of average iteration time vs time (optimization iteration)
-
+		Interestingly, even though their were dissruptions in the average iteration time due to other network and computer activitiy that happened durring
+		optimization, the optimizer still arrived at sensible weights 
 
 	\section{Conclusions}
 
-		The overall concept did yeild positive results and for the cases I tested, a speedup was acheived in both more isolated environment like flux
-		and in a noisy live environment like my livingroom. 
-		% talk about benefits
-
-		In the testing I carried out I could not get appreciable speedup above 6 processors and unfortunatly I don't have a good explination for why.
-		Perhaps a different underlying optimization algorithm could fix this. 
-		% talk about limitations
+		The overall concept did yeild positive results and for the cases I tested, a reasonable speedup was acheived in both an isolated environment like Flux
+		and in a noisy live environment like my livingroom. In the testing I carried out I could not get appreciable speedup above 6 processors and unfortunatly
+		I don't have a good explination for why. Perhaps a different underlying optimization algorithm could fix this. 
 		
 		There are two primary applications that I see this approach being useful: small beowolf clusters, and CPU/GPU hybrid code. There are many people
 		who don't have access to large HPC compute resources, but do have many machines laying around capable of being used. My living room being a prime
@@ -300,7 +311,5 @@
 		Even though I am a masters student I do have plans to extend this. The two main things I'm currently interested in are, as mentioned above, CPU/GPU
 		balancing, and testing different optimization algorithms. I'd like to test some gradient free methods, most likely simplex methods, and see if I
 		can acheive better scaling results. 
-		% talk about possible real world applications (GPU/CPU balancing)
-
 
 \end{document}

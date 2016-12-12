@@ -113,7 +113,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 
 		meshOpt.DerivativeType = "numd.optimization.FiniteDifference.FiniteDifferenceEqualized";
 		//meshOpt.StepSize = 5.0e-3;
-		double stepSize = 300.0/meshOpt.bigMesh.cells.length.to!double;
+		double stepSize = 500.0/meshOpt.bigMesh.cells.length.to!double;
 		MPI_Bcast(&stepSize, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 		uint optimizationRuns = 0;
