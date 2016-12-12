@@ -117,9 +117,9 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		MPI_Bcast(&stepSize, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 		uint optimizationRuns = 0;
+		Result result;
 		while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
 		{
-			Result result;
 			meshOpt.StepSize = stepSize;
 			meshOpt.runIterations = 270;
 			sqp = new SQP;
@@ -133,7 +133,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			else
 			{
 				sqp.InitialGuess = new double[p];
-				sqp.InitialGuess[] = result.DesignVariables;
+				sqp.InitialGuess[] = result.DesignVariables[];
 			}
 			sqp.PointFilename = "SQPpoints.csv";
 			sqp.ErrorFilename = "SQPerror.csv";
