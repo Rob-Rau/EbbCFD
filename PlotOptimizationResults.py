@@ -3,6 +3,7 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 
 def PlotRealNetwork():
 	weights = np.genfromtxt('SQPpoints_realNetwork.csv',
@@ -17,13 +18,39 @@ def PlotRealNetwork():
 	#print(weights)
 	plt.plot(weights)
 	plt.title('Metis mesh weights')
-	plt.xlabel('Optimizer iterations')
+	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
 
 	plt.subplot(2,1,2)
 	plt.title('Average iteration time')
 	plt.xlabel('Optimizer iterations')
 	plt.ylabel('Average solver iteration time [s]')
+
+	plt.suptitle('6 Processor Ethernet')
+	plt.plot(f)
+
+def PlotRealNetwork2():
+	weights = np.genfromtxt('SQPpoints_realNetwork2.csv',
+							skip_header=0,
+							skip_footer=0,
+							delimiter=',',
+							dtype='float64')
+
+	f = [0.0113527, 0.0100857, 0.00999296, 0.00991069, 0.00976466, 0.00974761, 0.00975821, 0.0138991, 0.0104268, 0.00999844, 0.00984646, 0.0107659, 0.0138946, 0.013898, 0.0108843, 0.0108483, 0.0115359, 0.0103734, 0.00991257, 0.0100628, 0.00978714814840781454, 0.0098085, 0.00980577, 0.00981618, 0.0110233, 0.00987941, 0.01355882222220922487, 0.010585, 0.00993282, 0.0098202]
+
+	plt.subplot(2,1,1)
+	#print(weights)
+	plt.plot(weights)
+	plt.title('Metis mesh weights')
+	#plt.xlabel('Optimizer iterations')
+	plt.ylabel('Mesh weights')
+
+	plt.subplot(2,1,2)
+	plt.title('Average iteration time')
+	plt.xlabel('Optimizer iterations')
+	plt.ylabel('Average solver iteration time [s]')
+
+	plt.suptitle('6 Processor Busy Ethernet')
 	plt.plot(f)
 
 def PlotNetworChange():
@@ -39,13 +66,15 @@ def PlotNetworChange():
 	#print(weights)
 	plt.plot(weights)
 	plt.title('Metis mesh weights')
-	plt.xlabel('Optimizer iterations')
+	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
 
 	plt.subplot(2,1,2)
 	plt.title('Average iteration time')
 	plt.xlabel('Optimizer iterations')
 	plt.ylabel('Average solver iteration time [s]')
+
+	plt.suptitle('Simulated network change')
 	plt.plot(f)
 
 def PlotNetworChange2():
@@ -61,7 +90,7 @@ def PlotNetworChange2():
 	#print(weights)
 	plt.plot(weights)
 	plt.title('Metis mesh weights')
-	plt.xlabel('Optimizer iterations')
+	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
 
 	plt.subplot(2,1,2)
@@ -85,7 +114,7 @@ def Plot6PevenSlowdown():
 	#print(weights)
 	plt.plot(weights)
 	plt.title('Metis mesh weights')
-	plt.xlabel('Optimizer iterations')
+	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
 
 	plt.subplot(2,1,2)
@@ -107,7 +136,7 @@ def Plot6PunevenSlowdownBigMesh():
 	#print(weights)
 	plt.plot(weights)
 	plt.title('Metis mesh weights')
-	plt.xlabel('Optimizer iterations')
+	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
 
 	plt.subplot(2,1,2)
@@ -130,7 +159,7 @@ def Plot6PunevenSlowdown():
 	#print(weights)
 	plt.plot(weights)
 	plt.title('Metis mesh weights')
-	plt.xlabel('Optimizer iterations')
+	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
 
 	plt.subplot(2,1,2)
@@ -142,6 +171,7 @@ def Plot6PunevenSlowdown():
 def PlotEbbSpeedup(elements, p, serialTime, parallelTime):
 	speedup = serialTime/parallelTime
 	handle = plt.plot(p, speedup, label=str(elements)+' element mesh')
+	plt.axis('equal')
 	plt.title('speedup')
 	return handle
 
@@ -159,6 +189,8 @@ if __name__ == "__main__":
 	p[2] = 8
 	p[3] = 16
 	p[4] = 32
+
+	matplotlib.rcParams.update({'font.size': 8})
 
 	parallelTime1 = np.zeros((5, 1))
 	serialTime1 = 150.15
@@ -180,30 +212,42 @@ if __name__ == "__main__":
 	h1 = PlotEbbSpeedup(6413, p, serialTime1, parallelTime1)
 	h2 = PlotEbbSpeedup(11594, p, serialTime2, parallelTime2)
 	plt.legend()
+	plt.savefig("Writeup/EbbSpeedup.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	h1 = PlotEbbEfficiency(6413, p, serialTime1, parallelTime1)
 	h2 = PlotEbbEfficiency(11594, p, serialTime2, parallelTime2)
 	plt.legend()
+	plt.savefig("Writeup/EbbEfficiency.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	Plot6PevenSlowdown()
+	plt.savefig("Writeup/6Pevenslow.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	Plot6PunevenSlowdown()
+	plt.savefig("Writeup/6Punevenslow.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	Plot6PunevenSlowdownBigMesh()
+	plt.savefig("Writeup/6PunevenslowBig.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	PlotNetworChange()
+	plt.savefig("Writeup/5PnetworkChange.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	PlotRealNetwork()
+	plt.savefig("Writeup/RealNetwork.pdf", bbox_inches='tight', papertype='letter', format='pdf')
+
+	plt.figure()
+	PlotRealNetwork2()
+	plt.savefig("Writeup/RealNetwork2.pdf", bbox_inches='tight', papertype='letter', format='pdf')
 
 	plt.figure()
 	PlotNetworChange2()
-	
+	plt.savefig("Writeup/6PNetworkChange.pdf", bbox_inches='tight', papertype='letter', format='pdf')
+
 	plt.show(block=True)
 
 

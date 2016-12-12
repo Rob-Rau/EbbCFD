@@ -90,8 +90,8 @@
 	\maketitle
 
 	\section{Introduction}
-		For this term project I impliment parallelization of my own computational fluid dynamics (CFD) software and explore load balancing
-		for heterogenous compute networks. In this report I will discuss how I parallelized my code, scalling results, my method of
+		For this term project I impliment parallelization of my own computational fluid dynamics (CFD) software and I explore load balancing
+		for heterogenous compute networks. In this report I will discuss how I parallelized my code, scaling results, my method of
 		load balancing, and present results for both simulated heterogenous networks and a real heterogenous network. 
 
 	\section{CFD}
@@ -118,6 +118,15 @@
 		This constitutes the bulk of the communication that needs to happen, but it doesn't account for all. 
 		% show partitioned mesh
 
+		\begin{figure}[H]
+			\centering
+			\begin{subfigure}[H]{0.6\textwidth}
+				\makebox[\textwidth]{\includegraphics[width=2\textwidth]{Meshes.pdf}}
+			\end{subfigure}
+			\begin{subfigure}[H]{0.6\textwidth}
+				\makebox[\textwidth]{\includegraphics[width=2\textwidth]{EbbSolution.pdf}}
+			\end{subfigure}
+		\end{figure}
 		There are other things, not directly tied to the solution that need to be communicated to considered a fully featured code.
 		CFD codes need to be able to compute forces imparted by the flow onto solid boundaries, they need to compute solution residuals,
 		and they often will dynamically set the timestep based off the solution. All of these things come down to performing reduce
@@ -130,12 +139,28 @@
 		on high latency networks like ethernet.
 		% show those scalling results 
 
+		EbbCFD scaled fairly well to ~200 elements per processor. I tested both a ~6400 element mesh and a ~11000 element mesh. The following
+		plot shows that with more elements, more processors are more effective, indicating communication overhead being the
+		bottle neck. Of course this makes sense, the fewer elements per processor, the less time it takes to compute those elements,
+		and communication time takes a higher percentage of the total iteration time. Non-blocking communications helps with this
+		some, but there always becomes a point where more processors are no longer effective. 
+		
+		\begin{figure}[H]
+			\centering
+			\begin{subfigure}[H]{0.3\textwidth}
+				\makebox[0cm]{\includegraphics[width=1.8\textwidth]{EbbSpeedup.pdf}}
+			\end{subfigure}
+			\begin{subfigure}[H]{0.3\textwidth}
+				\makebox[9cm]{\includegraphics[width=1.8\textwidth]{EbbEfficiency.pdf}}
+			\end{subfigure}
+		\end{figure}
+
 	\section{Optimization}
 		My approach to load balancing was through mathmatical optimization. Basically solving the following problem
-		\begin{eqnarray}
-			\mathrm{minimize} f(x) \\
-			\mathrm{subject to} c_j(x) = 0, c_k(x) >= 0
-		\end{eqnarray}
+		\begin{align}
+			\mathrm{minimize \ }& f(x) \\
+			\mathrm{subject \ to \ } & c_j(x) = 0, \quad c_k(x) >= 0
+		\end{align}
 		where $f(x)$ is the average computational time for one timestep of the simulation and $c_j(x)$ are the equality constraints and 
 		$c_k(x)$ are the inequality constraints. The constraints for this problem are determined by metis, the mesh partition library used.
 		Metis requires that each weight satisfy $0 \le w_i \le 1$ and that
@@ -185,18 +210,96 @@
 		It becomes what we call an active set method. Basically every iteration we test where the solution is and where it want't to go and
 		update inequality constraints to equality constraints if they are going to be violated.
 
-
-		% talk about SQP optimizer
+		Computing the gradient at every iteration may at first seem like a lot of overhead, but I implimented the code so that solution always marches
+		forward, even at the intermediate mesh weights. This required keeping the un partitioned mesh on processor 0 and scattering and gathering
+		results to and from the partitioned mesh. While this does add overhead, it ensures, that while an optimal mesh partition may not yet be acheived
+		actual work is still being done. As shown later, the optimizer never strays far from optimality so the runtime never gets significantly worse.
+		
+		For the finite difference derivative approximation, I found that setting the step size to $h = \frac{300}{N}$ provided reasonable results.
+		It ensured that enough cells where removed or added to make an appreciable difference in compute time.
 
 	\section{Results}
+		To test this method, I artificially slowed down some processors and let the optimizer run. To simulate network configuration changes, I could
+		change which processors were slowed down. This allowed for isolated testing in an enviroment like Flux, with low latency/high bandwidth interconnects.
+		I also tested on a live ethernet network between computers of varying capabilities without any artificial slowdowns.
+
+		Running on Flux, without simulating a network change, it the optimizer finds its way to an optimal mesh distribution in relatively few iterations,
+		yeilding a \% increase in computation speed.
+		% put figures here and also proper numbers
+
+
+		The following results come from a simulated network change. The code monitors the running time of the core solver and if it detects a significant
+		change in run time, it will trigger the optimizer to run again. Whether the optimizer starts at an even mesh distribution or the last optimal mesh
+		distribution is a question of scenario. If a wildly different configuration happens, like what is simulated, I found it's better to restart
+		the optimizer with equal weights. If the change is less extreme it can be beneficial to start with the old optimal solution with the hopes
+		that the new optimal point is not far away. Either way, it can be seen that it detects the change, and re-balances to the optimal point.
+		\begin{figure}[H]
+			\centering
+			\begin{subfigure}[H]{0.9\textwidth}
+				\includegraphics[width=\textwidth]{5PnetworkChange.pdf}
+				\caption{Network configuration change restarting with equal mesh partitions}
+			\end{subfigure}
+			\begin{subfigure}[H]{0.9\textwidth}
+				\includegraphics[width=\textwidth]{6PNetworkChange.pdf}
+				\caption{Network configuration change restarting with previous best mesh partitions}
+			\end{subfigure}
+		\end{figure}
+		% insert network change plots
+
+		For the following test, I ran this on my home gigabit ethernet network on the following machines.
+
+		\begin{centering}
+		\begin{tabular}{| m{1.8cm} | m{1.5cm} | c | c | m{1.5cm} | m{2cm} | m{1.8cm} | m{2cm} | }
+			\hline
+			Machine &	              L1 D/I cache & L2 cache & L3 cache & CPU &	    Operating frequency & CPUS(hw threads) & RAM \\ \hline\hline
+			2011 MacBook Pro 	    & 32k/32k      & 256k     & 6144k    & Intel I7-2720MQ & 2200Mhz & 4(8) & 16GB DDR3 1333Mhz \\ \hline
+			2015 Dell Precision M6800   & 32k/32k	   & 256k     & 8192k    & Intel I7-4910MQ & 2900Mhz & 4(8) & 32GB DDR3 1600Mhz \\ \hline
+			2012 Custom Desktop	    & 32k/32k	   & 256k     & 8192k	 & Intel I7-2600K  & 3400Mhz & 4(8) & 16GB DDR3 1867Mhz \\ \hline
+		\end{tabular}
+		\end{centering}
+
+		The following results where from a 6 processor run, with each machine running 2 processors. Even on a high latency/low bandwidth (relative to 
+		InfinaBand) network the optimizer managed to distribute the mesh in a way one would expect, and yeild a \% increas in computation speed.
+		\begin{figure}[H]
+			\centering
+			\begin{subfigure}[H]{0.9\textwidth}
+				\includegraphics[width=\textwidth]{RealNetwork.pdf}
+				\caption{6 processors on a quiet ethernet network with no other computational activity}
+			\end{subfigure}
+			\begin{subfigure}[H]{0.9\textwidth}
+				\includegraphics[width=\textwidth]{RealNetwork2.pdf}
+				\caption{6 processors on a less quiet ethernet network with various other computational activity}
+			\end{subfigure}
+		\end{figure}
+		% put figure in here and also proper numbers
 
 		% show plots of mesh weights vs time (optimization iteration)
 		% show plots of average iteration time vs time (optimization iteration)
 
 
 	\section{Conclusions}
+
+		The overall concept did yeild positive results and for the cases I tested, a speedup was acheived in both more isolated environment like flux
+		and in a noisy live environment like my livingroom. 
 		% talk about benefits
+
+		In the testing I carried out I could not get appreciable speedup above 6 processors and unfortunatly I don't have a good explination for why.
+		Perhaps a different underlying optimization algorithm could fix this. 
 		% talk about limitations
+		
+		There are two primary applications that I see this approach being useful: small beowolf clusters, and CPU/GPU hybrid code. There are many people
+		who don't have access to large HPC compute resources, but do have many machines laying around capable of being used. My living room being a prime
+		example. Once I graduate, I will won't have as readily available access to Flux, but I have other machines I can use to compute in parallel. As I
+		continue to develope EbbCFD and add in expensive viscouse flux calculations and add 3D support have this option open to me is a huge boon. I also
+		have many graphics cards available to me as an avid gamer, and I can see this approach working to balance CPU/GPU code execution on large enough
+		data sets.
+
+		All code relevent to this project is up on Github at the following URL's: \url{https://github.com/Rob-Rau/EbbCFD} and \url{https://github.com/Rob-Rau/numd}.
+		The numd repository contains the code for the optimizer. The specific file is \verb|numd/optimization/SQP.d|
+	\section{Future Work}
+		Even though I am a masters student I do have plans to extend this. The two main things I'm currently interested in are, as mentioned above, CPU/GPU
+		balancing, and testing different optimization algorithms. I'd like to test some gradient free methods, most likely simplex methods, and see if I
+		can acheive better scaling results. 
 		% talk about possible real world applications (GPU/CPU balancing)
 
 
