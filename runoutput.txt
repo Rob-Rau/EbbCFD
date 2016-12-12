@@ -1,0 +1,489 @@
+Proc 0: mesh sizes: [2199, 1889, 1809, 1953, 1848, 1896];   270 iterations took 4.24006 seconds; average iteration time: 0.0157039
+Proc 0: mesh sizes: [1634, 1943, 2012, 2030, 1982, 1993];   270 iterations took 4.30097 seconds; average iteration time: 0.0159295
+Proc 0: mesh sizes: [1841, 2322, 1806, 1932, 1837, 1856];   270 iterations took 4.40162 seconds; average iteration time: 0.0163023
+Proc 0: mesh sizes: [1996, 1620, 1964, 2053, 2001, 1960];   270 iterations took 4.33537 seconds; average iteration time: 0.0160569
+Proc 0: mesh sizes: [1815, 1818, 2292, 1870, 1863, 1936];   270 iterations took 4.15543 seconds; average iteration time: 0.0153905
+Proc 0: mesh sizes: [2020, 1932, 1624, 2027, 1994, 1997];   270 iterations took 4.3057 seconds; average iteration time: 0.015947
+Proc 0: mesh sizes: [1909, 1884, 1845, 2191, 1874, 1891];   270 iterations took 4.47277 seconds; average iteration time: 0.0165658
+Proc 0: mesh sizes: [2022, 2021, 1958, 1630, 2030, 1933];   270 iterations took 4.07024 seconds; average iteration time: 0.015075
+Proc 0: mesh sizes: [1953, 1905, 1837, 1814, 2281, 1804];   270 iterations took 4.09607 seconds; average iteration time: 0.0151706
+Proc 0: mesh sizes: [2029, 2022, 1941, 2043, 1651, 1908];   270 iterations took 4.33115 seconds; average iteration time: 0.0160413
+Proc 0: mesh sizes: [1930, 1885, 1858, 1819, 1825, 2277];   270 iterations took 4.09935 seconds; average iteration time: 0.0151828
+Proc 0: mesh sizes: [2033, 2007, 1944, 2008, 1980, 1622];   270 iterations took 4.29394 seconds; average iteration time: 0.0159035
+mu = 1
+Proc 0: mesh sizes: [1928, 1980, 1884, 1944, 1941, 1917];   270 iterations took 4.2061 seconds; average iteration time: 0.0155781
+minor iteration = 0
+Proc 0: mesh sizes: [1883, 1766, 2099, 1548, 2189, 2109];   270 iterations took 3.84129 seconds; average iteration time: 0.014227
+Proc 0: mesh sizes: [2239, 1808, 2004, 1463, 2080, 2000];   270 iterations took 3.85242 seconds; average iteration time: 0.0142682
+Proc 0: mesh sizes: [1692, 1887, 2084, 1576, 2275, 2080];   270 iterations took 3.93443 seconds; average iteration time: 0.014572
+Proc 0: mesh sizes: [1901, 2157, 1991, 1465, 2054, 2026];   270 iterations took 4.2869 seconds; average iteration time: 0.0158774
+Proc 0: mesh sizes: [2011, 1518, 2177, 1564, 2104, 2220];   270 iterations took 3.85171 seconds; average iteration time: 0.0142656
+Proc 0: mesh sizes: [1954, 1827, 2294, 1431, 2075, 2013];   270 iterations took 3.87555 seconds; average iteration time: 0.0143539
+Proc 0: mesh sizes: [2005, 1916, 1785, 1556, 2276, 2056];   270 iterations took 3.96902 seconds; average iteration time: 0.0147001
+Proc 0: mesh sizes: [1934, 1754, 1938, 1890, 2083, 1995];   270 iterations took 4.16359 seconds; average iteration time: 0.0154207
+Proc 0: mesh sizes: [2082, 1918, 2073, 1211, 2108, 2202];   270 iterations took 3.97684 seconds; average iteration time: 0.014729
+Proc 0: mesh sizes: [1957, 1726, 1959, 1530, 2439, 1983];   270 iterations took 3.83019 seconds; average iteration time: 0.0141859
+Proc 0: mesh sizes: [2017, 1919, 2078, 1622, 1815, 2143];   270 iterations took 3.97918 seconds; average iteration time: 0.0147377
+Proc 0: mesh sizes: [1954, 1765, 1970, 1492, 1982, 2431];   270 iterations took 3.82985 seconds; average iteration time: 0.0141846
+Proc 0: mesh sizes: [2079, 1882, 2062, 1602, 2203, 1766];   270 iterations took 3.94943 seconds; average iteration time: 0.0146275
+gk = [-0.00458162, 0.00498325, -0.0113039, 0.0302796, -0.0176833, -0.0146367]			pk = [nan, nan, nan, nan, nan, nan]
+f = 0.0155781	KKT1 = 0.0263252				KKT2 = 1.11022e-16				xk = [0.166667, 0.166667, 0.166667, 0.166667, 0.166667, 0.166667]				%error = nan
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [1883, 1766, 2099, 1548, 2189, 2109];   270 iterations took 3.97462 seconds; average iteration time: 0.0147208
+minor iteration = 0
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #3 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 1
+Proc 0: mesh sizes: [2151, 1090, 2506, 410, 2805, 2632];   270 iterations took 3.2972 seconds; average iteration time: 0.0122119
+Proc 0: mesh sizes: [2514, 1024, 2448, 445, 2697, 2466];   270 iterations took 3.2191 seconds; average iteration time: 0.0119226
+Proc 0: mesh sizes: [1924, 1179, 2518, 496, 2833, 2644];   270 iterations took 3.36373 seconds; average iteration time: 0.0124582
+Proc 0: mesh sizes: [2160, 1398, 2435, 411, 2679, 2511];   270 iterations took 3.45653 seconds; average iteration time: 0.012802
+Proc 0: mesh sizes: [2269, 851, 2484, 536, 2811, 2643];   270 iterations took 3.25743 seconds; average iteration time: 0.0120645
+Proc 0: mesh sizes: [2148, 1031, 2849, 403, 2672, 2491];   270 iterations took 3.30507 seconds; average iteration time: 0.012241
+Proc 0: mesh sizes: [2218, 1219, 2141, 509, 2866, 2641];   270 iterations took 3.40988 seconds; average iteration time: 0.0126292
+Proc 0: mesh sizes: [2124, 1073, 2415, 722, 2674, 2586];   270 iterations took 3.25407 seconds; average iteration time: 0.0120521
+Proc 0: mesh sizes: [2243, 1179, 2582, 185, 2769, 2636];   270 iterations took 3.35827 seconds; average iteration time: 0.0124381
+Proc 0: mesh sizes: [2123, 1080, 2397, 406, 3021, 2567];   270 iterations took 3.45824 seconds; average iteration time: 0.0128083
+Proc 0: mesh sizes: [2278, 1190, 2543, 428, 2458, 2697];   270 iterations took 3.28164 seconds; average iteration time: 0.0121542
+Proc 0: mesh sizes: [2096, 1084, 2380, 414, 2676, 2944];   270 iterations took 3.40122 seconds; average iteration time: 0.0125971
+Proc 0: mesh sizes: [2273, 1189, 2560, 428, 2822, 2322];   270 iterations took 3.37232 seconds; average iteration time: 0.0124901
+gk = [-0.0061686, 0.0327363, -0.00703087, 0.0140482, -0.0112077, -0.0089947]			pk = [0.00242451, -0.00714036, 0.00914676, -0.0324368, 0.0155262, 0.0124796]
+f = 0.0147208	KKT1 = -0.0615079				KKT2 = -2.22045e-16				xk = [0.169091, 0.159526, 0.175813, 0.13423, 0.182193, 0.179146]				%error = -0.0582389
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [2151, 1090, 2506, 410, 2805, 2632];   270 iterations took 3.31469 seconds; average iteration time: 0.0122766
+minor iteration = 0
+Proc 0: mesh sizes: [2306, 1074, 2583, 392, 2708, 2531];   270 iterations took 3.23043 seconds; average iteration time: 0.0119646
+Proc 0: mesh sizes: [2592, 952, 2466, 417, 2653, 2514];   270 iterations took 3.16074 seconds; average iteration time: 0.0117064
+Proc 0: mesh sizes: [2011, 1120, 2581, 417, 2711, 2754];   270 iterations took 3.28922 seconds; average iteration time: 0.0121823
+Proc 0: mesh sizes: [2209, 1291, 2600, 404, 2558, 2532];   270 iterations took 3.3317 seconds; average iteration time: 0.0123396
+Proc 0: mesh sizes: [2269, 796, 2574, 410, 2811, 2734];   270 iterations took 3.20813 seconds; average iteration time: 0.011882
+Proc 0: mesh sizes: [2165, 989, 2931, 401, 2670, 2438];   270 iterations took 3.34199 seconds; average iteration time: 0.0123777
+Proc 0: mesh sizes: [2291, 1129, 2297, 442, 2754, 2681];   270 iterations took 3.29381 seconds; average iteration time: 0.0121993
+Proc 0: mesh sizes: [2216, 1038, 2542, 745, 2565, 2488];   270 iterations took 3.17879 seconds; average iteration time: 0.0117733
+Proc 0: mesh sizes: [2357, 1075, 2640, 188, 2696, 2638];   270 iterations took 3.2422 seconds; average iteration time: 0.0120081
+Proc 0: mesh sizes: [2172, 1027, 2506, 407, 2984, 2498];   270 iterations took 3.41227 seconds; average iteration time: 0.012638
+Proc 0: mesh sizes: [2316, 1065, 2623, 527, 2312, 2751];   270 iterations took 3.26566 seconds; average iteration time: 0.012095
+Proc 0: mesh sizes: [2176, 1037, 2481, 400, 2561, 2939];   270 iterations took 3.37903 seconds; average iteration time: 0.0125149
+Proc 0: mesh sizes: [2326, 1080, 2629, 532, 2739, 2288];   270 iterations took 3.26343 seconds; average iteration time: 0.0120868
+gk = [-0.0108795, 0.014977, -0.00788449, -0.00783883, 0.0132839, 0.00217363]			pk = [0.0362112, -0.123803, 0.0699267, -0.185457, 0.11191, 0.0912113]
+f = 0.0122766	KKT1 = 0.0256624				KKT2 = -2.22045e-16				xk = [0.187197, 0.0976248, 0.210777, 0.0415016, 0.238148, 0.224752]				%error = -0.199093
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [2306, 1074, 2583, 392, 2708, 2531];   270 iterations took 3.23943 seconds; average iteration time: 0.0119979
+minor iteration = 0
+Proc 0: mesh sizes: [2756, 1023, 2672, 793, 2014, 2336];   270 iterations took 3.31364 seconds; average iteration time: 0.0122727
+minor iteration = 1
+Proc 0: mesh sizes: [2623, 991, 2490, 608, 2424, 2458];   270 iterations took 3.14174 seconds; average iteration time: 0.0116361
+Proc 0: mesh sizes: [2809, 984, 2647, 553, 2186, 2415];   270 iterations took 3.28675 seconds; average iteration time: 0.0121732
+Proc 0: mesh sizes: [2216, 1069, 2682, 685, 2407, 2535];   270 iterations took 3.20681 seconds; average iteration time: 0.0118771
+Proc 0: mesh sizes: [2530, 1300, 2515, 562, 2256, 2431];   270 iterations took 3.34329 seconds; average iteration time: 0.0123826
+Proc 0: mesh sizes: [2606, 723, 2681, 697, 2404, 2483];   270 iterations took 3.2319 seconds; average iteration time: 0.01197
+Proc 0: mesh sizes: [2503, 977, 2893, 559, 2265, 2397];   270 iterations took 3.32645 seconds; average iteration time: 0.0123202
+Proc 0: mesh sizes: [2601, 1091, 2337, 674, 2315, 2576];   270 iterations took 3.1758 seconds; average iteration time: 0.0117622
+Proc 0: mesh sizes: [2461, 944, 2518, 928, 2300, 2443];   270 iterations took 3.30423 seconds; average iteration time: 0.0122379
+Proc 0: mesh sizes: [2614, 1082, 2722, 237, 2423, 2516];   270 iterations took 3.24858 seconds; average iteration time: 0.0120318
+Proc 0: mesh sizes: [2492, 952, 2499, 587, 2637, 2427];   270 iterations took 3.16489 seconds; average iteration time: 0.0117218
+Proc 0: mesh sizes: [2584, 1099, 2698, 662, 2108, 2443];   270 iterations took 3.23912 seconds; average iteration time: 0.0119967
+Proc 0: mesh sizes: [2482, 955, 2499, 587, 2258, 2813];   270 iterations took 3.28118 seconds; average iteration time: 0.0121525
+Proc 0: mesh sizes: [2591, 1096, 2742, 662, 2327, 2176];   270 iterations took 3.27063 seconds; average iteration time: 0.0121135
+gk = [-0.00966485, 0.00929535, 0.00362398, -0.0047697, 0.0110285, 0.00869509]			pk = [0.0092944, -0.006539, 0.00884129, -0.00102099, -0.0104026, -0.000173107]
+f = 0.0119979	KKT1 = -0.0142918				KKT2 = 1.11022e-16				xk = [0.196491, 0.0910858, 0.219618, 0.0404807, 0.227745, 0.224579]				%error = -0.0232306
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [2623, 991, 2490, 608, 2424, 2458];   270 iterations took 3.13804 seconds; average iteration time: 0.0116224
+minor iteration = 0
+Proc 0: mesh sizes: [2548, 960, 2431, 577, 2492, 2586];   270 iterations took 3.10659 seconds; average iteration time: 0.0115059
+Proc 0: mesh sizes: [2871, 928, 2451, 513, 2377, 2454];   270 iterations took 3.30386 seconds; average iteration time: 0.0122365
+Proc 0: mesh sizes: [2183, 1013, 2718, 641, 2449, 2590];   270 iterations took 3.22394 seconds; average iteration time: 0.0119405
+Proc 0: mesh sizes: [2430, 1277, 2504, 508, 2407, 2468];   270 iterations took 3.31993 seconds; average iteration time: 0.012296
+Proc 0: mesh sizes: [2514, 711, 2647, 631, 2523, 2568];   270 iterations took 3.19959 seconds; average iteration time: 0.0118503
+Proc 0: mesh sizes: [2435, 943, 2867, 503, 2402, 2444];   270 iterations took 3.2837 seconds; average iteration time: 0.0121619
+Proc 0: mesh sizes: [2554, 1063, 2269, 622, 2496, 2590];   270 iterations took 3.17176 seconds; average iteration time: 0.0117473
+Proc 0: mesh sizes: [2435, 913, 2476, 854, 2419, 2497];   270 iterations took 3.22278 seconds; average iteration time: 0.0119362
+Proc 0: mesh sizes: [2540, 1014, 2652, 271, 2509, 2608];   270 iterations took 3.17509 seconds; average iteration time: 0.0117596
+Proc 0: mesh sizes: [2420, 926, 2519, 522, 2775, 2432];   270 iterations took 3.23858 seconds; average iteration time: 0.0119947
+Proc 0: mesh sizes: [2563, 1022, 2680, 611, 2144, 2574];   270 iterations took 3.19857 seconds; average iteration time: 0.0118466
+Proc 0: mesh sizes: [2386, 901, 2509, 517, 2440, 2841];   270 iterations took 3.26975 seconds; average iteration time: 0.0121102
+Proc 0: mesh sizes: [2547, 1025, 2649, 626, 2491, 2256];   270 iterations took 3.19276 seconds; average iteration time: 0.011825
+gk = [0.0060134, 0.00837864, 0.0113326, 0.00418626, -0.00558405, 0.000793148]			pk = [0.0431122, -0.00269053, 0.00946373, 0.0290156, -0.0545598, -0.0243412]
+f = 0.0116224	KKT1 = 0.019222				KKT2 = 0				xk = [0.218047, 0.0897405, 0.22435, 0.0549884, 0.200466, 0.212408]				%error = -0.0323103
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [2548, 960, 2431, 577, 2492, 2586];   270 iterations took 3.10057 seconds; average iteration time: 0.0114836
+minor iteration = 0
+Proc 0: mesh sizes: [2493, 962, 2529, 568, 2519, 2523];   270 iterations took 3.06339 seconds; average iteration time: 0.0113459
+Proc 0: mesh sizes: [2736, 931, 2484, 428, 2488, 2527];   270 iterations took 3.21626 seconds; average iteration time: 0.0119121
+Proc 0: mesh sizes: [2190, 1069, 2600, 638, 2502, 2595];   270 iterations took 3.15738 seconds; average iteration time: 0.011694
+Proc 0: mesh sizes: [2366, 1279, 2480, 428, 2485, 2556];   270 iterations took 3.32046 seconds; average iteration time: 0.012298
+Proc 0: mesh sizes: [2595, 676, 2646, 634, 2452, 2591];   270 iterations took 3.17822 seconds; average iteration time: 0.0117712
+Proc 0: mesh sizes: [2361, 941, 2840, 428, 2495, 2529];   270 iterations took 3.27157 seconds; average iteration time: 0.0121169
+Proc 0: mesh sizes: [2518, 1058, 2273, 627, 2538, 2580];   270 iterations took 3.14492 seconds; average iteration time: 0.0116478
+Proc 0: mesh sizes: [2476, 883, 2516, 851, 2425, 2443];   270 iterations took 3.22141 seconds; average iteration time: 0.0119311
+Proc 0: mesh sizes: [2529, 1017, 2570, 280, 2595, 2603];   270 iterations took 3.15562 seconds; average iteration time: 0.0116875
+Proc 0: mesh sizes: [2464, 923, 2521, 513, 2740, 2433];   270 iterations took 3.19799 seconds; average iteration time: 0.0118444
+Proc 0: mesh sizes: [2500, 1027, 2549, 641, 2196, 2681];   270 iterations took 3.21763 seconds; average iteration time: 0.0119172
+Proc 0: mesh sizes: [2472, 886, 2494, 513, 2415, 2814];   270 iterations took 3.25709 seconds; average iteration time: 0.0120633
+Proc 0: mesh sizes: [2490, 1023, 2566, 630, 2621, 2264];   270 iterations took 3.17545 seconds; average iteration time: 0.0117609
+Done!
+gk = [0.00601205, 0.00905187, 0.00842046, 0.00358705, 0.00300957, 0.00579135]			pk = [-0.00332919, -0.00320176, -0.00452703, -0.00592609, 0.011934, 0.00505007]
+f = 0.0114836	KKT1 = -0.00148517				KKT2 = 0				xk = [0.214718, 0.0865388, 0.219823, 0.0490624, 0.2124, 0.217458]Done!
+Done!
+				%error = -0.0120861
+------------------------------------------------------------------------------------------------------------
+
+Done!
+Done!
+Done!
+Proc 0: mesh sizes: [2493, 962, 2529, 568, 2519, 2523];   270 iterations took 3.06184 seconds; average iteration time: 0.0113402
+
+	Optimal weights =  [0.21354977644262829184, 0.08490130882727711659, 0.21711384227037774930, 0.05001552122556131297, 0.21634714577226332732, 0.21807240546189218811]
+	Average iteration time = 0.01134016248914930525
+	Converged in 6 iterations.
+	Computation time: 400.336 secs.
+
+Mesh partitions optimized, running and monitoring simulation
+Proc 0: weights: [0.21355, 0.0849013, 0.217114, 0.0500155, 0.216347, 0.218072];  Average solver iteration time: 0.0113497
+Proc 0: weights: [0.21355, 0.0849013, 0.217114, 0.0500155, 0.216347, 0.218072];  Average solver iteration time: 0.011347
+Proc 0: weights: [0.21355, 0.0849013, 0.217114, 0.0500155, 0.216347, 0.218072];  Average solver iteration time: 0.0184374
+Proc 0: weights: [0.21355, 0.0849013, 0.217114, 0.0500155, 0.216347, 0.218072];  elapsed time jumped up by 10%, restarting optimization; minTime: 0.0113402
+Proc 1: Starting optimization
+Proc 2: Starting optimization
+Proc 3: Starting optimization
+Proc 4: Starting optimization
+Proc 5: Starting optimization
+Proc 0: Starting optimization
+Proc 0: mesh sizes: [2736, 931, 2484, 428, 2488, 2527];   270 iterations took 5.28614 seconds; average iteration time: 0.0195783
+Proc 0: mesh sizes: [2190, 1069, 2600, 638, 2502, 2595];   270 iterations took 4.68177 seconds; average iteration time: 0.0173399
+Proc 0: mesh sizes: [2366, 1279, 2480, 428, 2485, 2556];   270 iterations took 4.84788 seconds; average iteration time: 0.0179551
+Proc 0: mesh sizes: [2595, 676, 2646, 634, 2452, 2591];   270 iterations took 5.11548 seconds; average iteration time: 0.0189462
+Proc 0: mesh sizes: [2361, 941, 2840, 428, 2495, 2529];   270 iterations took 4.84558 seconds; average iteration time: 0.0179466
+Proc 0: mesh sizes: [2518, 1058, 2273, 627, 2538, 2580];   270 iterations took 5.01976 seconds; average iteration time: 0.0185917
+Proc 0: mesh sizes: [2476, 883, 2516, 851, 2425, 2443];   270 iterations took 4.97195 seconds; average iteration time: 0.0184146
+Proc 0: mesh sizes: [2529, 1017, 2570, 280, 2595, 2603];   270 iterations took 5.03813 seconds; average iteration time: 0.0186598
+Proc 0: mesh sizes: [2464, 923, 2521, 513, 2740, 2433];   270 iterations took 4.96415 seconds; average iteration time: 0.0183857
+Proc 0: mesh sizes: [2500, 1027, 2549, 641, 2196, 2681];   270 iterations took 4.99971 seconds; average iteration time: 0.0185175
+Proc 0: mesh sizes: [2472, 886, 2494, 513, 2415, 2814];   270 iterations took 4.9778 seconds; average iteration time: 0.0184363
+Proc 0: mesh sizes: [2490, 1023, 2566, 630, 2621, 2264];   270 iterations took 4.98663 seconds; average iteration time: 0.018469
+mu = 1
+Proc 0: mesh sizes: [2493, 962, 2529, 568, 2519, 2523];   270 iterations took 4.9784 seconds; average iteration time: 0.0184385
+minor iteration = 0
+Proc 0: mesh sizes: [2035, 1174, 2737, 641, 2558, 2449];   270 iterations took 4.70312 seconds; average iteration time: 0.0174189
+Proc 0: mesh sizes: [2210, 1154, 2687, 571, 2430, 2542];   270 iterations took 4.67184 seconds; average iteration time: 0.0173031
+Proc 0: mesh sizes: [1654, 1259, 2756, 686, 2638, 2601];   270 iterations took 4.79715 seconds; average iteration time: 0.0177672
+Proc 0: mesh sizes: [1902, 1518, 2617, 577, 2539, 2441];   270 iterations took 4.67583 seconds; average iteration time: 0.0173179
+Proc 0: mesh sizes: [1946, 931, 2604, 717, 2681, 2715];   270 iterations took 4.84234 seconds; average iteration time: 0.0179346
+Proc 0: mesh sizes: [1987, 1120, 2986, 578, 2483, 2440];   270 iterations took 4.63309 seconds; average iteration time: 0.0171596
+Proc 0: mesh sizes: [2016, 1248, 2342, 695, 2646, 2647];   270 iterations took 4.79565 seconds; average iteration time: 0.0177617
+Proc 0: mesh sizes: [1837, 1115, 2710, 889, 2489, 2554];   270 iterations took 4.62658 seconds; average iteration time: 0.0171355
+Proc 0: mesh sizes: [2060, 1297, 2683, 276, 2618, 2660];   270 iterations took 4.81122 seconds; average iteration time: 0.0178193
+Proc 0: mesh sizes: [1894, 1126, 2664, 543, 2867, 2500];   270 iterations took 5.07482 seconds; average iteration time: 0.0187956
+Proc 0: mesh sizes: [2029, 1294, 2744, 686, 2291, 2550];   270 iterations took 4.46882 seconds; average iteration time: 0.0165512
+Proc 0: mesh sizes: [1905, 1118, 2656, 543, 2499, 2873];   270 iterations took 4.64673 seconds; average iteration time: 0.0172101
+Proc 0: mesh sizes: [2034, 1270, 2761, 674, 2656, 2199];   270 iterations took 4.81128 seconds; average iteration time: 0.0178196
+gk = [0.0454621, -0.0201295, -0.0131025, -0.0049786, -0.00267541, -0.000664522]			pk = [nan, nan, nan, nan, nan, nan]
+f = 0.0184385	KKT1 = -0.0187737				KKT2 = 0				xk = [0.21355, 0.0849013, 0.217114, 0.0500155, 0.216347, 0.218072]				%error = nan
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [2035, 1174, 2737, 641, 2558, 2449];   270 iterations took 4.70206 seconds; average iteration time: 0.0174151
+minor iteration = 0
+Proc 0: mesh sizes: [1480, 1540, 3037, 815, 2023, 2699];   270 iterations took 4.132 seconds; average iteration time: 0.0153037
+Proc 0: mesh sizes: [1783, 1511, 2898, 776, 1959, 2667];   270 iterations took 4.2148 seconds; average iteration time: 0.0156104
+Proc 0: mesh sizes: [1216, 1616, 3035, 897, 2099, 2731];   270 iterations took 4.21711 seconds; average iteration time: 0.0156189
+Proc 0: mesh sizes: [1471, 1825, 2891, 770, 1970, 2667];   270 iterations took 4.06883 seconds; average iteration time: 0.0150697
+Proc 0: mesh sizes: [1543, 1244, 3037, 909, 2111, 2750];   270 iterations took 4.22939 seconds; average iteration time: 0.0156644
+Proc 0: mesh sizes: [1485, 1504, 3248, 764, 1967, 2626];   270 iterations took 4.08501 seconds; average iteration time: 0.0151297
+Proc 0: mesh sizes: [1586, 1560, 2677, 921, 2110, 2740];   270 iterations took 4.2162 seconds; average iteration time: 0.0156155
+Proc 0: mesh sizes: [1404, 1557, 3006, 1093, 1989, 2545];   270 iterations took 4.09486 seconds; average iteration time: 0.0151661
+Proc 0: mesh sizes: [1539, 1674, 3060, 550, 2099, 2672];   270 iterations took 4.21864 seconds; average iteration time: 0.0156246
+Proc 0: mesh sizes: [1401, 1484, 2998, 770, 2272, 2669];   270 iterations took 4.40109 seconds; average iteration time: 0.0163003
+Proc 0: mesh sizes: [1553, 1661, 3072, 883, 1729, 2696];   270 iterations took 3.98178 seconds; average iteration time: 0.0147473
+Proc 0: mesh sizes: [1401, 1537, 2916, 781, 2008, 2951];   270 iterations took 4.1088 seconds; average iteration time: 0.0152178
+Proc 0: mesh sizes: [1543, 1667, 3081, 884, 2062, 2357];   270 iterations took 4.17796 seconds; average iteration time: 0.0154739
+gk = [-0.0094264, -0.0125252, -0.0122283, -0.0138892, 0.0455848, -0.0123777]			pk = [-0.0448102, 0.0207814, 0.0137544, 0.00563054, 0.00332736, 0.00131646]
+f = 0.0174151	KKT1 = 0.00941811				KKT2 = 0				xk = [0.16874, 0.105683, 0.230868, 0.0556461, 0.219675, 0.219389]				%error = -0.0587701
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [1480, 1540, 3037, 815, 2023, 2699];   270 iterations took 4.12719 seconds; average iteration time: 0.0152859
+minor iteration = 0
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #0 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 1
+Proc 0: mesh sizes: [321, 2523, 3647, 1352, 853, 2898];   270 iterations took 4.12032 seconds; average iteration time: 0.0152604
+minor iteration = 2
+Proc 0: mesh sizes: [966, 1968, 3354, 1043, 1424, 2839];   270 iterations took 3.83548 seconds; average iteration time: 0.0142055
+Proc 0: mesh sizes: [1178, 1936, 3328, 1021, 1399, 2732];   270 iterations took 3.89017 seconds; average iteration time: 0.014408
+Proc 0: mesh sizes: [624, 2079, 3385, 1151, 1537, 2818];   270 iterations took 3.90524 seconds; average iteration time: 0.0144638
+Proc 0: mesh sizes: [859, 2301, 3309, 1015, 1341, 2769];   270 iterations took 3.75841 seconds; average iteration time: 0.01392
+Proc 0: mesh sizes: [1026, 1734, 3364, 1129, 1500, 2841];   270 iterations took 3.87522 seconds; average iteration time: 0.0143527
+Proc 0: mesh sizes: [826, 2040, 3586, 1037, 1371, 2734];   270 iterations took 4.05374 seconds; average iteration time: 0.0150138
+Proc 0: mesh sizes: [983, 2104, 2971, 1126, 1501, 2909];   270 iterations took 3.59768 seconds; average iteration time: 0.0133248
+Proc 0: mesh sizes: [851, 1966, 3264, 1382, 1411, 2720];   270 iterations took 3.75976 seconds; average iteration time: 0.013925
+Proc 0: mesh sizes: [964, 2082, 3498, 790, 1472, 2788];   270 iterations took 3.96665 seconds; average iteration time: 0.0146913
+Proc 0: mesh sizes: [841, 1982, 3285, 1024, 1758, 2704];   270 iterations took 3.93379 seconds; average iteration time: 0.0145696
+Proc 0: mesh sizes: [988, 2084, 3378, 1130, 1135, 2879];   270 iterations took 3.84161 seconds; average iteration time: 0.0142282
+Proc 0: mesh sizes: [846, 1983, 3240, 1041, 1349, 3135];   270 iterations took 3.72355 seconds; average iteration time: 0.0137909
+Proc 0: mesh sizes: [967, 2121, 3370, 1125, 1476, 2535];   270 iterations took 3.8693 seconds; average iteration time: 0.0143308
+gk = [-0.000173766, -0.0120778, -0.00986832, -0.00931092, 0.0315411, -0.00520222]			pk = [-0.0380701, 0.0306778, 0.0233471, 0.0168387, -0.0438273, 0.0110338]
+f = 0.0152859	KKT1 = -0.0163061				KKT2 = 0				xk = [0.13067, 0.13636, 0.254215, 0.0724848, 0.175847, 0.230423]				%error = -0.139291
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [966, 1968, 3354, 1043, 1424, 2839];   270 iterations took 3.83273 seconds; average iteration time: 0.0141953
+minor iteration = 0
+Proc 0: mesh sizes: [522, 2391, 3119, 1467, 1092, 3003];   270 iterations took 3.5166 seconds; average iteration time: 0.0130244
+Proc 0: mesh sizes: [812, 2418, 3057, 1351, 961, 2995];   270 iterations took 3.55123 seconds; average iteration time: 0.0131527
+Proc 0: mesh sizes: [201, 2646, 3242, 1425, 1092, 2988];   270 iterations took 3.6407 seconds; average iteration time: 0.0134841
+Proc 0: mesh sizes: [383, 2818, 3134, 1313, 978, 2968];   270 iterations took 3.53396 seconds; average iteration time: 0.0130888
+Proc 0: mesh sizes: [543, 2222, 3216, 1430, 1098, 3085];   270 iterations took 3.616 seconds; average iteration time: 0.0133926
+Proc 0: mesh sizes: [383, 2463, 3484, 1399, 979, 2886];   270 iterations took 3.9628 seconds; average iteration time: 0.014677
+Proc 0: mesh sizes: [543, 2591, 2892, 1457, 1098, 3013];   270 iterations took 3.45589 seconds; average iteration time: 0.0127996
+Proc 0: mesh sizes: [391, 2455, 3068, 1711, 968, 3001];   270 iterations took 3.46282 seconds; average iteration time: 0.0128253
+Proc 0: mesh sizes: [583, 2537, 3201, 1085, 1092, 3096];   270 iterations took 3.60016 seconds; average iteration time: 0.0133339
+Proc 0: mesh sizes: [391, 2447, 3099, 1376, 1324, 2957];   270 iterations took 3.63235 seconds; average iteration time: 0.0134532
+Proc 0: mesh sizes: [602, 2488, 3197, 1491, 764, 3052];   270 iterations took 3.58619 seconds; average iteration time: 0.0132822
+Proc 0: mesh sizes: [391, 2459, 3085, 1389, 961, 3309];   270 iterations took 3.73815 seconds; average iteration time: 0.013845
+Proc 0: mesh sizes: [596, 2523, 3178, 1467, 1138, 2692];   270 iterations took 3.58409 seconds; average iteration time: 0.0132744
+gk = [-0.00113315, -0.00878688, 0.0343055, -0.0155629, 0.00693422, -0.010964]			pk = [-0.20459, 0.164878, 0.120667, 0.0818659, -0.202238, 0.0394174]
+f = 0.0141953	KKT1 = 0.0221418				KKT2 = 0				xk = [0.079522, 0.17758, 0.284382, 0.0929512, 0.125288, 0.240277]				%error = -0.0768281
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [522, 2391, 3119, 1467, 1092, 3003];   270 iterations took 3.54564 seconds; average iteration time: 0.013132
+minor iteration = 0
+Proc 0: mesh sizes: [0, 3432, 2436, 2186, 460, 3080];   270 iterations took 3.88628 seconds; average iteration time: 0.0143936
+minor iteration = 1
+Proc 0: mesh sizes: [220, 2921, 2838, 1800, 753, 3062];   270 iterations took 3.44527 seconds; average iteration time: 0.0127602
+Proc 0: mesh sizes: [601, 2863, 2778, 1742, 720, 2890];   270 iterations took 3.33878 seconds; average iteration time: 0.0123658
+Proc 0: mesh sizes: [0, 2987, 2849, 1854, 801, 3103];   270 iterations took 3.49304 seconds; average iteration time: 0.0129372
+Proc 0: mesh sizes: [286, 3183, 2788, 1705, 710, 2922];   270 iterations took 3.5977 seconds; average iteration time: 0.0133248
+Proc 0: mesh sizes: [405, 2593, 2779, 1876, 836, 3105];   270 iterations took 3.50054 seconds; average iteration time: 0.012965
+Proc 0: mesh sizes: [274, 2872, 3096, 1719, 704, 2929];   270 iterations took 3.46023 seconds; average iteration time: 0.0128157
+Proc 0: mesh sizes: [400, 2982, 2477, 1845, 793, 3097];   270 iterations took 3.49188 seconds; average iteration time: 0.0129329
+Proc 0: mesh sizes: [287, 2879, 2598, 2082, 715, 3033];   270 iterations took 3.41816 seconds; average iteration time: 0.0126599
+Proc 0: mesh sizes: [390, 3034, 2766, 1492, 824, 3088];   270 iterations took 3.47214 seconds; average iteration time: 0.0128598
+Proc 0: mesh sizes: [274, 2868, 2569, 1715, 1077, 3091];   270 iterations took 3.52675 seconds; average iteration time: 0.013062
+Proc 0: mesh sizes: [398, 3029, 2757, 1853, 473, 3084];   270 iterations took 3.46784 seconds; average iteration time: 0.0128438
+Proc 0: mesh sizes: [288, 2886, 2595, 1749, 722, 3354];   270 iterations took 3.80575 seconds; average iteration time: 0.0140954
+Proc 0: mesh sizes: [388, 3053, 2730, 1856, 818, 2749];   270 iterations took 3.44237 seconds; average iteration time: 0.0127495
+gk = [-0.00672989, -0.00617102, 0.0381306, -0.0103311, 0.00347224, 0.0115889]			pk = [-0.0340078, 0.0365968, -0.0148754, 0.0289632, -0.033724, 0.0170473]
+f = 0.013132	KKT1 = -0.0278741				KKT2 = 1.11022e-16				xk = [0.0455142, 0.214177, 0.269507, 0.121914, 0.0915637, 0.257324]				%error = -0.0809688
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [220, 2921, 2838, 1800, 753, 3062];   270 iterations took 3.44219 seconds; average iteration time: 0.0127488
+minor iteration = 0
+Proc 0: mesh sizes: [546, 2729, 2777, 1828, 859, 2855];   270 iterations took 3.28174 seconds; average iteration time: 0.0121546
+Proc 0: mesh sizes: [824, 2723, 2790, 1794, 805, 2658];   270 iterations took 3.34104 seconds; average iteration time: 0.0123742
+Proc 0: mesh sizes: [272, 2863, 2784, 1821, 944, 2910];   270 iterations took 3.32321 seconds; average iteration time: 0.0123082
+Proc 0: mesh sizes: [376, 3170, 2758, 1811, 783, 2696];   270 iterations took 3.58875 seconds; average iteration time: 0.0132917
+Proc 0: mesh sizes: [584, 2551, 2769, 1822, 937, 2931];   270 iterations took 3.35913 seconds; average iteration time: 0.0124412
+Proc 0: mesh sizes: [376, 2821, 3096, 1815, 796, 2690];   270 iterations took 3.46058 seconds; average iteration time: 0.012817
+Proc 0: mesh sizes: [579, 2798, 2486, 1870, 947, 2914];   270 iterations took 3.35207 seconds; average iteration time: 0.0124151
+Proc 0: mesh sizes: [448, 2830, 2717, 2121, 791, 2687];   270 iterations took 3.22027 seconds; average iteration time: 0.0119269
+Proc 0: mesh sizes: [591, 2775, 2924, 1572, 913, 2819];   270 iterations took 3.33997 seconds; average iteration time: 0.0123703
+Proc 0: mesh sizes: [442, 2814, 2675, 1763, 1110, 2790];   270 iterations took 3.31789 seconds; average iteration time: 0.0122885
+Proc 0: mesh sizes: [582, 2798, 2913, 1831, 577, 2893];   270 iterations took 3.33546 seconds; average iteration time: 0.0123536
+Proc 0: mesh sizes: [438, 2797, 2710, 1748, 815, 3086];   270 iterations took 3.4737 seconds; average iteration time: 0.0128656
+Proc 0: mesh sizes: [591, 2811, 2922, 1833, 924, 2513];   270 iterations took 3.33921 seconds; average iteration time: 0.0123674
+gk = [-0.0116038, 0.00730851, -0.00238043, -0.0040602, 0.00443155, 0.0273337]			pk = [-0.0322361, 0.0748449, -0.0637575, 0.0652056, -0.0500901, 0.00603315]
+f = 0.0127488	KKT1 = 0.0186267				KKT2 = 1.11022e-16				xk = [0.0293961, 0.251599, 0.237628, 0.154517, 0.0665186, 0.260341]				%error = -0.0300547
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [546, 2729, 2777, 1828, 859, 2855];   270 iterations took 3.28556 seconds; average iteration time: 0.0121687
+minor iteration = 0
+Proc 0: mesh sizes: [1342, 1935, 2529, 2063, 1430, 2295];   270 iterations took 3.7238 seconds; average iteration time: 0.0137919
+minor iteration = 1
+Proc 0: mesh sizes: [934, 2383, 2608, 2001, 1146, 2522];   270 iterations took 3.29443 seconds; average iteration time: 0.0122016
+minor iteration = 2
+Proc 0: mesh sizes: [717, 2622, 2659, 1876, 1031, 2689];   270 iterations took 3.2356 seconds; average iteration time: 0.0119837
+Proc 0: mesh sizes: [1006, 2406, 2718, 1901, 937, 2626];   270 iterations took 3.38062 seconds; average iteration time: 0.0125208
+Proc 0: mesh sizes: [442, 2662, 2780, 1951, 1064, 2695];   270 iterations took 3.25655 seconds; average iteration time: 0.0120613
+Proc 0: mesh sizes: [657, 2735, 2731, 1918, 959, 2594];   270 iterations took 3.24022 seconds; average iteration time: 0.0120008
+Proc 0: mesh sizes: [782, 2295, 2658, 2008, 1083, 2768];   270 iterations took 3.32839 seconds; average iteration time: 0.0123274
+Proc 0: mesh sizes: [657, 2521, 3042, 1815, 947, 2612];   270 iterations took 3.44998 seconds; average iteration time: 0.0127777
+Proc 0: mesh sizes: [790, 2569, 2398, 2016, 1072, 2749];   270 iterations took 3.30702 seconds; average iteration time: 0.0122482
+Proc 0: mesh sizes: [685, 2518, 2633, 2158, 947, 2653];   270 iterations took 3.21412 seconds; average iteration time: 0.0119041
+Proc 0: mesh sizes: [792, 2584, 2787, 1607, 1052, 2772];   270 iterations took 3.3382 seconds; average iteration time: 0.0123637
+Proc 0: mesh sizes: [687, 2526, 2627, 1792, 1290, 2672];   270 iterations took 3.32298 seconds; average iteration time: 0.0123073
+Proc 0: mesh sizes: [796, 2623, 2744, 1954, 708, 2769];   270 iterations took 3.33613 seconds; average iteration time: 0.012356
+Proc 0: mesh sizes: [690, 2490, 2633, 1790, 966, 3025];   270 iterations took 3.47476 seconds; average iteration time: 0.0128695
+Proc 0: mesh sizes: [768, 2644, 2756, 1956, 1097, 2373];   270 iterations took 3.28819 seconds; average iteration time: 0.0121785
+gk = [0.00134144, 0.0172727, 0.00816281, -0.00900374, -0.00132157, 0.0101167]			pk = [0.0179817, -0.0113088, -0.0023423, 0.00245877, 0.00939036, -0.0161797]
+f = 0.0121687	KKT1 = -0.0121429				KKT2 = 0				xk = [0.0473779, 0.24029, 0.235286, 0.156976, 0.075909, 0.244161]				%error = -0.0476711
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [717, 2622, 2659, 1876, 1031, 2689];   270 iterations took 3.24039 seconds; average iteration time: 0.0120014
+minor iteration = 0
+Proc 0: mesh sizes: [831, 2539, 2553, 2399, 992, 2280];   270 iterations took 3.18784 seconds; average iteration time: 0.0118068
+Proc 0: mesh sizes: [1111, 2513, 2302, 2401, 986, 2281];   270 iterations took 3.47424 seconds; average iteration time: 0.0128675
+Proc 0: mesh sizes: [579, 2615, 2484, 2468, 1085, 2363];   270 iterations took 3.16059 seconds; average iteration time: 0.0117059
+Proc 0: mesh sizes: [782, 2695, 2441, 2413, 959, 2304];   270 iterations took 3.27135 seconds; average iteration time: 0.0121161
+Proc 0: mesh sizes: [941, 2212, 2452, 2572, 1076, 2341];   270 iterations took 3.30107 seconds; average iteration time: 0.0122262
+Proc 0: mesh sizes: [790, 2454, 2689, 2437, 985, 2239];   270 iterations took 3.25972 seconds; average iteration time: 0.012073
+Proc 0: mesh sizes: [926, 2533, 2185, 2491, 1093, 2366];   270 iterations took 3.28348 seconds; average iteration time: 0.012161
+Proc 0: mesh sizes: [791, 2398, 2421, 2744, 973, 2267];   270 iterations took 3.30917 seconds; average iteration time: 0.0122562
+Proc 0: mesh sizes: [891, 2568, 2511, 2170, 1086, 2368];   270 iterations took 3.24724 seconds; average iteration time: 0.0120268
+Proc 0: mesh sizes: [821, 2487, 2415, 2431, 1274, 2166];   270 iterations took 3.29091 seconds; average iteration time: 0.0121886
+Proc 0: mesh sizes: [892, 2515, 2497, 2501, 760, 2429];   270 iterations took 3.24881 seconds; average iteration time: 0.0120326
+Proc 0: mesh sizes: [808, 2465, 2436, 2416, 950, 2519];   270 iterations took 3.1662 seconds; average iteration time: 0.0117267
+Proc 0: mesh sizes: [884, 2571, 2517, 2474, 1107, 2041];   270 iterations took 3.23749 seconds; average iteration time: 0.0119907
+gk = [0.00933298, -0.00663228, 0.0107538, -0.00933411, -0.000989242, 0.014034]			pk = [0.0690318, -0.0752601, -0.0183031, 0.0230517, 0.0503541, -0.0488744]
+f = 0.0120014	KKT1 = 0.0108995				KKT2 = -2.22045e-16				xk = [0.0646358, 0.221475, 0.23071, 0.162739, 0.0884975, 0.231943]				%error = -0.0139397
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [831, 2539, 2553, 2399, 992, 2280];   270 iterations took 3.18951 seconds; average iteration time: 0.011813
+minor iteration = 0
+Proc 0: mesh sizes: [628, 2629, 2558, 2429, 910, 2440];   270 iterations took 3.15121 seconds; average iteration time: 0.0116712
+Proc 0: mesh sizes: [896, 2576, 2498, 2302, 892, 2430];   270 iterations took 3.25591 seconds; average iteration time: 0.0120589
+Proc 0: mesh sizes: [363, 2708, 2644, 2426, 953, 2500];   270 iterations took 3.1727 seconds; average iteration time: 0.0117507
+Proc 0: mesh sizes: [568, 2815, 2540, 2333, 900, 2438];   270 iterations took 3.25724 seconds; average iteration time: 0.0120639
+Proc 0: mesh sizes: [693, 2390, 2546, 2485, 978, 2502];   270 iterations took 3.11638 seconds; average iteration time: 0.0115421
+Proc 0: mesh sizes: [583, 2574, 2813, 2403, 844, 2377];   270 iterations took 3.26058 seconds; average iteration time: 0.0120762
+Proc 0: mesh sizes: [692, 2724, 2237, 2494, 943, 2504];   270 iterations took 3.25208 seconds; average iteration time: 0.0120448
+Proc 0: mesh sizes: [562, 2594, 2512, 2601, 832, 2493];   270 iterations took 3.1097 seconds; average iteration time: 0.0115174
+Proc 0: mesh sizes: [687, 2657, 2648, 2116, 947, 2539];   270 iterations took 3.19777 seconds; average iteration time: 0.0118436
+Proc 0: mesh sizes: [585, 2569, 2496, 2418, 1191, 2335];   270 iterations took 3.20793 seconds; average iteration time: 0.0118812
+Proc 0: mesh sizes: [696, 2668, 2622, 2431, 610, 2567];   270 iterations took 3.20983 seconds; average iteration time: 0.0118882
+Proc 0: mesh sizes: [562, 2640, 2513, 2410, 846, 2623];   270 iterations took 3.13389 seconds; average iteration time: 0.011607
+Proc 0: mesh sizes: [695, 2662, 2616, 2450, 991, 2180];   270 iterations took 3.20472 seconds; average iteration time: 0.0118694
+gk = [0.0235929, -0.00223552, -0.00178781, 0.00465844, 0.003167, -0.00536259]			pk = [0.010478, -0.00471761, -0.0196043, 0.0457933, 0.00121622, -0.0331656]
+f = 0.011813	KKT1 = -0.0217402				KKT2 = 1.11022e-16				xk = [0.0751138, 0.216758, 0.211106, 0.208532, 0.0897137, 0.198777]				%error = -0.0159504
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [628, 2629, 2558, 2429, 910, 2440];   270 iterations took 3.15041 seconds; average iteration time: 0.0116682
+minor iteration = 0
+Proc 0: mesh sizes: [551, 2658, 2528, 2536, 845, 2476];   270 iterations took 3.1455 seconds; average iteration time: 0.01165
+Proc 0: mesh sizes: [866, 2560, 2575, 2478, 801, 2314];   270 iterations took 3.22868 seconds; average iteration time: 0.0119581
+Proc 0: mesh sizes: [258, 2669, 2655, 2562, 900, 2550];   270 iterations took 3.1273 seconds; average iteration time: 0.0115826
+Proc 0: mesh sizes: [383, 2976, 2582, 2497, 819, 2337];   270 iterations took 3.35349 seconds; average iteration time: 0.0124203
+Proc 0: mesh sizes: [609, 2320, 2618, 2602, 906, 2539];   270 iterations took 3.13689 seconds; average iteration time: 0.0116181
+Proc 0: mesh sizes: [383, 2630, 2922, 2506, 782, 2371];   270 iterations took 3.26747 seconds; average iteration time: 0.0121017
+Proc 0: mesh sizes: [617, 2641, 2287, 2652, 899, 2498];   270 iterations took 3.16694 seconds; average iteration time: 0.0117294
+Proc 0: mesh sizes: [494, 2605, 2431, 2851, 780, 2433];   270 iterations took 3.25736 seconds; average iteration time: 0.0120643
+Proc 0: mesh sizes: [578, 2730, 2709, 2140, 896, 2541];   270 iterations took 3.21343 seconds; average iteration time: 0.0119016
+Proc 0: mesh sizes: [495, 2622, 2425, 2498, 1106, 2448];   270 iterations took 3.18246 seconds; average iteration time: 0.0117869
+Proc 0: mesh sizes: [612, 2698, 2660, 2564, 557, 2503];   270 iterations took 3.19932 seconds; average iteration time: 0.0118493
+Proc 0: mesh sizes: [501, 2611, 2447, 2493, 791, 2751];   270 iterations took 3.1894 seconds; average iteration time: 0.0118126
+Proc 0: mesh sizes: [608, 2728, 2728, 2539, 891, 2100];   270 iterations took 3.22388 seconds; average iteration time: 0.0119403
+gk = [0.00625894, 0.0105959, 0.000638787, -0.00662481, -0.000143063, -0.00532864]			pk = [-0.0192112, 0.0110514, 0.00954873, -0.00401491, -0.0100032, 0.0126291]
+f = 0.0116682	KKT1 = 0.0251568				KKT2 = 0				xk = [0.0559026, 0.227809, 0.220654, 0.204517, 0.0797105, 0.211406]				%error = -0.0124139
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [551, 2658, 2528, 2536, 845, 2476];   270 iterations took 3.1491 seconds; average iteration time: 0.0116633
+minor iteration = 0
+Proc 0: mesh sizes: [502, 2532, 2625, 2558, 859, 2518];   270 iterations took 3.09318 seconds; average iteration time: 0.0114562
+Proc 0: mesh sizes: [755, 2550, 2605, 2425, 798, 2461];   270 iterations took 3.18384 seconds; average iteration time: 0.011792
+Proc 0: mesh sizes: [185, 2653, 2644, 2664, 938, 2510];   270 iterations took 3.14239 seconds; average iteration time: 0.0116385
+Proc 0: mesh sizes: [420, 2930, 2577, 2445, 801, 2421];   270 iterations took 3.31539 seconds; average iteration time: 0.0122792
+Proc 0: mesh sizes: [471, 2310, 2633, 2654, 920, 2606];   270 iterations took 3.12128 seconds; average iteration time: 0.0115603
+Proc 0: mesh sizes: [383, 2510, 3010, 2442, 799, 2450];   270 iterations took 3.38277 seconds; average iteration time: 0.0125288
+Proc 0: mesh sizes: [471, 2639, 2355, 2610, 950, 2569];   270 iterations took 3.13366 seconds; average iteration time: 0.0116061
+Proc 0: mesh sizes: [421, 2474, 2599, 2829, 821, 2450];   270 iterations took 3.23061 seconds; average iteration time: 0.0119652
+Proc 0: mesh sizes: [547, 2644, 2720, 2232, 938, 2513];   270 iterations took 3.16093 seconds; average iteration time: 0.0117071
+Proc 0: mesh sizes: [413, 2471, 2619, 2514, 1150, 2427];   270 iterations took 3.20075 seconds; average iteration time: 0.0118546
+Proc 0: mesh sizes: [537, 2645, 2695, 2550, 603, 2564];   270 iterations took 3.13069 seconds; average iteration time: 0.0115951
+Proc 0: mesh sizes: [416, 2477, 2635, 2485, 809, 2772];   270 iterations took 3.16944 seconds; average iteration time: 0.0117387
+Proc 0: mesh sizes: [545, 2606, 2716, 2537, 922, 2268];   270 iterations took 3.14746 seconds; average iteration time: 0.0116573
+gk = [0.00762647, 0.0162928, 0.00756189, 0.00330444, -0.00126848, -0.0025936]			pk = [-0.00905346, -0.000765741, 0.00280857, 0.0119077, -0.0050574, 0.000160292]
+f = 0.0116633	KKT1 = 0.0205986				KKT2 = 0				xk = [0.0468492, 0.227043, 0.223463, 0.216425, 0.0746531, 0.211566]				%error = -0.000416027
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [502, 2532, 2625, 2558, 859, 2518];   270 iterations took 3.06753 seconds; average iteration time: 0.0113612
+minor iteration = 0
+Proc 0: mesh sizes: [419, 2417, 2626, 2609, 961, 2562];   270 iterations took 3.11578 seconds; average iteration time: 0.0115399
+minor iteration = 1
+Proc 0: mesh sizes: [419, 2432, 2686, 2611, 897, 2549];   270 iterations took 3.13176 seconds; average iteration time: 0.0115991
+minor iteration = 2
+Proc 0: mesh sizes: [428, 2451, 2659, 2627, 878, 2551];   270 iterations took 3.09246 seconds; average iteration time: 0.0114536
+minor iteration = 3
+Proc 0: mesh sizes: [487, 2538, 2603, 2555, 887, 2524];   270 iterations took 3.05735 seconds; average iteration time: 0.0113235
+Proc 0: mesh sizes: [745, 2541, 2573, 2488, 817, 2430];   270 iterations took 3.1279 seconds; average iteration time: 0.0115848
+Proc 0: mesh sizes: [185, 2612, 2710, 2617, 936, 2534];   270 iterations took 3.16335 seconds; average iteration time: 0.0117161
+Proc 0: mesh sizes: [433, 2867, 2606, 2451, 828, 2409];   270 iterations took 3.23217 seconds; average iteration time: 0.011971
+Proc 0: mesh sizes: [537, 2247, 2683, 2643, 950, 2534];   270 iterations took 3.13787 seconds; average iteration time: 0.0116218
+Proc 0: mesh sizes: [383, 2496, 2994, 2494, 804, 2423];   270 iterations took 3.33352 seconds; average iteration time: 0.0123464
+Proc 0: mesh sizes: [556, 2611, 2344, 2626, 927, 2530];   270 iterations took 3.1049 seconds; average iteration time: 0.0114996
+Proc 0: mesh sizes: [418, 2500, 2611, 2775, 859, 2431];   270 iterations took 3.1754 seconds; average iteration time: 0.0117607
+Proc 0: mesh sizes: [535, 2603, 2748, 2247, 926, 2535];   270 iterations took 3.17254 seconds; average iteration time: 0.0117501
+Proc 0: mesh sizes: [412, 2472, 2654, 2590, 1132, 2334];   270 iterations took 3.19472 seconds; average iteration time: 0.0118323
+Proc 0: mesh sizes: [533, 2605, 2756, 2550, 634, 2516];   270 iterations took 3.16842 seconds; average iteration time: 0.0117349
+Proc 0: mesh sizes: [409, 2491, 2638, 2578, 810, 2668];   270 iterations took 3.07891 seconds; average iteration time: 0.0114034
+Proc 0: mesh sizes: [534, 2555, 2780, 2603, 934, 2188];   270 iterations took 3.1973 seconds; average iteration time: 0.0118419
+gk = [0.00311818, 0.0146013, 0.018739, 0.00524177, 0.00526978, 0.00165315]			pk = [-0.00514978, -0.00765287, 0.00346761, 0.00339108, 0.00216504, 0.00377892]
+f = 0.0113612	KKT1 = -0.0307573				KKT2 = 0				xk = [0.0416994, 0.219391, 0.22693, 0.219816, 0.0768182, 0.215345]				%error = -0.0265905
+------------------------------------------------------------------------------------------------------------
+
+mu = 1
+Proc 0: mesh sizes: [487, 2538, 2603, 2555, 887, 2524];   270 iterations took 3.06405 seconds; average iteration time: 0.0113483
+minor iteration = 0
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #1 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 1
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #1 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 2
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #1 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 3
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #1 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 4
+PARMETIS ERROR: The tpwgts for constraint #0 and partition #1 is out of bounds.
+Proc 0: mesh sizes: [11594, 0, 0, 0, 0, 0];   270 iterations took 600 seconds; average iteration time: 2.22222
+minor iteration = 5
+Proc 0: mesh sizes: [666, 1149, 2131, 3149, 1513, 2986];   270 iterations took 3.74376 seconds; average iteration time: 0.0138658
+minor iteration = 6
+Proc 0: mesh sizes: [584, 1784, 2429, 2863, 1205, 2729];   270 iterations took 3.40299 seconds; average iteration time: 0.0126037
+minor iteration = 7
+Proc 0: mesh sizes: [530, 2224, 2460, 2747, 1050, 2583];   270 iterations took 3.23973 seconds; average iteration time: 0.011999
+minor iteration = 8
+Proc 0: mesh sizes: [428, 2389, 2623, 2627, 974, 2553];   270 iterations took 3.12625 seconds; average iteration time: 0.0115787
+minor iteration = 9
+Proc 0: mesh sizes: [493, 2415, 2566, 2695, 921, 2504];   270 iterations took 3.14744 seconds; average iteration time: 0.0116572
+minor iteration = 10
+Proc 0: mesh sizes: [478, 2452, 2655, 2575, 886, 2548];   270 iterations took 3.09826 seconds; average iteration time: 0.011475
+minor iteration = 11
+Proc 0: mesh sizes: [419, 2440, 2698, 2686, 876, 2475];   270 iterations took 3.1333 seconds; average iteration time: 0.0116048
+minor iteration = 12
+Proc 0: mesh sizes: [495, 2489, 2613, 2550, 877, 2570];   270 iterations took 3.07822 seconds; average iteration time: 0.0114008
+minor iteration = 13
+Proc 0: mesh sizes: [493, 2529, 2619, 2557, 859, 2537];   270 iterations took 3.08439 seconds; average iteration time: 0.0114237
+minor iteration = 14
+Proc 0: mesh sizes: [485, 2530, 2624, 2562, 870, 2523];   270 iterations took 3.08178 seconds; average iteration time: 0.011414
+minor iteration = 15
+minorIterations > 15, breaking out
+Done!
+Done!
+Done!
+Done!
+Done!
+Done!
+Proc 0: mesh sizes: [487, 2538, 2603, 2555, 887, 2524];   270 iterations took 3.0667 seconds; average iteration time: 0.0113581
+
+	Optimal weights =  [0.04194510466001365179, 0.21775601051486276338, 0.22634100034267717882, 0.22058437366274449842, 0.07757198039553012126, 0.21580153042417182796]
+	Average iteration time = 0.01135814808033130778
+	Converged in 12 iterations.
+	Computation time: 848.556 secs.
+
+Mesh partitions optimized, running and monitoring simulation
+Proc 0: weights: [0.0419451, 0.217756, 0.226341, 0.220584, 0.077572, 0.215802];  Average solver iteration time: 0.0113867
+Proc 0: weights: [0.0419451, 0.217756, 0.226341, 0.220584, 0.077572, 0.215802];  Average solver iteration time: 0.0113881
+Proc 0: weights: [0.0419451, 0.217756, 0.226341, 0.220584, 0.077572, 0.215802];  Average solver iteration time: 0.0113843
+Proc 0: weights: [0.0419451, 0.217756, 0.226341, 0.220584, 0.077572, 0.215802];  Average solver iteration time: 0.0113874
+Proc 0: weights: [0.0419451, 0.217756, 0.226341, 0.220584, 0.077572, 0.215802];  Average solver iteration time: 0.0113844
+Proc 0: weights: [0.0419451, 0.217756, 0.226341, 0.220584, 0.077572, 0.215802];  Average solver iteration time: 0.0113874

@@ -1,0 +1,149 @@
+\documentclass[12pt,parskip=full]{article}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage[left=1.0in,right=1.0in,top=0.5in,bottom=1.0in]{geometry}
+\geometry{letterpaper}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{soul}
+\usepackage{textcomp}
+\usepackage{marvosym}
+\usepackage{wasysym}
+\usepackage{latexsym}
+\usepackage{amssymb}
+\usepackage{apacite}
+\usepackage{tabu}
+\usepackage[svgnames]{xcolor}
+\usepackage{tikz}
+\usepackage[linktoc=all]{hyperref}
+\usepackage{cleveref}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{array}
+\usepackage{apacite}
+\usepackage{natbib}
+\usepackage{multicol}
+\usepackage{subcaption}
+\usepackage{mathtools}
+\usetikzlibrary{arrows}
+
+\pgfdeclarelayer{edgelayer}
+\pgfdeclarelayer{nodelayer}
+\pgfsetlayers{edgelayer,nodelayer,main}
+
+\tikzstyle{none}=[inner sep=0pt]
+\tikzstyle{waypt}=[circle,fill=Black,draw=Black,scale=0.4]
+\tikzstyle{Helobody}=[circle,fill=White,draw=Black,scale=4.0]
+\tikzstyle{Tailrotor}=[circle,fill=White,draw=Black,scale=1.0]
+\tikzstyle{ForceVector}=[->,draw=Indigo,fill=Indigo]
+\tikzstyle{Coordinate}=[->,draw=Red,fill=Red,fill opacity=1.0]
+\tikzstyle{angle}=[->]
+\tikzstyle{MeasureMark}=[|-|]
+\newlength{\imagewidth}
+\newlength{\imagescale}
+
+\setlength{\parskip}{11pt}
+%\setlength{\parindent}{15pt}
+\usepackage{bookmark}
+\makeatletter
+\renewcommand\@seccntformat[1]{}
+\makeatother
+
+\lstset
+{
+    language=c,
+    keywords={break,case,catch,continue,else,for,
+        if,return,switch,try,while,int,void},
+    basicstyle=\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{ForestGreen},
+    stringstyle=\color{purple},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=10pt,
+    backgroundcolor=\color{white},
+    tabsize=4,
+    showspaces=false,
+    showstringspaces=false
+}
+
+\renewcommand{\thesection}{\arabic{section}}
+
+\renewcommand{\thesubsection}{\thesection\alph{subsection}}
+\renewcommand{\theequation}{\thesubsection\arabic{equation}}
+\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
+            \node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
+            
+\numberwithin{subsection}{section}
+
+\begin{document}
+	\vspace{-4ex}
+	\title{Final Project\vspace{-3.5ex}}
+	\author{Rob Rau\vspace{-4ex}}
+	\date{\today\vspace{-4ex}}
+	\maketitle
+
+	\section{Introduction}
+		For this term project I impliment parallelization of my own computational fluid dynamics (CFD) software and explore load balancing
+		for heterogenous compute networks. In this report I will discuss how I parallelized my code, scalling results, my method of
+		load balancing, and present results for both simulated heterogenous networks and a real heterogenous network. 
+
+	\section{CFD}
+		The first step the needed to be completed in this project was to parallelize my computational fluid dynamics code, EbbCFD.
+		EbbCFD is a 2 dimensional second order finite volume code that currently only solves the Euler equations. It operates on a
+		mesh consisting of triangles, where each triangle represents a finite volume (or area in 2D) that we use to approximate the
+		solution state in. A finite volume code works by computing the flux between two cells and using those fluxes to update the
+		average solution state of the cells. For triangular meshes, each cells will have 3 flux values that are used to compute the
+		current solution state. A first order code will use the cell averaged values to compute the fluxes between two cells, where
+		as a second order code will compute an approximation of the solution state gradient, use said gradient to compute the solution
+		state at the cell edges, and use those edge values to compute the flux.
+		
+		% make clear with a few formulas
+
+		To parallelize this sort of code, I (and most other people) divide up the mesh into sub-meshes that each processor then computes.
+		This means that each processor will need to communicate information to processors that are geometrically next to them on the 
+		mesh. This means that for a first order code, the cell averaged solution state of the outer edge of the submesh will need to be
+		sent to the relevant neighbors each timestep. A second order code is a bit more tricky. The cell averaged solution state still
+		needs to be communicated but as there are now gradients and edge state values, we need to send more information. I broke down my
+		commuication into two steps: an average state update, and an edge state update. Each processor maintains extra cells around its
+		submesh that represent the relevent cells of its neighbors, typically called halo cells. In the first communication step these
+		cells are populated with average state information. That information is then used to compute gradients and edge values. The
+		second communication step then sends the computed edge values so neighbor processors can compute the necessary fluxes.
+		This constitutes the bulk of the communication that needs to happen, but it doesn't account for all. 
+		% show partitioned mesh
+
+		There are other things, not directly tied to the solution that need to be communicated to considered a fully featured code.
+		CFD codes need to be able to compute forces imparted by the flow onto solid boundaries, they need to compute solution residuals,
+		and they often will dynamically set the timestep based off the solution. All of these things come down to performing reduce
+		operations every timestep. Overall this is relativly easy but still something that needs to be considered.
+
+		To reduce the overhead of the two comunication steps in the core of my solver, I resorted to using non blocking communications,
+		which CFD lends itself to relativly well. Typically only a small portion of what needs to be computed relies on communicated data.
+		So to address this, sends and receives are started with MPI_Startall, work is done on other parts of the mesh, and when we
+		need the data, we block until MPI_Testall tells us that our communications have arrived. Switching to this method improved scaling
+		on high latency networks like ethernet.
+		% show those scalling results 
+
+	\section{Optimization}
+		% talk about mathmatical optimization
+		% talk about SQP optimizer
+
+	\section{Results}
+
+		% show plots of mesh weights vs time (optimization iteration)
+		% show plots of average iteration time vs time (optimization iteration)
+
+
+	\section{Conclusions}
+		% talk about benefits
+		% talk about limitations
+		% talk about possible real world applications (GPU/CPU balancing)
+
+
+\end{document}
