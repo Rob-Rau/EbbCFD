@@ -736,6 +736,7 @@ MPI_Datatype vec4dataType;
 
 	version(meshopt)
 	{
+		/+
 		shared bool bullshit;
 		if(mesh.mpiRank == sid1)
 		{
@@ -755,6 +756,7 @@ MPI_Datatype vec4dataType;
 				atomicStore(bullshit, true);
 			}
 		}
+		+/
 	}
 	// update ghost cell states before we can compute gradients
 	foreach(i; mesh.ghostCells)

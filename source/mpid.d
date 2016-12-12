@@ -109,7 +109,7 @@ MPI_Datatype toMPIType(T)()
 
 void send(T)(MPI_Comm comm, T data, uint proc, int tag)
 {
-	MPI_Send(&data, 1, toMPIType!T, proc, tag, comm);
+	MPI_Ssend(&data, 1, toMPIType!T, proc, tag, comm);
 }
 
 T recv(T)(MPI_Comm comm, uint from, int tag)
@@ -123,8 +123,8 @@ T recv(T)(MPI_Comm comm, uint from, int tag)
 void sendArray(T)(MPI_Comm comm, T[] data, uint proc, int tag)
 {
 	uint len = cast(uint)data.length;
-	MPI_Send(&len, 1, MPI_UINT32_T, proc, tag, comm);
-	MPI_Send(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag + 1, comm);
+	MPI_Ssend(&len, 1, MPI_UINT32_T, proc, tag, comm);
+	MPI_Ssend(data.ptr, cast(uint)data.length, toMPIType!T, proc, tag + 1, comm);
 }
 
 T[] recvArray(T)(MPI_Comm comm, uint from, const int tag)
