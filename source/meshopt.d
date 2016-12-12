@@ -116,15 +116,25 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 		double stepSize = 300.0/meshOpt.bigMesh.cells.length.to!double;
 		MPI_Bcast(&stepSize, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+		uint optimizationRuns = 0;
 		while((meshOpt.t < config.tEnd) && !atomicLoad(interrupted))
 		{
+			Result result;
 			meshOpt.StepSize = stepSize;
 			meshOpt.runIterations = 270;
 			sqp = new SQP;
 			meshOpt.sqp = sqp;
 			sqp.DebugMode = true;
-			sqp.InitialGuess = new double[p];
-			sqp.InitialGuess[] = 1.0/(cast(double)p);
+			if(optimizationRuns == 0)
+			{
+				sqp.InitialGuess = new double[p];
+				sqp.InitialGuess[] = 1.0/(cast(double)p);
+			}
+			else
+			{
+				sqp.InitialGuess = new double[p];
+				sqp.InitialGuess[] = result.DesignVariables;
+			}
 			sqp.PointFilename = "SQPpoints.csv";
 			sqp.ErrorFilename = "SQPerror.csv";
 			sqp.FileOutput = true;
@@ -133,7 +143,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			sqp.Eta = 0.05;
 			logln("Starting optimization");
 			MPI_Barrier(MPI_COMM_WORLD);
-			Result result = sqp.Optimize(meshOpt);
+			result = sqp.Optimize(meshOpt);
 
 			if(id == 0)
 			{
@@ -274,6 +284,7 @@ void startOptimization(Config config, string saveFile, uint p, uint id)
 			Mallocator.instance.deallocate(cast(void[])meshOpt.thisE);
 			Mallocator.instance.deallocate(cast(void[])meshOpt.tmp);
 			Mallocator.instance.deallocate(cast(void[])meshOpt.R);
+			optimizationRuns++;
 
 		}
 		if(id == 0)
