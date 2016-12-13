@@ -17,7 +17,7 @@ def PlotRealNetwork():
 
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -28,7 +28,7 @@ def PlotRealNetwork():
 	plt.ylabel('Average solver iteration time [s]')
 
 	plt.suptitle('6 Processor Ethernet')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 def PlotRealNetwork2():
 	weights = np.genfromtxt('SQPpoints_realNetwork2.csv',
@@ -42,7 +42,7 @@ def PlotRealNetwork2():
 
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -53,7 +53,7 @@ def PlotRealNetwork2():
 	plt.ylabel('Average solver iteration time [s]')
 
 	plt.suptitle('6 Processor Busy Ethernet')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 def PlotNetworChange():
 	weights = np.genfromtxt('SQPpoints_networkChange.csv',
@@ -67,7 +67,7 @@ def PlotNetworChange():
 
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -78,7 +78,7 @@ def PlotNetworChange():
 	plt.ylabel('Average solver iteration time [s]')
 
 	plt.suptitle('Simulated network change')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 def PlotNetworChange2():
 	weights = np.genfromtxt('SQPpoints_networkChange_p6.csv',
@@ -92,7 +92,7 @@ def PlotNetworChange2():
 
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -101,7 +101,7 @@ def PlotNetworChange2():
 	plt.title('Average iteration time')
 	plt.xlabel('Optimizer iterations')
 	plt.ylabel('Average solver iteration time [s]')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 
 
@@ -117,7 +117,7 @@ def Plot6PevenSlowdown():
 	
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -126,7 +126,7 @@ def Plot6PevenSlowdown():
 	plt.title('Average iteration time')
 	plt.xlabel('Optimizer iterations')
 	plt.ylabel('Average solver iteration time [s]')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 def Plot6PunevenSlowdownBigMesh():
 	weights = np.genfromtxt('SQPpoints_p6_unevenSlow_bigmesh.csv',
@@ -140,7 +140,7 @@ def Plot6PunevenSlowdownBigMesh():
 
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -149,7 +149,7 @@ def Plot6PunevenSlowdownBigMesh():
 	plt.title('Average iteration time')
 	plt.xlabel('Optimizer iterations')
 	plt.ylabel('Average solver iteration time [s]')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 def Plot6PunevenSlowdown():
 	weights = np.genfromtxt('SQPpoints_p6_unevenSlow.csv',
@@ -163,7 +163,7 @@ def Plot6PunevenSlowdown():
 	
 	plt.subplot(2,1,1)
 	#print(weights)
-	plt.plot(weights)
+	plt.plot(weights, marker='o')
 	plt.title('Metis mesh weights')
 	#plt.xlabel('Optimizer iterations')
 	plt.ylabel('Mesh weights')
@@ -172,18 +172,18 @@ def Plot6PunevenSlowdown():
 	plt.title('Average iteration time')
 	plt.xlabel('Optimizer iterations')
 	plt.ylabel('Average solver iteration time [s]')
-	plt.plot(f)
+	plt.plot(f, marker='o')
 
 def PlotEbbSpeedup(elements, p, serialTime, parallelTime):
 	speedup = serialTime/parallelTime
-	handle = plt.plot(p, speedup, label=str(elements)+' element mesh')
+	handle = plt.plot(p, speedup, label=str(elements)+' element mesh', marker='o')
 	plt.axis('equal')
 	plt.title('speedup')
 	return handle
 
 def PlotEbbEfficiency(elements, p, serialTime, parallelTime):
 	efficiency = serialTime/(p*parallelTime)
-	handle = plt.plot(p, efficiency, label=str(elements)+' element mesh')
+	handle = plt.plot(p, efficiency, label=str(elements)+' element mesh', marker='o')
 	plt.title('efficiency')
 	return handle
 
