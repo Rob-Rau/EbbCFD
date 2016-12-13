@@ -90,9 +90,9 @@
 	\maketitle
 
 	\section{Introduction}
-		For this term project I impliment parallelization of my own computational fluid dynamics (CFD) software and I explore load balancing
-		for heterogenous compute networks. In this report I will discuss how I parallelized my code, scaling results, my method of
-		load balancing, and present results for both simulated heterogenous networks and a real heterogenous network. 
+		For this term project I implement parallelism of my own computational fluid dynamics (CFD) software and I explore load balancing
+		for heterogeneous compute networks. In this report I will discuss how I parallelized my code, scaling results, my method of
+		load balancing, and present results for both simulated heterogeneous networks and a real heterogeneous network. 
 
 	\section{CFD}
 		The first step that needed to be completed in this project was to parallelize my computational fluid dynamics code, EbbCFD.
@@ -108,11 +108,11 @@
 
 		To parallelize this sort of code, I (and most other people) divide up the mesh into sub-meshes that each processor then computes.
 		This means that each processor will need to communicate information to processors that are geometrically next to them on the 
-		mesh. This means that for a first order code, the cell averaged solution state of the outer edge of the submesh will need to be
-		sent to the relevant neighbors each timestep. A second order code is a bit more tricky. The cell averaged solution state still
+		mesh. This means that for a first order code, the cell averaged solution state of the outer edge of the sub-mesh will need to be
+		sent to the relevant neighbors each time-step. A second order code is a bit more tricky. The cell averaged solution state still
 		needs to be communicated but as there are now gradients and edge state values, we need to send more information. I broke down my
-		commuication into two steps: an average state update, and an edge state update. Each processor maintains extra cells around its
-		submesh that represent the relevent cells of its neighbors, typically called halo cells. In the first communication step these
+		communication into two steps: an average state update, and an edge state update. Each processor maintains extra cells around its
+		sub-mesh that represent the relevant cells of its neighbors, typically called halo cells. In the first communication step these
 		cells are populated with average state information. That information is then used to compute gradients and edge values. The
 		second communication step then sends the computed edge values so neighbor processors can compute the necessary fluxes.
 		This constitutes the bulk of the communication that needs to happen, but it doesn't account for all.
@@ -128,11 +128,11 @@
 		\end{figure}
 		There are other things, not directly tied to the solution that need to be communicated to considered a fully featured code.
 		CFD codes need to be able to compute forces imparted by the flow onto solid boundaries, they need to compute solution residuals,
-		and they often will dynamically set the timestep based off the solution. All of these things come down to performing reduce
-		operations every timestep. Overall this is relativly easy but still something that needs to be considered.
+		and they often will dynamically set the time-step based off the solution. All of these things come down to performing reduce
+		operations every time-step. Overall this is relatively easy but still something that needs to be considered.
 
-		To reduce the overhead of the two comunication steps in the core of my solver, I resorted to using non blocking communications,
-		which CFD lends itself to relativly well. Typically only a small portion of what needs to be computed relies on communicated data.
+		To reduce the overhead of the two communication steps in the core of my solver, I resorted to using non blocking communications,
+		which CFD lends itself to relatively well. Typically only a small portion of what needs to be computed relies on communicated data.
 		So to address this, sends and receives are started with \verb|MPI_Startall|, work is done on other parts of the mesh, and when we
 		need the data, we block until \verb|MPI_Testall| tells us that our communications have arrived. Switching to this method improved
 		performance on high latency networks like ethernet.
@@ -165,28 +165,28 @@
 		\end{figure}
 
 	\section{Optimization}
-		My approach to load balancing was through mathmatical optimization. Basically solving the following problem
+		My approach to load balancing was through mathematical optimization. Basically solving the following problem
 		\begin{align}
 			\mathrm{minimize \ }& f(x) \\
 			\mathrm{subject \ to \ } & c_j(x) = 0, \quad c_k(x) >= 0
 		\end{align}
-		where $f(x)$ is the average computational time for one timestep of the simulation and $c_j(x)$ are the equality constraints and 
+		where $f(x)$ is the average computational time for one time-step of the simulation and $c_j(x)$ are the equality constraints and 
 		$c_k(x)$ are the inequality constraints. The constraints for this problem are determined by metis, the mesh partition library used.
 		Metis requires that each weight satisfy $0 \le w_i \le 1$ and that
 		\begin{equation}
 			0 = 1 - \sum{w_i} \quad i = 1,..,p
 		\end{equation}
 		
-		The thing with mathmatical optimization is that it assumes smooth continuous functions. The thing with computers is that they
+		The thing with mathematical optimization is that it assumes smooth continuous functions. The thing with computers is that they
 		typically aren't smooth continuous devices. Interestingly enough, for this problem at least, this can be spoofed to be the case.
-		I found that by taking long enough runtime samples of my code the average iteration time, measured in seconds, stayed stable.
+		I found that by taking long enough run time samples of my code the average iteration time, measured in seconds, stayed stable.
 		Typically to about 4 significant figures. This, coupled with the fact that, for a two dimensional mesh, computation time scales
-		as expected with $O(N^2)$, we have a potential recipe for mathmatical optimization. 
+		as expected with $O(N^2)$, we have a potential recipe for mathematical optimization. 
 
-		There are many different algorithms that solve optimization problems, but most fall into two catagories: gradient based optimization,
+		There are many different algorithms that solve optimization problems, but most fall into two categories: gradient based optimization,
 		and gradient free optimization. Gradient free approaches vary wildly in their fundamental concepts. Genetic algorithms in a way
 		attempt to emulate evolution, simplex methods compute the objective function at the points of an $n + 1$ dimensional simplex, and
-		find search directions using that, and the partical swarm optimizer emulates particles in a feild, traveling towards a minimum point.
+		find search directions using that, and the particle swarm optimizer emulates particles in a field, traveling towards a minimum point.
 		In my past research with various optimization methods, I typically found that gradient free approaches, while work, usually converge
 		slower, and can require more computations of the objective function that their gradient based counterparts.
 
@@ -200,11 +200,11 @@
 			\end{bmatrix}
 		\end{equation}
 
-		Unfortunatly the gradient needs to be computed at each $x$ visited. However, using the quasi-newton method BFGS (Broyden-Fletcher-Goldfarb-Shanno),
+		Unfortunately the gradient needs to be computed at each $x$ visited. However, using the quasi-newton method BFGS (Broyden-Fletcher-Goldfarb-Shanno),
 		the Hessian matrix is is not computed at each iteration, but it is estimated and updated as the optimizer moves through the design space. This saves
 		us from needing to compute $n^2$ second derivatives, and only computing $n$ derivatives. Using a central difference scheme, this ends up 
 		computing the objective function $2n + 1$ times per iteration. The BFGS method is formulated for unconstrained optimization, but we clearly
-		have constraints that need to satisfied, so in comes Sequentail Quadratic Programming (SQP). SQP is a modification on top of BFGS to
+		have constraints that need to satisfied, so in comes Sequential Quadratic Programming (SQP). SQP is a modification on top of BFGS to
 		allow for equality constraints, that basically solves the problem
 		\begin{equation}
 			\mathrm{minimize \ } \phi(x) = f(x) + \frac{1}{\mu}||c||_1
@@ -214,25 +214,25 @@
 			||c||_1 = \sum{|c_j|}
 		\end{equation}
 
-		Metis requires us to have inequality constraints as well. Fortunatly a relatively minor modification can be made to SQP to allow for this.
-		It becomes what we call an active set method. Basically every iteration we test where the solution is and where it want't to go and
+		Metis requires us to have inequality constraints as well. Fortunately a relatively minor modification can be made to SQP to allow for this.
+		It becomes what we call an active set method. Basically every iteration we test where the solution is and where it want's to go and
 		update inequality constraints to equality constraints if they are going to be violated.
 
-		Computing the gradient at every iteration may at first seem like a lot of overhead, but I implimented the code so that solution always marches
+		Computing the gradient at every iteration may at first seem like a lot of overhead, but I implemented the code so that solution always marches
 		forward, even at the intermediate mesh weights. This required keeping the un partitioned mesh on processor 0 and scattering and gathering
-		results to and from the partitioned mesh. While this does add overhead, it ensures, that while an optimal mesh partition may not yet be acheived
-		actual work is still being done. As shown later, the optimizer never strays far from optimality so the runtime never gets significantly worse.
+		results to and from the partitioned mesh. While this does add overhead, it ensures, that while an optimal mesh partition may not yet be achieved
+		actual work is still being done. As shown later, the optimizer never strays far from optimality so the run time never gets significantly worse.
 		
 		For the finite difference derivative approximation, I found that setting the step size to $h = \frac{300}{N}$ provided reasonable results.
 		It ensured that enough cells where removed or added to make an appreciable difference in compute time.
 
 	\section{Results}
 		To test this method, I artificially slowed down some processors and let the optimizer run. To simulate network configuration changes, I could
-		change which processors were slowed down. This allowed for isolated testing in an enviroment like Flux, with low latency/high bandwidth interconnects.
+		change which processors were slowed down. This allowed for isolated testing in an environment like Flux, with low latency/high bandwidth interconnects.
 		I also tested on a live ethernet network between computers of varying capabilities without any artificial slowdowns.
 
 		Running on Flux, without simulating a network change, it the optimizer finds its way to an optimal mesh distribution in relatively few iterations,
-		yeilding a 25.422\% increase in computation speed.
+		yielding a 25.422\% increase in computation speed.
 
 		% put figures here and also proper numbers
 		\begin{figure}[H]
@@ -240,7 +240,7 @@
 			\includegraphics[width=\textwidth]{6Pevenslow.pdf}
 		\end{figure}
 
-		Of course the optimizer does fine when the slow downs are uneven. It still yeilded a 29.28\% speedup.
+		Of course the optimizer does fine when the slow downs are uneven. It still yielded a 29.28\% speedup.
 		\begin{figure}[H]
 			\centering
 			\includegraphics[width=\textwidth]{6Punevenslow.pdf}
@@ -277,7 +277,7 @@
 		\end{centering}
 
 		The following results where from a 6 processor run, with each machine running 2 processors. Even on a high latency/low bandwidth (relative to 
-		InfinaBand) network the optimizer managed to distribute the mesh in a way one would expect, and yeild a 12.6\% increas in computation speed.
+		InfinaBand) network the optimizer managed to distribute the mesh in a way one would expect, and yield a 12.6\% increase in computation speed.
 		\begin{figure}[H]
 			\centering
 			\begin{subfigure}[H]{0.9\textwidth}
@@ -289,27 +289,28 @@
 				\caption{6 processors on a less quiet ethernet network with various other computational activity}
 			\end{subfigure}
 		\end{figure}
-		Interestingly, even though their were dissruptions in the average iteration time due to other network and computer activitiy that happened durring
+		Interestingly, even though their were disruptions in the average iteration time due to other network and computer activity that happened during
 		optimization, the optimizer still arrived at sensible weights 
 
 	\section{Conclusions}
 
-		The overall concept did yeild positive results and for the cases I tested, a reasonable speedup was acheived in both an isolated environment like Flux
-		and in a noisy live environment like my livingroom. In the testing I carried out I could not get appreciable speedup above 6 processors and unfortunatly
-		I don't have a good explination for why. Perhaps a different underlying optimization algorithm could fix this. 
+		The overall concept did yield positive results and for the cases I tested, a reasonable speedup was achieved in both an isolated environment like Flux
+		and in a noisy live environment like my living room. In the testing I carried out I could not get appreciable speedup above 6 processors. The optimizer
+		would try to take a step that would violate a constraint and was pulled back to the point of not actually moving. I suspect a different underlying 
+		optimization algorithm could fix this.
 		
-		There are two primary applications that I see this approach being useful: small beowolf clusters, and CPU/GPU hybrid code. There are many people
+		There are two primary applications that I see this approach being useful: small beowulf clusters, and CPU/GPU hybrid code. There are many people
 		who don't have access to large HPC compute resources, but do have many machines laying around capable of being used. My living room being a prime
 		example. Once I graduate, I will won't have as readily available access to Flux, but I have other machines I can use to compute in parallel. As I
-		continue to develope EbbCFD and add in expensive viscouse flux calculations and add 3D support have this option open to me is a huge boon. I also
+		continue to develop EbbCFD and add in expensive viscous flux calculations and add 3D support have this option open to me is a huge boon. I also
 		have many graphics cards available to me as an avid gamer, and I can see this approach working to balance CPU/GPU code execution on large enough
 		data sets.
 
-		All code relevent to this project is up on Github at the following URL's: \url{https://github.com/Rob-Rau/EbbCFD} and \url{https://github.com/Rob-Rau/numd}.
+		All code relevant to this project is up on Github at the following URL's: \url{https://github.com/Rob-Rau/EbbCFD} and \url{https://github.com/Rob-Rau/numd}.
 		The numd repository contains the code for the optimizer. The specific file is \verb|numd/optimization/SQP.d|
 	\section{Future Work}
 		Even though I am a masters student I do have plans to extend this. The two main things I'm currently interested in are, as mentioned above, CPU/GPU
 		balancing, and testing different optimization algorithms. I'd like to test some gradient free methods, most likely simplex methods, and see if I
-		can acheive better scaling results. 
+		can achieve better scaling results. 
 
 \end{document}
