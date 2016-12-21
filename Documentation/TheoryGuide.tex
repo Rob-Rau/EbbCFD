@@ -51,7 +51,7 @@
 %\setlength{\parindent}{15pt}
 \usepackage{bookmark}
 \makeatletter
-\renewcommand\@seccntformat[1]{}
+%\renewcommand\@seccntformat[1]{}
 \makeatother
 
 \lstset
@@ -73,10 +73,10 @@
     showstringspaces=false
 }
 
-\renewcommand{\thesection}{\arabic{section}}
+%\renewcommand{\thesection}{\arabic{section}}
 
-\renewcommand{\thesubsection}{\thesection\alph{subsection}}
-\renewcommand{\theequation}{\thesubsection\arabic{equation}}
+%\renewcommand{\thesubsection}{\thesection\alph{subsection}}
+%\renewcommand{\theequation}{\thesubsection\arabic{equation}}
 \newcommand*\circled[1]{\tikz[baseline=(char.base)]{
             \node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
             
@@ -90,6 +90,17 @@
 	\maketitle
 
 	\section{Introduction}
-		
+        EbbCFD is a computational fluid dynamics package intended to solve the compressible Euler equations.
+        It uses an unstructured, limited, second order finite volume spacial scheme and supports numerous
+        time integration schemes. This document covers the theory behind EbbCFD's implimentation
+        
+	\section{Unstructured Finite Volume}
+
+	\section{Second Order}
+        \subsection{Gradients}
+        \subsection{Limiters}
 	
+    \section{Numerical Viscosity}
+
+
 \end{document}
