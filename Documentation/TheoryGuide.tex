@@ -56,21 +56,21 @@
 
 \lstset
 {
-    language=c,
-    keywords={break,case,catch,continue,else,for,
-        if,return,switch,try,while,int,void},
-    basicstyle=\ttfamily,
-    keywordstyle=\color{blue},
-    commentstyle=\color{ForestGreen},
-    stringstyle=\color{purple},
-    numbers=left,
-    numberstyle=\tiny\color{gray},
-    stepnumber=1,
-    numbersep=10pt,
-    backgroundcolor=\color{white},
-    tabsize=4,
-    showspaces=false,
-    showstringspaces=false
+	language=c,
+	keywords={break,case,catch,continue,else,for,
+		if,return,switch,try,while,int,void},
+	basicstyle=\ttfamily,
+	keywordstyle=\color{blue},
+	commentstyle=\color{ForestGreen},
+	stringstyle=\color{purple},
+	numbers=left,
+	numberstyle=\tiny\color{gray},
+	stepnumber=1,
+	numbersep=10pt,
+	backgroundcolor=\color{white},
+	tabsize=4,
+	showspaces=false,
+	showstringspaces=false
 }
 
 %\renewcommand{\thesection}{\arabic{section}}
@@ -78,8 +78,8 @@
 %\renewcommand{\thesubsection}{\thesection\alph{subsection}}
 %\renewcommand{\theequation}{\thesubsection\arabic{equation}}
 \newcommand*\circled[1]{\tikz[baseline=(char.base)]{
-            \node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
-            
+			\node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
+			
 \numberwithin{subsection}{section}
 
 \begin{document}
@@ -90,17 +90,19 @@
 	\maketitle
 
 	\section{Introduction}
-        EbbCFD is a computational fluid dynamics package intended to solve the compressible Euler equations.
-        It uses an unstructured, limited, second order finite volume spacial scheme and supports numerous
-        time integration schemes. This document covers the theory behind EbbCFD's implimentation
-        
-	\section{Unstructured Finite Volume}
+		EbbCFD is a computational fluid dynamics package intended to solve the compressible Euler equations.
+		It uses an unstructured, limited, second order finite volume spacial scheme and supports numerous
+		time integration schemes. This document covers the theory behind EbbCFD's implimentation
 
+	\section{Unstructured Finite Volume}
+		EbbCFD operates on completely unstructured meshes. In theory it supports cell geometries of up to six faces,
+		though only trianglular meshes have been extensivly tested. 
+		
 	\section{Second Order}
-        \subsection{Gradients}
-        \subsection{Limiters}
+		\subsection{Gradients}
+		\subsection{Limiters}
 	
-    \section{Numerical Viscosity}
+	\section{Numerical Viscosity}
 
 
 \end{document}
