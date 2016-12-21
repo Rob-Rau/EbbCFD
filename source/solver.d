@@ -376,33 +376,39 @@ static shared bool interrupted = false;
 		}
 
 		residMax = max(residRho, residU, residV, residE);
-		if(residRhoLast < residMax)
+		if(config.cflAdjust)
 		{
-			residRhoIncIters++;
-		}
-		else
-		{
-			if(residRhoIncIters >= 1)
+			if(residRhoLast < residMax)
 			{
-				residRhoIncIters--;
+				residRhoIncIters++;
 			}
-		}
+			else
+			{
+				if(residRhoIncIters >= 1)
+				{
+					residRhoIncIters--;
+				}
+			}
 
-		if(residRhoIncIters >= 2000)
-		{
-			config.CFL *= 0.99;
-			printf("Max RMS residual hasn't decreased in 2000 iterations, decreasing CFL to %f\n", config.CFL);
-			residRhoIncIters = 0;
+			if(residRhoIncIters >= 2000)
+			{
+				config.CFL *= 0.99;
+				printf("Max RMS residual hasn't decreased in 2000 iterations, decreasing CFL to %f\n", config.CFL);
+				residRhoIncIters = 0;
+			}
 		}
 
 		residRhoLast = residMax;
 
-		if(iterations % config.plotIter == 0)
+		if(config.plotIter != -1)
 		{
-			if(mesh.mpiRank == 0)
+			if(iterations % config.plotIter == 0)
 			{
-				printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
-				printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+				if(mesh.mpiRank == 0)
+				{
+					printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
+					printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, Rmax, dt);
+				}
 			}
 		}
 		

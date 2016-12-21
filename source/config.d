@@ -67,6 +67,7 @@ struct Config
 	double aitkenTol = -1;
 	bool localTimestep = false;
 	bool multistageLimiting = false;
+	bool cflAdjust = false;
 }
 
 Config loadConfig(string conf)
@@ -205,6 +206,16 @@ Config loadConfig(string conf)
 	{
 		writeln("Multistage Limiting option not provided, enabling");
 		config.multistageLimiting = true;
+	}
+
+	try
+	{
+		config.cflAdjust = (jConfig["cflAdjust"].type == JSON_TYPE.TRUE);
+	}
+	catch(Exception ex)
+	{
+		writeln("CFL adjustment option not provided, enabling");
+		config.cflAdjust = true;
 	}
 
 	auto ics = jConfig["initialConditions"].array;
