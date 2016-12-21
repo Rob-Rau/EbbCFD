@@ -17,3 +17,8 @@ bamg
 build*
 refinementStudy
 *.out
+*.aux
+*.log
+*.fdb_latexmk
+*.bak
+*.fls

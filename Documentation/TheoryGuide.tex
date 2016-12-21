@@ -1,0 +1,95 @@
+\documentclass[12pt,parskip=full]{article}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage[left=1.0in,right=1.0in,top=0.5in,bottom=1.0in]{geometry}
+\geometry{letterpaper}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{soul}
+\usepackage{textcomp}
+\usepackage{marvosym}
+\usepackage{wasysym}
+\usepackage{latexsym}
+\usepackage{amssymb}
+\usepackage{apacite}
+\usepackage{tabu}
+\usepackage[svgnames]{xcolor}
+\usepackage{tikz}
+\usepackage[linktoc=all]{hyperref}
+\usepackage{cleveref}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{array}
+\usepackage{apacite}
+\usepackage{natbib}
+\usepackage{multicol}
+\usepackage{subcaption}
+\usepackage{mathtools}
+\usetikzlibrary{arrows}
+
+\pgfdeclarelayer{edgelayer}
+\pgfdeclarelayer{nodelayer}
+\pgfsetlayers{edgelayer,nodelayer,main}
+
+\tikzstyle{none}=[inner sep=0pt]
+\tikzstyle{waypt}=[circle,fill=Black,draw=Black,scale=0.4]
+\tikzstyle{Helobody}=[circle,fill=White,draw=Black,scale=4.0]
+\tikzstyle{Tailrotor}=[circle,fill=White,draw=Black,scale=1.0]
+\tikzstyle{ForceVector}=[->,draw=Indigo,fill=Indigo]
+\tikzstyle{Coordinate}=[->,draw=Red,fill=Red,fill opacity=1.0]
+\tikzstyle{angle}=[->]
+\tikzstyle{MeasureMark}=[|-|]
+\newlength{\imagewidth}
+\newlength{\imagescale}
+
+\setlength{\parskip}{11pt}
+%\setlength{\parindent}{15pt}
+\usepackage{bookmark}
+\makeatletter
+\renewcommand\@seccntformat[1]{}
+\makeatother
+
+\lstset
+{
+    language=c,
+    keywords={break,case,catch,continue,else,for,
+        if,return,switch,try,while,int,void},
+    basicstyle=\ttfamily,
+    keywordstyle=\color{blue},
+    commentstyle=\color{ForestGreen},
+    stringstyle=\color{purple},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=10pt,
+    backgroundcolor=\color{white},
+    tabsize=4,
+    showspaces=false,
+    showstringspaces=false
+}
+
+\renewcommand{\thesection}{\arabic{section}}
+
+\renewcommand{\thesubsection}{\thesection\alph{subsection}}
+\renewcommand{\theequation}{\thesubsection\arabic{equation}}
+\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
+            \node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
+            
+\numberwithin{subsection}{section}
+
+\begin{document}
+	\vspace{-4ex}
+	\title{EbbCFD Theory Guide\vspace{-3.5ex}}
+	\author{Rob Rau\vspace{-4ex}}
+	\date{\today\vspace{-4ex}}
+	\maketitle
+
+	\section{Introduction}
+		
+	
+\end{document}
