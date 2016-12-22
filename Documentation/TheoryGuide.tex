@@ -73,10 +73,10 @@
 	showstringspaces=false
 }
 
-%\renewcommand{\thesection}{\arabic{section}}
+\renewcommand{\thesection}{\arabic{section}}
 
-%\renewcommand{\thesubsection}{\thesection\alph{subsection}}
-%\renewcommand{\theequation}{\thesubsection\arabic{equation}}
+\renewcommand{\thesubsection}{\thesection\alph{subsection}}
+\renewcommand{\theequation}{\thesubsection\arabic{equation}}
 \newcommand*\circled[1]{\tikz[baseline=(char.base)]{
 			\node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
 			
@@ -96,12 +96,48 @@
 
 	\section{Unstructured Finite Volume}
 		EbbCFD operates on completely unstructured meshes. In theory it supports cell geometries of up to six faces,
-		though only trianglular meshes have been extensivly tested. 
-		
+		though only trianglular meshes have been extensivly tested. For a first order spatial update, the numerical flux
+		is computed on each edge in the mesh, than, for each cell in the mesh, those fluxes are summed and called the
+		flux residuals.
+		\begin{equation}
+			\mathbf{R}_i = \sum_{e = 1}^{N_{f_i}}{m\mathbf{\hat{F}}(\mathbf{U}_i, \mathbf{U}_{N(i,e)}, \vec{n}_{i,e}) \Delta l_{i,e}}
+		\end{equation}
+		where $\mathbf{\hat{F}}(\mathbf{U}_i, \mathbf{U}_{N(i,e)}, \vec{n}_{i,e})$ is the numerical flux function,
+		$\Delta l_{i,e}$ is the length of the cell edge, $N_{f_i}$ is the number of faces of cell $i$, and $m$ is $\pm 1$
+		depending on which cell the normal $\vec{n}_{i,e}$ belonged to. This possible because the flux function is homogeneous, i.e.
+		$\mathbf{\hat{F}}(\mathbf{U}_i, \mathbf{U}_{N(i,e)}, \vec{n}_{i,e}) = -\mathbf{\hat{F}}(\mathbf{U}_i, \mathbf{U}_{N(i,e)}, -\vec{n}_{i,e})$.
+		This allows the code to compute the flux only once per edge, and then depending on the cell, multiply by $\pm 1$.
+		With this flux residual we can write the semi-discrete form of the first order finite volume update.
+		\begin{equation}
+			\frac{\partial \mathbf{U}_i}{\partial t} = -\frac{1}{A_i}\mathbf{R}_i
+		\end{equation}
+		where $A_i$ is the area of cell $i$. Currently, EbbCFD only supports the Roe flux function, but others are planned.
+
 	\section{Second Order}
+		To acheive second order accuracy, the numerical flux is no longer computed using cell averaged state values.
+		Instead, the edge state values are computed and used. To obtain edge state values, an estimate of the cell gradients 
+		is necessary. To reduce solution oscilations at discontinuities in the flow, EbbCFD also supports a couple of
+		different schemes for gradient limiting.
+
 		\subsection{Gradients}
+			To estimate cell gradients a least squares approximation was used. The least squares problem is set up like so
+			\begin{equation}
+				\mathbf{r} = \begin{bmatrix} x_1 - x_M & y_1 - y_M \\ \vdots & \vdots \\ x_{N_{f_i}} - x_M & y_{N_{f_i}} - y_M \end{bmatrix} \begin{bmatrix}D_x \\ D_y \end{bmatrix} - \begin{bmatrix} u_1 - u_M \\ \vdots \\ u_{N_{f_i}} - u_M \end{bmatrix}
+			\end{equation}
+			where $x_M$ and $y_M$ are the current cell centroid coordinates, $x_1..x_{N_{f_i}}$ and $y_1..y_{N_{f_i}}$ 
+			are the cell centroid coordinates for the neighboring cells, $u_M$ is a conserved state variable of the current 
+			cell, and $u_1..u_{N_{f_i}}$ are the conserved state variables of the neighboring cells. In 2D, four
+			least squares problems need to be solved in order to get a gradient for each conserved quantity (density,
+			x/y momentum, and energy for the Euler equations). For cells located at a boundary, a ghost cell approach is
+			used. The cell centroid of the boundary cells is reflected accross the boundary edge and its state values
+			are updated in acordance with what type of boundary it is. A wall boundary for instance, will reflect the
+			flow momentum accross the boundary in order to cancel out the normal momentum component.
+
 		\subsection{Limiters}
-	
+			EbbCFD currently supports two different limiting techniques. The first is a scalar limiter, where a single scalar
+			value limits both x and y components of a gradient. The other is a vector limiter, where x and y gradient components
+			are limited seperatly. 
+			
 	\section{Numerical Viscosity}
 
 
