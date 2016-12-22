@@ -458,7 +458,7 @@ static shared bool interrupted = false;
 {
 	double M = config.ic[0];
 	double aoa = config.ic[1] * (PI/180);
-	double p = config.ic[2];
+	double p = 1.0;//config.ic[2];
 	double rho = config.ic[3];
 	double a = sqrt(gamma*(1.0/rho));
 	double U = M*a;
@@ -476,8 +476,8 @@ static shared bool interrupted = false;
 			mesh.q[i][0] = rho;
 			mesh.q[i][1] = M*cos(aoa);
 			mesh.q[i][2] = M*sin(aoa);
-			//mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-			mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+			mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+			//mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			lastRho[i] = mesh.q[i][0];
 			lastU[i] = mesh.q[i][1];
 			lastV[i] = mesh.q[i][2];
@@ -545,7 +545,7 @@ static shared bool interrupted = false;
 
 			M = config.bc[bcIdx][0];
 			aoa = config.bc[bcIdx][1] * (PI/180);
-			p = config.bc[bcIdx][2];
+			p = 1.0;//config.bc[bcIdx][2];
 			rho = config.bc[bcIdx][3];
 			a = sqrt(gamma*(1.0/rho));
 			U = M*a;
@@ -558,8 +558,8 @@ static shared bool interrupted = false;
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
-				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			}
 		}
 	}
