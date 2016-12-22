@@ -476,8 +476,8 @@ static shared bool interrupted = false;
 			mesh.q[i][0] = rho;
 			mesh.q[i][1] = rho*M*cos(aoa);
 			mesh.q[i][2] = rho*M*sin(aoa);
-			//mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-			mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+			mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+			//mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			lastRho[i] = mesh.q[i][0];
 			lastU[i] = mesh.q[i][1];
 			lastV[i] = mesh.q[i][2];
@@ -558,8 +558,8 @@ static shared bool interrupted = false;
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*M*cos(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*M*sin(aoa);
-				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			}
 		}
 	}
