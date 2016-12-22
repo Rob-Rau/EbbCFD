@@ -476,8 +476,8 @@ static shared bool interrupted = false;
 			mesh.q[i][0] = rho;
 			mesh.q[i][1] = M*cos(aoa);
 			mesh.q[i][2] = M*sin(aoa);
-			mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-
+			//mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+			mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			lastRho[i] = mesh.q[i][0];
 			lastU[i] = mesh.q[i][1];
 			lastV[i] = mesh.q[i][2];
@@ -558,7 +558,8 @@ static shared bool interrupted = false;
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
-				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
+				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			}
 		}
 	}
@@ -1026,7 +1027,7 @@ MPI_Datatype vec4dataType;
 					auto rho = mesh.edges[i].q[k][0];
 					auto u = mesh.edges[i].q[k][1]/rho;
 					auto v = mesh.edges[i].q[k][2]/rho;
-					mesh.edges[i].q[k][3] = 0.5*rho*(u^^2.0 + v^^2.0);
+					mesh.edges[i].q[k][3] = 1.0e-9/(gamma - 1) + 0.5*rho*(u^^2.0 + v^^2.0);
 				}
 			}
 		}
