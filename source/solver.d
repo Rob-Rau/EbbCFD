@@ -1011,7 +1011,7 @@ MPI_Datatype vec4dataType;
 
 				if(getPressure(mesh.edges[i].q[k]) < 0)
 				{
-					/+
+					
 					double[2] lim = [1.0, 1.0];
 					for(uint j = 0; j < dims; j++)
 					{
@@ -1023,11 +1023,13 @@ MPI_Datatype vec4dataType;
 					{
 						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 					}
-					+/
+					
+					/+
 					auto rho = mesh.edges[i].q[k][0];
 					auto u = mesh.edges[i].q[k][1]/rho;
 					auto v = mesh.edges[i].q[k][2]/rho;
 					mesh.edges[i].q[k][3] = 1.0e-9/(gamma - 1) + 0.5*rho*(u^^2.0 + v^^2.0);
+					+/
 				}
 			}
 		}
