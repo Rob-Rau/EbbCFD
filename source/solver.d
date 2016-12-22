@@ -474,8 +474,8 @@ static shared bool interrupted = false;
 		{
 			//mesh.q[i] = buildQ(rho, u, v, p);
 			mesh.q[i][0] = rho;
-			mesh.q[i][1] = M*cos(aoa);
-			mesh.q[i][2] = M*sin(aoa);
+			mesh.q[i][1] = rho*M*cos(aoa);
+			mesh.q[i][2] = rho*M*sin(aoa);
 			mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
 			//mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			lastRho[i] = mesh.q[i][0];
@@ -556,8 +556,8 @@ static shared bool interrupted = false;
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
-				mesh.edges[mesh.bGroups[i][j]].q[1][1] = M*cos(aoa);
-				mesh.edges[mesh.bGroups[i][j]].q[1][2] = M*sin(aoa);
+				mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*M*cos(aoa);
+				mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*M*sin(aoa);
 				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
 				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			}
