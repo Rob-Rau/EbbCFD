@@ -100,7 +100,7 @@ struct BEuler
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
 	{
 		double newDt = double.infinity;
 		double maxDiff = -double.infinity;
@@ -125,7 +125,7 @@ struct BEuler
 		@nogc void func(Vector!4[] f, Vector!4[] qn)
 		{
 			printf("in func\n");
-			solver(R, qn, mesh, config, newDt, Rmax, true, false, ex);
+			solver(R, qn, mesh, config, newDt, Rmax, true, false);
 			//for(uint i = 0; i < f.length; i++)
 			foreach(i; mesh.interiorCells)
 			{
@@ -221,11 +221,11 @@ struct Euler
 
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
 	{
 		double newDt = double.infinity;
 
-		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
+		solver(R, mesh.q, mesh, config, newDt, Rmax, true, true);
 
 		foreach(i; mesh.interiorCells)
 		{
@@ -283,34 +283,34 @@ struct RK4
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
 	{
 		import core.stdc.stdio : printf;
 
 		double newDt = double.infinity;
 
-		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
+		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k1[i]);
 		}
 
-		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
+		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + ((dt/2.0)*k2[i]);
 		}
 
-		solver(k3, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
+		solver(k3, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + (dt*k3[i]);
 		}
 
-		solver(k4, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
+		solver(k4, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false);
 
 		foreach(i; mesh.interiorCells)
 		{
@@ -359,13 +359,13 @@ struct RK2_TVD
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
 	{
 		import core.stdc.stdio : printf;
 
 		double newDt = double.infinity;
 		
-		solver(R, mesh.q, mesh, config, newDt, Rmax, true, config.localTimestep, ex);
+		solver(R, mesh.q, mesh, config, newDt, Rmax, true, config.localTimestep);
 
 		foreach(i; mesh.interiorCells)
 		{
@@ -379,7 +379,7 @@ struct RK2_TVD
 			}
 		}
 
-		solver(k2, qFE, mesh, config, newDt, Rmax, false, !config.localTimestep, ex);
+		solver(k2, qFE, mesh, config, newDt, Rmax, false, !config.localTimestep);
 
 		foreach(i; mesh.interiorCells)
 		{
@@ -432,19 +432,19 @@ struct RK2
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax, SolverException ex)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
 	{
 		import core.stdc.stdio : printf;
 
 		double newDt = double.infinity;
 
-		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true, ex);
+		solver(k1, mesh.q, mesh, config, newDt, Rmax, true, true);
 
 		foreach(i; mesh.interiorCells)
 		{
 			tmp[i] = mesh.q[i] + (dt*k1[i]);
 		}
-		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false, ex);
+		solver(k2, tmp, mesh, config, newDt, Rmax, config.multistageLimiting, false);
 
 		foreach(i; mesh.interiorCells)
 		{

@@ -13,141 +13,127 @@ import ebb.mesh;
 
 import numd.linearalgebra.matrix;
 
-class SolverException : Exception
+class CellException : Exception
 {
 	this(string msg)
 	{
 		super(msg);
 	}
 
-	enum SExceptionType
-	{
-		EdgeException,
-		CellException
-	}
-
-	@nogc struct EdgeException
-	{
-		double pL, pR;
-		Vector!4 flux, qL, qR;
-		Vector!2 normal;
-		uint cellL, cellR;
-
-		@nogc this(double pL, double pR, Vector!4 flux, Vector!4 qL, Vector!4 qR, Vector!2 n, uint cellL, uint cellR)
-		{
-			this.pL = pL;
-			this.pR = pR;
-			this.flux = flux;
-			this.qL = qL;
-			this.qR = qR;
-			this.normal = n;
-			this.cellL = cellL;
-			this.cellR = cellR;
-		}
-	}
-
-	@nogc struct CellException
-	{
-		double p;
-		Vector!4 q;
-		uint cellIdx;
-
-		@nogc this(double p, Vector!4 q, uint cellIdx)
-		{
-			this.p = p;
-			this.q = q;
-			this.cellIdx = cellIdx;
-		}
-	}
-
-	SExceptionType exceptionType;
-	CellException cExcept;
-	EdgeException eExcept;
-
-	@nogc void SetException(SExceptionType type, string msg, EdgeException ex, string file = __FILE__, size_t line = __LINE__)
-	{
-		exceptionType = type;
-		eExcept = ex;
-		this.msg = msg;
-		this.file = file;
-		this.line = line;
-	}
-
-	@nogc void SetException(SExceptionType type, string msg, CellException ex, string file = __FILE__, size_t line = __LINE__)
-	{
-		exceptionType = type;
-		cExcept = ex;
-		this.msg = msg;
-		this.file = file;
-		this.line = line;
-	}
-
-	/+
-	printf("pL = %f\n", getPressure(mesh.q[i]));
-	printf("qL = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
-	printf("cell = %d\n", i);
-	+/
-	/+
-	printf("pL = %f\n", getPressure(mesh.edges[i].q[0]));
-	printf("pR = %f\n", getPressure(mesh.edges[i].q[1]));
-	printf("Flux = [%f, %f, %f, %f]\n", mesh.edges[i].flux[0], mesh.edges[i].flux[1], mesh.edges[i].flux[2], mesh.edges[i].flux[3]);
-	printf("qL = [%f, %f, %f, %f]\n", mesh.edges[i].q[0][0], mesh.edges[i].q[0][1], mesh.edges[i].q[0][2], mesh.edges[i].q[0][3]);
-	printf("qR = [%f, %f, %f, %f]\n", mesh.edges[i].q[1][0], mesh.edges[i].q[1][1], mesh.edges[i].q[1][2], mesh.edges[i].q[1][3]);
-	printf("cell L = %d\n", mesh.edges[i].cellIdx[0]);
-	printf("cell R = %d\n", mesh.edges[i].cellIdx[1]);
-	printf("normal = [%f, %f]\n", mesh.edges[i].normal[0], mesh.edges[i].normal[1]);
-	+/
+	UCell2 cell;	
 }
 
-//Exception[] exceptions;
-Tuple!(string, Exception)[] exceptions;
+class EdgeException : Exception
+{
+	this(string msg)
+	{
+		super(msg);
+	}
+
+	Edge edge;
+}
+
+private alias Exceptions = Tuple!(string, Exception)[];
+private Exceptions exceptions;
+private Exceptions addExceptions(alias mod)()
+{
+	Exceptions newExceptions;
+	foreach(i, member; __traits(allMembers, mod))
+    {
+        static if(__traits(compiles, __traits(classInstanceSize, mixin(member))))
+        {
+            foreach(base; BaseClassesTuple!(mixin(member)))
+            {
+                static if(is(base : Exception))
+                {
+                    pragma(msg, "Class "~member~" is an exception");
+                    mixin("newExceptions ~= tuple("~member~".stringof, cast(Exception)new "~member~"(\"\"));");
+					break;
+                }
+            }
+        }
+    }
+	return newExceptions;
+}
+
 static this()
 {
-    foreach(i, member; __traits(allMembers, ebb.exception))
-    {
-        static if(__traits(compiles, __traits(classInstanceSize, mixin(member))))
-        {
-            foreach(base; BaseClassesTuple!(mixin(member)))
-            {
-                static if(is(base : Exception))
-                {
-                    pragma(msg, "Class "~member~" is an exception");
-                    mixin("exceptions ~= tuple("~member~".stringof, cast(Exception)new "~member~"(\"\"));");
-                }
-            }
-        }
-    }
-    
-    foreach(i, member; __traits(allMembers, std.exception))
-    {
-        static if(__traits(compiles, __traits(classInstanceSize, mixin(member))))
-        {
-            //pragma(msg, "found class: "~member);
-            foreach(base; BaseClassesTuple!(mixin(member)))
-            {
-                static if(is(base : Exception))
-                {
-                    pragma(msg, "Class "~member~" is an exception");
-                    mixin("exceptions ~= tuple("~member~".stringof, cast(Exception)new "~member~"(\"\"));");
-                }
-            }
-        }
-    }
+	exceptions ~= tuple(Exception.stringof, new Exception(""));
+	exceptions ~= addExceptions!(ebb.exception);
+	exceptions ~= addExceptions!(std.exception);
+	exceptions ~= addExceptions!(std.conv);
 }
 
-template enforce(T)
+@nogc void enforce(T = Exception)(bool cond, string msg, string file = __FILE__, int line = __LINE__)
 {
-	@nogc void enforce(bool cond, string msg)
+	if(!cond)
 	{
-		if(!cond)
+		auto idx = exceptions.countUntil!"a[0].equal(b)"(T.stringof);
+		if(idx >= 0)
 		{
-			auto idx = exceptions.countUntil!"a[0].equal(b)"(T.stringof);
-			if(idx >= 0)
-			{
-				auto ex = cast(T)exceptions[idx][1];
-				ex.msg = msg;
-				throw ex;
-			}
+			auto ex = cast(T)exceptions[idx][1];
+			ex.msg = msg;
+			throw ex;
+		}
+		else
+		{
+			auto ex = cast(Exception)exceptions[0][1];
+			ex.msg = msg;
+			ex.line = line;
+			ex.file = file;
+			throw ex;
+		}
+	}
+}
+
+@nogc void enforce(T = Exception)(bool cond, string msg, UCell2 cell, string file = __FILE__, int line = __LINE__)
+	if(is(T : CellException))
+{
+	if(!cond)
+	{
+		auto idx = exceptions.countUntil!"a[0].equal(b)"(T.stringof);
+		if(idx >= 0)
+		{
+			auto ex = cast(T)exceptions[idx][1];
+			ex.msg = msg;
+			ex.cell = cell;
+			ex.line = line;
+			ex.file = file;
+			throw ex;
+		}
+		else
+		{
+			auto ex = cast(Exception)exceptions[0][1];
+			ex.msg = msg;
+			ex.line = line;
+			ex.file = file;
+			throw ex;
+		}
+	}
+}
+
+@nogc void enforce(T = Exception)(bool cond, string msg, Edge edge, string file = __FILE__, int line = __LINE__)
+	if(is(T : EdgeException))
+{
+	if(!cond)
+	{
+		auto idx = exceptions.countUntil!"a[0].equal(b)"(T.stringof);
+		if(idx >= 0)
+		{
+			auto ex = cast(T)exceptions[idx][1];
+			ex.msg = msg;
+			ex.edge = edge;
+			ex.line = line;
+			ex.file = file;
+			throw ex;
+		}
+		else
+		{
+			auto ex = cast(Exception)exceptions[0][1];
+			ex.msg = msg;
+			ex.line = line;
+			ex.file = file;
+			throw ex;
 		}
 	}
 }

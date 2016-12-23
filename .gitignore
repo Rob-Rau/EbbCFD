@@ -22,3 +22,5 @@ refinementStudy
 *.fdb_latexmk
 *.bak
 *.fls
+*.blg
+*.bbl

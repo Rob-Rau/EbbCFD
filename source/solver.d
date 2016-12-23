@@ -180,7 +180,7 @@ static shared bool interrupted = false;
 	}
 }
 
-@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, SolverException ex)
+@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -276,7 +276,7 @@ static shared bool interrupted = false;
 	double lastRmax = 0.0;
 
 	// Setup IC's and BC's
-	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile, ex);
+	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile);
 	MPI_Barrier(mesh.comm);
 	while((t < config.tEnd) && !atomicLoad(interrupted))
 	{
@@ -285,17 +285,17 @@ static shared bool interrupted = false;
 
 		if((config.aitkenTol < 0) || ((config.aitkenTol > 0) && (iterations < 500)))
 		{
-			integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax, ex);
+			integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax);
 		}
 		else
 		{
 			q0[] = mesh.q[];
 
-			integrator.step!solver(R, q1, mesh, config, newDt, Rmax, ex);
+			integrator.step!solver(R, q1, mesh, config, newDt, Rmax);
 			newDt = dt;
 			mesh.q[] = q1[];
 
-			integrator.step!solver(R, q2, mesh, config, newDt, Rmax, ex);
+			integrator.step!solver(R, q2, mesh, config, newDt, Rmax);
 
 			for(uint i = 0; i < mesh.cells.length; i++)
 			{
@@ -319,7 +319,8 @@ static shared bool interrupted = false;
 			thisV[i] = mesh.q[i][2];
 			thisE[i] = mesh.q[i][3];
 			
-			if(mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN)
+			immutable bool haveNan = mesh.q[i][0].isNaN || mesh.q[i][1].isNaN || mesh.q[i][2].isNaN || mesh.q[i][3].isNaN;
+			if(haveNan)
 			{
 				printf("p = %f\n", getPressure(mesh.q[i]));
 				printf("q = [%f, %f, %f, %f]\n", mesh.q[i][0], mesh.q[i][1], mesh.q[i][2], mesh.q[i][3]);
@@ -327,10 +328,7 @@ static shared bool interrupted = false;
 				printf("iteration = %d\n", iterations);
 				printf("dt = %f\n", dt);
 				printf("t = %f\n", t);
-				ex.msg = "Got nan on cell average value";
-				ex.file = __FILE__;
-				ex.line = __LINE__;
-				throw ex;
+				enforce!CellException(!haveNan, "Got nan on cell average value", mesh.cells[i]);
 			}
 		}
 
@@ -454,7 +452,7 @@ static shared bool interrupted = false;
 	}
 }
 
-@nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile, SolverException ex)
+@nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile)
 {
 	double M = config.ic[0];
 	double aoa = config.ic[1] * (PI/180);
@@ -486,22 +484,14 @@ static shared bool interrupted = false;
 	}
 	else
 	{
-		if(loadSolution(mesh, t, dt, saveFile))
+		enforce(loadSolution(mesh, t, dt, saveFile), "Failed to load solution");
+		
+		foreach(i; mesh.interiorCells)
 		{
-			foreach(i; mesh.interiorCells)
-			{
-				lastRho[i] = mesh.q[i][0];
-				lastU[i] = mesh.q[i][1];
-				lastV[i] = mesh.q[i][2];
-				lastE[i] = mesh.q[i][3];
-			}
-		}
-		else
-		{
-			ex.msg = "Failed to load solution";
-			ex.line = __LINE__;
-			ex.file = __FILE__;
-			throw ex;
+			lastRho[i] = mesh.q[i][0];
+			lastU[i] = mesh.q[i][1];
+			lastV[i] = mesh.q[i][2];
+			lastE[i] = mesh.q[i][3];
 		}
 	}
 
@@ -517,31 +507,16 @@ static shared bool interrupted = false;
 					return j;
 				}
 			}
-			ex.msg = "Could not find match boundary condition tag";
-			ex.file = __FILE__;
-			ex.line = __LINE__;
-			throw ex;
+			enforce(false, "Could not find match boundary condition tag");
+			assert(false);
 		}
 
 		uint bcIdx = findBcIndex(mesh.bTags[i]);
 
 		for(uint j = 0; j < mesh.bGroups[i].length; j++)
 		{
-			if(!mesh.edges[mesh.bGroups[i][j]].isBoundary)
-			{
-				ex.msg = "Edge not boundary edge but should be";
-				ex.file = __FILE__;
-				ex.line = __LINE__;
-				throw ex;
-			}
-
-			if(mesh.edges[mesh.bGroups[i][j]].boundaryTag != config.bTags[bcIdx])
-			{
-				ex.msg = "Incorrect boundary tag";
-				ex.file = __FILE__;
-				ex.line = __LINE__;
-				throw ex;
-			}
+			enforce(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
+			enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.bTags[bcIdx], "Incorrect boundary tag");
 
 			M = config.bc[bcIdx][0];
 			aoa = config.bc[bcIdx][1] * (PI/180);
@@ -568,7 +543,7 @@ static shared bool interrupted = false;
 MPI_Datatype vec4dataType;
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate, SolverException ex)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate)
 {
 	@nogc void buildGradients(uint[] cellList)
 	{
@@ -934,21 +909,9 @@ MPI_Datatype vec4dataType;
 				auto qR = mesh.edges[i].q[1];
 
 				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
-				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-				{
-					enforce!SolverException(false, "Got NaN on fullstate edge");
-					ex.SetException(SolverException.SExceptionType.EdgeException,
-									"Got NaN on fullstate edge",
-									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-																	getPressure(mesh.edges[i].q[1]),
-																	mesh.edges[i].flux,
-																	mesh.edges[i].q[0],
-																	mesh.edges[i].q[1],
-																	mesh.edges[i].normal,
-																	mesh.edges[i].cellIdx[0],
-																	mesh.edges[i].cellIdx[1]));
-					throw ex;
-				}
+
+				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
+				enforce!EdgeException(!haveNan, "Got NaN on fullstate edge", mesh.edges[i]);
 				break;
 			case InviscidWall:
 				if(config.order == 1)
@@ -1001,26 +964,12 @@ MPI_Datatype vec4dataType;
 				auto qL = mesh.edges[i].q[0];
 				auto qR = q[mesh.edges[i].cellIdx[1]];
 				
-				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-				{
-					ex.SetException(SolverException.SExceptionType.EdgeException,
-									"Got NaN on wall edge",
-									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-																	getPressure(mesh.edges[i].q[1]),
-																	mesh.edges[i].flux,
-																	qL,
-																	qR,
-																	mesh.edges[i].normal,
-																	mesh.edges[i].cellIdx[0],
-																	mesh.edges[i].cellIdx[1]));
-					throw ex;
-				}
+				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
+				enforce!EdgeException(!haveNan, "Got NaN on wall edge", mesh.edges[i]);
+
 				break;
 			default:
-				ex.msg = "Unsupported boundary type";
-				ex.file = __FILE__;
-				ex.line = __LINE__;
-				throw ex;
+				enforce(false, "Unsupported boundary type");
 		}
 	}
 
@@ -1079,20 +1028,8 @@ MPI_Datatype vec4dataType;
 
 		mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 
-		if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-		{
-			ex.SetException(SolverException.SExceptionType.EdgeException,
-							"Got NaN on interior edge",
-							SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-															getPressure(mesh.edges[i].q[1]),
-															mesh.edges[i].flux,
-															mesh.edges[i].q[0],
-															mesh.edges[i].q[1],
-															mesh.edges[i].normal,
-															mesh.edges[i].cellIdx[0],
-															mesh.edges[i].cellIdx[1]));
-			throw ex;
-		}
+		immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
+		enforce!EdgeException(!haveNan, "Got NaN on interior edge", mesh.edges[i]);
 	}
 
 
@@ -1124,20 +1061,8 @@ MPI_Datatype vec4dataType;
 
 			mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 
-			if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
-			{
-				ex.SetException(SolverException.SExceptionType.EdgeException,
-								"Got NaN on comm edge",
-								SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 
-																getPressure(mesh.edges[i].q[1]),
-																mesh.edges[i].flux,
-																mesh.edges[i].q[0],
-																mesh.edges[i].q[1],
-																mesh.edges[i].normal,
-																mesh.edges[i].cellIdx[0],
-																mesh.edges[i].cellIdx[1]));
-				throw ex;
-			}
+			immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
+			enforce!EdgeException(!haveNan, "Got NaN on comm edge", mesh.edges[i]);
 		}
 	}
 
@@ -1194,8 +1119,6 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		double dt = config.dt;
 		double t = 0;
 
-		auto ex = new SolverException("No error");
-
 		if(id == 0)
 		{
 			if(config.meshFile.canFind(".gri"))
@@ -1246,7 +1169,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 											writeln("-limiter: "~lim);
 											writeln("-flux: "~fl);
 											writeln("-integrator: "~inte);
-											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, ex);
+											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile);
 											break;
 									}
 								}
@@ -1259,20 +1182,32 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			}
 		}
 	}
-	catch(SolverException ex)
+	catch(CellException ce)
+	{
+		writeln("Solver encountered an error: ", ce.msg);
+		writeln("	In file ", ce.file);
+		writeln("	On line ", ce.line);
+	}
+	catch(EdgeException ex)
 	{
 		writeln("Solver encountered an error: ", ex.msg);
-		if(ex.exceptionType == SolverException.SExceptionType.EdgeException)
-		{
-			writeln("pL = ", ex.eExcept.pL);
-			writeln("pR = ", ex.eExcept.pR);
-			writeln("Flux = ", ex.eExcept.flux);
-			writeln("qL = ", ex.eExcept.qL);
-			writeln("qR = ", ex.eExcept.qR);
-			writeln("cell L = ", ex.eExcept.cellL);
-			writeln("cell R = ", ex.eExcept.cellR);
-			writeln("normal = ", ex.eExcept.normal);
-		}
+		writeln("	In file ", ex.file);
+		writeln("	On line ", ex.line);
+		writeln("	pL = ", getPressure(ex.edge.q[0]));
+		writeln("	pR = ", getPressure(ex.edge.q[1]));
+		writeln("	Flux = ", ex.edge.flux);
+		writeln("	qL = ", ex.edge.q[0]);
+		writeln("	qR = ", ex.edge.q[1]);
+		writeln("	cell L = ", ex.edge.cellIdx[0]);
+		writeln("	cell R = ", ex.edge.cellIdx[1]);
+		writeln("	normal = ", ex.edge.normal);
+	}
+	catch(Exception ex)
+	{
+
+	}
+	finally
+	{
 		writeln("exiting");
 		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
