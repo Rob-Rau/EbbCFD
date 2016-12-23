@@ -936,6 +936,7 @@ MPI_Datatype vec4dataType;
 				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 				if(mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN)
 				{
+					enforce!SolverException(false, "Got NaN on fullstate edge");
 					ex.SetException(SolverException.SExceptionType.EdgeException,
 									"Got NaN on fullstate edge",
 									SolverException.EdgeException(getPressure(mesh.edges[i].q[0]), 

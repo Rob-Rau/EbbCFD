@@ -1,5 +1,14 @@
 module ebb.exception;
 
+import std.algorithm;
+import std.conv;
+import std.exception;
+import std.stdio;
+import std.meta;
+import std.string;
+import std.typecons;
+import std.traits;
+
 import ebb.mesh;
 
 import numd.linearalgebra.matrix;
@@ -88,4 +97,57 @@ class SolverException : Exception
 	printf("cell R = %d\n", mesh.edges[i].cellIdx[1]);
 	printf("normal = [%f, %f]\n", mesh.edges[i].normal[0], mesh.edges[i].normal[1]);
 	+/
+}
+
+//Exception[] exceptions;
+Tuple!(string, Exception)[] exceptions;
+static this()
+{
+    foreach(i, member; __traits(allMembers, ebb.exception))
+    {
+        static if(__traits(compiles, __traits(classInstanceSize, mixin(member))))
+        {
+            foreach(base; BaseClassesTuple!(mixin(member)))
+            {
+                static if(is(base : Exception))
+                {
+                    pragma(msg, "Class "~member~" is an exception");
+                    mixin("exceptions ~= tuple("~member~".stringof, cast(Exception)new "~member~"(\"\"));");
+                }
+            }
+        }
+    }
+    
+    foreach(i, member; __traits(allMembers, std.exception))
+    {
+        static if(__traits(compiles, __traits(classInstanceSize, mixin(member))))
+        {
+            //pragma(msg, "found class: "~member);
+            foreach(base; BaseClassesTuple!(mixin(member)))
+            {
+                static if(is(base : Exception))
+                {
+                    pragma(msg, "Class "~member~" is an exception");
+                    mixin("exceptions ~= tuple("~member~".stringof, cast(Exception)new "~member~"(\"\"));");
+                }
+            }
+        }
+    }
+}
+
+template enforce(T)
+{
+	@nogc void enforce(bool cond, string msg)
+	{
+		if(!cond)
+		{
+			auto idx = exceptions.countUntil!"a[0].equal(b)"(T.stringof);
+			if(idx >= 0)
+			{
+				auto ex = cast(T)exceptions[idx][1];
+				ex.msg = msg;
+				throw ex;
+			}
+		}
+	}
 }
