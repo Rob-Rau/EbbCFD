@@ -612,7 +612,22 @@ MPI_Datatype vec4dataType;
 						auto grad = mesh.cells[i].gradient;
 						auto centroid = mesh.cells[i].centroid;
 						auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
+						/+
+						int sharedEdgeIdx = -1;
+						
+						for(int edgeIdx1 = 0; edgeIdx1 < mesh.cells[mesh.cells[i].neighborCells[j]].nEdges; edgeIdx1++)
+						{
+							for(int edgeIdx2 = 0; edgeIdx2 < mesh.cells[i].nEdges; edgeIdx2++)
+							{
+								if(mesh.cells[mesh.cells[i].neighborCells[j]].edges[edgeIdx1] == mesh.cells[i].edges[edgeIdx2])
+								{
+									sharedEdgeIdx = mesh.cells[i].edges[edgeIdx2];
+								}
+							}
+						}
 
+						auto mid = mesh.edges[sharedEdgeIdx].mid;
+						+/
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
 						auto minQ = mesh.cells[i].minQ;
@@ -676,13 +691,38 @@ MPI_Datatype vec4dataType;
 								for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
 								{
 									immutable uint cellIdx = mesh.cells[i].neighborCells[j];
+									/+
+									int sharedEdgeIdx = -1;
+						
+									for(int edgeIdx1 = 0; edgeIdx1 < mesh.cells[mesh.cells[i].neighborCells[j]].nEdges; edgeIdx1++)
+									{
+										for(int edgeIdx2 = 0; edgeIdx2 < mesh.cells[i].nEdges; edgeIdx2++)
+										{
+											if(mesh.cells[mesh.cells[i].neighborCells[j]].edges[edgeIdx1] == mesh.cells[i].edges[edgeIdx2])
+											{
+												sharedEdgeIdx = mesh.cells[i].edges[edgeIdx2];
+											}
+										}
+									}
+									
+									auto mid = mesh.edges[sharedEdgeIdx].mid;
+									
+
+									A[cIdx+4,0] = (mid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
+									A[cIdx+4,1] = (mid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+
+									A[cIdx+5,0] = -(mid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
+									A[cIdx+5,1] = -(mid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									+/
 
 									A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
 									A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									
 									b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
 
 									A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
 									A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									
 									b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
 								}
 
@@ -1011,7 +1051,6 @@ MPI_Datatype vec4dataType;
 
 				if(getPressure(mesh.edges[i].q[k]) < 0)
 				{
-					
 					double[2] lim = [1.0, 1.0];
 					for(uint j = 0; j < dims; j++)
 					{
@@ -1023,7 +1062,7 @@ MPI_Datatype vec4dataType;
 					{
 						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 					}
-					
+
 					/+
 					auto rho = mesh.edges[i].q[k][0];
 					auto u = mesh.edges[i].q[k][1]/rho;

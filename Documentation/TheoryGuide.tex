@@ -92,11 +92,11 @@
 	\section{Introduction}
 		EbbCFD is a computational fluid dynamics package intended to solve the compressible Euler equations.
 		It uses an unstructured, limited, second order finite volume spacial scheme and supports numerous
-		time integration schemes. This document covers the theory behind EbbCFD's implimentation
+		time integration schemes. This document covers the theory behind EbbCFD's implementation
 
 	\section{Unstructured Finite Volume}
 		EbbCFD operates on completely unstructured meshes. In theory it supports cell geometries of up to six faces,
-		though only trianglular meshes have been extensivly tested. For a first order spatial update, the numerical flux
+		though only triangular meshes have been extensively tested. For a first order spatial update, the numerical flux
 		is computed on each edge in the mesh, than, for each cell in the mesh, those fluxes are summed and called the
 		flux residuals.
 		\begin{equation}
@@ -114,9 +114,9 @@
 		where $A_i$ is the area of cell $i$. Currently, EbbCFD only supports the Roe flux function, but others are planned.
 
 	\section{Second Order}
-		To acheive second order accuracy, the numerical flux is no longer computed using cell averaged state values.
+		To achieve second order accuracy, the numerical flux is no longer computed using cell averaged state values.
 		Instead, the edge state values are computed and used. To obtain edge state values, an estimate of the cell gradients 
-		is necessary. To reduce solution oscilations at discontinuities in the flow, EbbCFD also supports a couple of
+		is necessary. To reduce solution oscillations at discontinuities in the flow, EbbCFD also supports a couple of
 		different schemes for gradient limiting.
 
 		\subsection{Gradients}
@@ -129,16 +129,92 @@
 			cell, and $u_1..u_{N_{f_i}}$ are the conserved state variables of the neighboring cells. In 2D, four
 			least squares problems need to be solved in order to get a gradient for each conserved quantity (density,
 			x/y momentum, and energy for the Euler equations). For cells located at a boundary, a ghost cell approach is
-			used. The cell centroid of the boundary cells is reflected accross the boundary edge and its state values
-			are updated in acordance with what type of boundary it is. A wall boundary for instance, will reflect the
-			flow momentum accross the boundary in order to cancel out the normal momentum component.
+			used. The cell centroid of the boundary cells is reflected across the boundary edge and its state values
+			are updated in accordance with what type of boundary it is. A wall boundary for instance, will reflect the
+			flow momentum across the boundary in order to cancel out the normal momentum component.
 
 		\subsection{Limiters}
 			EbbCFD currently supports two different limiting techniques. The first is a scalar limiter, where a single scalar
 			value limits both x and y components of a gradient. The other is a vector limiter, where x and y gradient components
-			are limited seperatly. 
-			
+			are limited separately. Both scalar and vector limiters used in EbbCFD are implementations of ideas laid out by
+			May and Berger. Specifically EbbCFD uses what is referred to as the \textit{relaxed formulation} as its gradient 
+			limit constraints \cite{doi:10.1137/120875624}. The means the limiters must obey the following conditions
+			\begin{equation}
+				\min{(u_M, u_1, \dots, u_N)} \le u_M + \begin{bmatrix}(x_j - x_M)D_x \\ (y_j - y_M)D_y\end{bmatrix} \begin{bmatrix} \phi_x \\ \phi_y \end{bmatrix} \le \max{(u_M, u_1, \dots, u_N)}
+			\end{equation}
+			where $\phi_x$ and $\phi_y$ are the limiters. This method finds the min and max values of all neighboring cells and
+			ensures that when the solution is reconstructed to the neighboring cell centroids, monotonicity constraints aren't
+			violated.
+
+			\subsubsection{Scalar limiter}
+				For the scalar limiter, $\phi_x = \phi_y$. The limiter value is computed as follows
+				\begin{align}
+					u_r &= u_M + (x_j - x_M)D_x + (y_j - y_M)D_y \\
+					s_j &= \begin{cases}
+						\frac{u_{min} - u_M}{(x_j - x_M)D_x + (y_j - y_M)D_y} & \mathrm{if}\ u_r < u_{min} \\
+						\frac{u_{max} - u_M}{(x_j - x_M)D_x + (y_j - y_M)D_y} & \mathrm{if}\ u_r > u_{max}
+					\end{cases} \quad j = 1..N_{f_i} \\
+					\phi &= \min{(s_0, \dots, s_{N_{f_i}})}
+				\end{align}
+				
+			\subsubsection{Vector limiter}
+				The vector limiting scheme presented by May and Berger frames the limiting problem as a linear programming problem.
+				Basically, the goal is to minimize the limited gradient error, i.e.
+				\begin{align}
+					\mathrm{minimize}\quad &|D_x - \phi_x D_x| + |D_y - \phi_y D_y| \\
+									=& -|D_x|\phi_x - |D_y|\phi_y
+				\end{align}
+				subject to the monotonicity constraints presented earlier. The algorithm EbbCFD uses to solve this linear
+				programming problem is the All-inequality simplex method outlined in \cite{doi:10.1137/120875624}. The vector
+				limiter is still an area of ongoing development as it currently seems to get in the way of convergence.
+
+		\begin{figure}[H]
+			\centering
+			\begin{subfigure}[H]{0.6\textwidth}
+				\includegraphics[width=\textwidth,trim={7cm 2cm 10cm 2cm},clip]{FirstOrderShock.pdf}
+				\caption{First order shock capture}
+			\end{subfigure}
+			\begin{subfigure}[H]{0.6\textwidth}
+				\includegraphics[width=\textwidth,trim={7cm 2cm 10cm 2cm},clip]{SecondOrderShock.pdf}
+				\caption{Second order shock capture. Over/under shoot is visible at shock boundary}
+			\end{subfigure}
+			\begin{subfigure}[H]{0.6\textwidth}
+				\includegraphics[width=\textwidth,trim={7cm 2cm 10cm 2cm},clip]{SecondOrderScalarLimitedShock.pdf}
+				\caption{Second order with scalar limiter shock capture. Over/under shoot eliminated}
+			\end{subfigure}
+			\caption{Mach 2 diamond wedge airfoil}
+		\end{figure}
+
 	\section{Numerical Viscosity}
+		The Euler equations neglect a dissipative term and thus are not suitable for simulating viscous flows. However, when
+		discretized, the approximation of the Euler equations that are actually solved add some dissipation back into
+		the solution. An attempt was made to characterize this dissipation to see if any relation between mesh size and
+		viscosity could be made. The thought behind this study was to: first, at low Mach number ($M = 0.3$) generate vortices
+		from the flow past a cylinder at various mesh sizes, and second, find a correlation between shedding frequency and 
+		the average hydraulic diameter of the mesh.
+		
+		Unfortunately, EbbCFD could not be made to shed vortices around a cylinder at low Mach number, so instead a half cylinder
+		was substituted. While the half cylinders did produce vortex shedding, it did not show any sort of meaningful 
+		relationship between average hydraulic diameter and shedding frequency. Instead all runs snapped to one of two different
+		modes as show below.
 
+		\begin{figure}[H]
+			\centering
+			\includegraphics[width=\textwidth]{SheddingFrequency.pdf}
+			\caption{Vortex shedding frequencies on different mesh sizes}
+		\end{figure}
+		\begin{figure}[H]
+			\centering
+			\includegraphics[width=\textwidth]{ForceTime.pdf}
+			\caption{Lift force time history}
+		\end{figure}
 
+		\begin{figure}[H]
+			\centering
+			\includegraphics[width=\textwidth,trim={7cm 2cm 10cm 2cm},clip]{HalfCylinderVortex.pdf}
+			\caption{A sample half cylinder shedding vortices}
+		\end{figure}
+
+		\bibliographystyle{siam}
+		\bibliography{siam_sjoce335_A2163}
 \end{document}

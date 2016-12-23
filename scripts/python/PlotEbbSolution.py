@@ -122,12 +122,17 @@ if __name__ == "__main__":
 	colors = ['k', 'b', 'g', 'c', 'y', 'm', 'r']
 
 	f = plt.figure(figsize=(12,6))
-	plt.axis([-100, 100,-100, 100])
+	
+	# globalMin = 0.45
+	# globalMax = 1.8
+
 	for idx in range(len(meshFiles)):
 		mesh = eu.importEbbMatlabMesh(meshFiles[idx])
 		#sln = eu.importEbbSolution(slnFiles[idx])
 		plotstate(mesh, slns[idx], state, "", globalMin, globalMax, colors[idx%len(colors)])
 		plt.hold(True)
+
+	#plt.axis([-0.3, 1.3,-0.5, 0.5])
 
 	plt.colorbar()
 	plt.show(block=True)
