@@ -1,11 +1,12 @@
 module ebb.mpid;
 
 import std.conv;
-import std.exception;
 import std.meta;
 import std.stdio;
 import std.traits;
 import std.typecons;
+
+import ebb.exception;
 
 import numd.linearalgebra.matrix;
 import numd.utility;

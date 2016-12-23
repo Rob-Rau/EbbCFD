@@ -61,7 +61,6 @@ static this()
 	exceptions ~= tuple(Exception.stringof, new Exception(""));
 	exceptions ~= addExceptions!(ebb.exception);
 	exceptions ~= addExceptions!(std.exception);
-	exceptions ~= addExceptions!(std.conv);
 }
 
 @nogc void enforce(T = Exception)(bool cond, string msg, string file = __FILE__, int line = __LINE__)

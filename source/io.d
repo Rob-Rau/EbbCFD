@@ -5,7 +5,6 @@ import core.stdc.stdio;
 import std.algorithm;
 import std.array;
 import std.conv;
-import std.exception;
 import std.file;
 import std.meta;
 import std.stdio : File, writeln;
@@ -13,6 +12,7 @@ import std.string;
 
 import numd.linearalgebra.matrix;
 
+import ebb.exception;
 import ebb.mesh;
 
 /+
@@ -266,10 +266,7 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 	auto buffer = slnFile.rawRead(new ubyte[fileSize]);
 	auto nNodes = buffer.read!ulong;
-	if(nNodes != mesh.nodes.length)
-	{
-		throw new Exception("Mesh file has different number of nodes than solution file.");
-	}
+	enforce(nNodes == mesh.nodes.length, "Mesh file has different number of nodes than solution file.");
 
 	//writeln("nNodes = ", nNodes);
 
@@ -280,10 +277,8 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 	}
 
 	auto nEls = buffer.read!ulong;
-	if(nEls != mesh.cells.length)
-	{
-		throw new Exception("Mesh file has different number of cells than solution file.");
-	}
+	enforce(nEls == mesh.cells.length, "Mesh file has different number of cells than solution file.");
+
 	//writeln("nEdges = ", nEls);
 	for(uint i = 0; i < nEls; i++)
 	{
@@ -325,10 +320,7 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 	auto nCells = buffer.read!ulong;
 	//writeln("nCells = ", nCells);
-	if(nEls != mesh.cells.length)
-	{
-		throw new Exception("Mesh file has different number of cells than solution file.");
-	}
+	enforce(nEls == mesh.cells.length, "Mesh file has different number of cells than solution file.");
 
 	for(uint i = 0; i < nCells; i++)
 	{
@@ -552,7 +544,7 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 	immutable uint nElems = headerLine[1].to!uint;
 	immutable uint nDims = headerLine[2].to!uint;
 
-	enforce(nDims == 2, new Exception(nDims.to!string~" dimensional meshes not supported"));
+	enforce(nDims == 2, nDims.to!string~" dimensional meshes not supported");
 
 	if(chatty)
 	{
@@ -605,7 +597,7 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 		uint q = elementLine[1].to!uint;
 		uint subElements = elementLine[0].to!uint;
 
-		enforce((q < 4) && (q != 0), new Exception("Unsuported q"));
+		enforce((q < 4) && (q != 0), "Unsuported q");
 
 		if(elementLine[2].canFind("Tri"))
 		{
@@ -617,7 +609,7 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 		}
 		else
 		{
-			throw new Exception("Unsuported cell type");
+			enforce(false, "Unsuported cell type");
 		}
 
 		if(chatty) writeln("    Element group ", eGroup, ": faces = ", faces, ", q = ", q, ", subElements = ", subElements);

@@ -4,7 +4,6 @@ module ebb.mesher;
 import std.algorithm;
 import std.array;
 import std.conv;
-import std.exception;
 import std.getopt;
 import std.math;
 import std.stdio;

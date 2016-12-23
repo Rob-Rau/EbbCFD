@@ -4,7 +4,6 @@ module ebb.mesh;
 import std.algorithm;
 import std.array;
 import std.conv;
-import std.exception;
 import std.math;
 import std.stdio;
 import std.string;
