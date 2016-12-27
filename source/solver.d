@@ -277,7 +277,7 @@ static shared bool interrupted = false;
 
 	// Setup IC's and BC's
 	setup(mesh, config, lastRho, lastU, lastV, lastE, t, dt, saveFile);
-	MPI_Barrier(mesh.comm);
+	mesh.comm.barrier;
 	while((t < config.tEnd) && !atomicLoad(interrupted))
 	{
 		double Rmax = 0;
@@ -778,29 +778,19 @@ MPI_Datatype vec4dataType;
 			 	break;
 
 			default:
-				printf("HIT DEFAULT!!\n");
+				enforce(false, "Unsupported boundary type");
 				break;
 		}
 	}
 
 	buildGradients(mesh.nonCommCells);
 
-	bool allRecvFinished = false;
-	if(mesh.recvRequests.length > 0)
+	mesh.recvRequests.waitall(mesh.statuses);
+	foreach(commIdx, commCells; mesh.commCellRecvIdx)
 	{
-		while(!allRecvFinished)
+		foreach(i, cell; commCells)
 		{
-			int flag;
-			MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
-			allRecvFinished = cast(bool)flag;
-		}
-
-		foreach(commIdx, commCells; mesh.commCellRecvIdx)
-		{
-			foreach(i, cell; commCells)
-			{
-				q[cell] = mesh.recvStateBuffers[commIdx][i];
-			}
+			q[cell] = mesh.recvStateBuffers[commIdx][i];
 		}
 	}
 
@@ -849,19 +839,16 @@ MPI_Datatype vec4dataType;
 		}
 	}
 	
-	if(mesh.sendRequests.length > 0)
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
-		foreach(commIdx, commEdges; mesh.commEdgeIdx)
+		foreach(i, edge; commEdges)
 		{
-			foreach(i, edge; commEdges)
-			{
-				mesh.sendStateBuffers[commIdx][i] = mesh.edges[edge].q[0];
-			}
+			mesh.sendStateBuffers[commIdx][i] = mesh.edges[edge].q[0];
 		}
-
-		MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
-		MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 	}
+
+	mesh.sendRequests.startall;
+	mesh.recvRequests.startall;
 
 	// update edge values and compute fluxes on boundary edges.
 	foreach(i; mesh.boundaryEdges)
@@ -1032,23 +1019,12 @@ MPI_Datatype vec4dataType;
 		enforce!EdgeException(!haveNan, "Got NaN on interior edge", mesh.edges[i]);
 	}
 
-
-	if(mesh.recvRequests.length > 0)
+	mesh.recvRequests.waitall(mesh.statuses);
+	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
-		allRecvFinished = false;
-		while(!allRecvFinished)
+		foreach(i, edge; commEdges)
 		{
-			int flag;
-			MPI_Testall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr, &flag, mesh.statuses.ptr);
-			allRecvFinished = cast(bool)flag;
-		}
-
-		foreach(commIdx, commEdges; mesh.commEdgeIdx)
-		{
-			foreach(i, edge; commEdges)
-			{
-				mesh.edges[edge].q[1] = mesh.recvStateBuffers[commIdx][i];
-			}
+			mesh.edges[edge].q[1] = mesh.recvStateBuffers[commIdx][i];
 		}
 	}
 
@@ -1107,6 +1083,7 @@ MPI_Datatype vec4dataType;
 	}
 
 	MPI_Allreduce(&newDt, &newDt, 1, MPI_DOUBLE, MPI_MIN, mesh.comm);
+	mesh.comm.allreduce(newDt, newDt, MPI_MIN);
 	MPI_Allreduce(&Rmax, &Rmax, 1, MPI_DOUBLE, MPI_MAX, mesh.comm);
 }
 
@@ -1254,12 +1231,12 @@ int main(string[] args)
 
 	startComputation(config, saveFile, p, id);
 
-	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_COMM_WORLD.barrier;
 	double elapsed = MPI_Wtime() - startTime;
 	if(id == 0)
 	{
 		writeln("total time: ", elapsed);
 	}
 	
-	return MPI_Shutdown;
+	return shutdown;
 }

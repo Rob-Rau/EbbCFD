@@ -409,12 +409,12 @@ struct UMesh2
 
 		for(uint commIdx = 0; commIdx < sendRequests.length; commIdx++)
 		{
-			MPI_Send_init(sendStateBuffers[commIdx].ptr, cast(int)sendStateBuffers[commIdx].length, toMPIType!(Vector!4), commProc[commIdx], meshTag, comm, &sendRequests[commIdx]);
+			comm.sendInit!(Vector!4)(sendStateBuffers[commIdx], commProc[commIdx], meshTag, sendRequests[commIdx]);
 		}
 
 		for(uint commIdx = 0; commIdx < recvRequests.length; commIdx++)
 		{
-			MPI_Recv_init(recvStateBuffers[commIdx].ptr, cast(int)recvStateBuffers[commIdx].length, toMPIType!(Vector!4), commProc[commIdx], meshTag, comm, &recvRequests[commIdx]);
+			comm.recvInit!(Vector!4)(recvStateBuffers[commIdx], commProc[commIdx], meshTag, recvRequests[commIdx]);
 		}
 
 		// We now need to distribute cell centroids to neighboring 
@@ -979,7 +979,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, MPI_Comm comm)
 		}
 	}
 
-	//MPI_Barrier(comm);
+	comm.barrier;
 
 	return smallMesh;
 }
