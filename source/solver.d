@@ -1164,6 +1164,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		writeln("Solver encountered an error: ", ce.msg);
 		writeln("	In file ", ce.file);
 		writeln("	On line ", ce.line);
+		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 	catch(EdgeException ex)
 	{
@@ -1178,15 +1179,18 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		writeln("	cell L = ", ex.edge.cellIdx[0]);
 		writeln("	cell R = ", ex.edge.cellIdx[1]);
 		writeln("	normal = ", ex.edge.normal);
+		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 	catch(Exception ex)
 	{
-
+		writeln("Caught unknown exception. Message: ", ex.msg);
+		writeln("	In file ", ex.file);
+		writeln("	On line ", ex.line);
+		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 	finally
 	{
 		writeln("exiting");
-		MPI_Abort(MPI_COMM_WORLD, 1);
 	}
 }
 
