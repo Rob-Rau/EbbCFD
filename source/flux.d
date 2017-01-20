@@ -67,9 +67,7 @@ enum fluxDir
 	return G0*n[0] + G1*n[1];
 }
 
-// Vector!dims rusanovFlux(size_t dims)(Vector!dims qL, Vector!dims qR, Vector!(dims - 2) n)
 @nogc Vector!dims rusanovFlux(size_t dims)(Vector!dims qL, Vector!dims qR, Vector!(dims - 2) n, ref double sMax)
-//Vector!dims rusanovFlux(size_t dims, int kx, int ky)(Vector!dims qL, Vector!dims qR, double dt, double dx)
 {
 	// Left state variables
 	immutable double rhoL = (qL[0]);
