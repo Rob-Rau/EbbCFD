@@ -587,22 +587,7 @@ MPI_Datatype vec4dataType;
 						auto grad = mesh.cells[i].gradient;
 						auto centroid = mesh.cells[i].centroid;
 						auto mid = mesh.cells[mesh.cells[i].neighborCells[j]].centroid;
-						/+
-						int sharedEdgeIdx = -1;
-						
-						for(int edgeIdx1 = 0; edgeIdx1 < mesh.cells[mesh.cells[i].neighborCells[j]].nEdges; edgeIdx1++)
-						{
-							for(int edgeIdx2 = 0; edgeIdx2 < mesh.cells[i].nEdges; edgeIdx2++)
-							{
-								if(mesh.cells[mesh.cells[i].neighborCells[j]].edges[edgeIdx1] == mesh.cells[i].edges[edgeIdx2])
-								{
-									sharedEdgeIdx = mesh.cells[i].edges[edgeIdx2];
-								}
-							}
-						}
 
-						auto mid = mesh.edges[sharedEdgeIdx].mid;
-						+/
 						auto dx = mid[0] - centroid[0];
 						auto dy = mid[1] - centroid[1];
 						auto minQ = mesh.cells[i].minQ;
@@ -644,11 +629,9 @@ MPI_Datatype vec4dataType;
 						{
 							if(mesh.cells[i].lim[k][0] < config.lpThresh)
 							{
-								//printf("Using LP limiter\n");
 								auto A = Matrix!(10,2)(0);
 								auto b = Vector!10(0);
 								auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
-								//auto xk = Vector!2(mesh.cells[i].lim[k][0], mesh.cells[i].lim[k][1]);
 								auto xk = Vector!2(0);
 								A[0,0] = 1;
 								A[0,1] = 0;
@@ -666,29 +649,6 @@ MPI_Datatype vec4dataType;
 								for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
 								{
 									immutable uint cellIdx = mesh.cells[i].neighborCells[j];
-									/+
-									int sharedEdgeIdx = -1;
-						
-									for(int edgeIdx1 = 0; edgeIdx1 < mesh.cells[mesh.cells[i].neighborCells[j]].nEdges; edgeIdx1++)
-									{
-										for(int edgeIdx2 = 0; edgeIdx2 < mesh.cells[i].nEdges; edgeIdx2++)
-										{
-											if(mesh.cells[mesh.cells[i].neighborCells[j]].edges[edgeIdx1] == mesh.cells[i].edges[edgeIdx2])
-											{
-												sharedEdgeIdx = mesh.cells[i].edges[edgeIdx2];
-											}
-										}
-									}
-									
-									auto mid = mesh.edges[sharedEdgeIdx].mid;
-									
-
-									A[cIdx+4,0] = (mid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
-									A[cIdx+4,1] = (mid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
-
-									A[cIdx+5,0] = -(mid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
-									A[cIdx+5,1] = -(mid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
-									+/
 
 									A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
 									A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
@@ -703,7 +663,6 @@ MPI_Datatype vec4dataType;
 
 								LP!10(A, b, c, xk);
 
-								//printf("xk = [%.10e, %.10e], lim = %.10e\n\n", xk[0], xk[1], mesh.cells[i].lim[k][0]);
 								mesh.cells[i].lim[k][0] = xk[0];
 								mesh.cells[i].lim[k][1] = xk[1];
 
@@ -724,20 +683,15 @@ MPI_Datatype vec4dataType;
 		}
 	}
 
-	if(mesh.sendRequests.length > 0)
+	foreach(commIdx, commCells; mesh.commCellSendIdx)
 	{
-		foreach(commIdx, commCells; mesh.commCellSendIdx)
+		foreach(i, cell; commCells)
 		{
-			foreach(i, cell; commCells)
-			{
-				//printf("cell = %d;\tq.length = %d\n", cell, q.length);
-				mesh.sendStateBuffers[commIdx][i] = q[cell];
-			}
+			mesh.sendStateBuffers[commIdx][i] = q[cell];
 		}
-
-		MPI_Startall(cast(int)mesh.sendRequests.length, mesh.sendRequests.ptr);
-		MPI_Startall(cast(int)mesh.recvRequests.length, mesh.recvRequests.ptr);
 	}
+	mesh.sendRequests.startall;
+	mesh.recvRequests.startall;
 
 	// update ghost cell states before we can compute gradients
 	foreach(i; mesh.ghostCells)
@@ -999,13 +953,6 @@ MPI_Datatype vec4dataType;
 					{
 						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
 					}
-
-					/+
-					auto rho = mesh.edges[i].q[k][0];
-					auto u = mesh.edges[i].q[k][1]/rho;
-					auto v = mesh.edges[i].q[k][2]/rho;
-					mesh.edges[i].q[k][3] = 1.0e-9/(gamma - 1) + 0.5*rho*(u^^2.0 + v^^2.0);
-					+/
 				}
 			}
 		}

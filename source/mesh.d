@@ -49,6 +49,10 @@ struct Edge
 	// Flux on this edge
 	Vector!4 flux;
 
+	// Values for viscous flux calc
+	Vector!4 qAve;
+	Vector!2[4] gradient;
+
 	// This is a boundary edg1e
 	bool isBoundary;
 	string boundaryTag;
