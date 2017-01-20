@@ -44,6 +44,15 @@ import ebb.mesh;
 	]
 }
 +/
+
+struct PhysicalConfig
+{
+	double Pr;
+	double R;
+	double gamma;
+	double viscosity;
+}
+
 struct Config
 {
 	string meshFile;
