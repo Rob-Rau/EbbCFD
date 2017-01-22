@@ -1094,7 +1094,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		auto triMap = triMesh[1];
 		auto tMesh = triMesh[0];
 		tMesh.buildMesh;
-		//writeln(tMesh.edges);
+
 		saveMatlabMesh(tMesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 
 		final switch(config.limiter)
