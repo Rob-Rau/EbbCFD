@@ -13,10 +13,8 @@ import numd.linearalgebra.matrix;
 import numd.utility;
 
 import ebb.euler;
+import ebb.exception;
 import ebb.mpid;
-
-//import mpi;
-//import mpi.util;
 
 import parmetis;
 
@@ -642,6 +640,44 @@ struct UMesh2
 
 		return globalF;
 	}
+}
+
+UMesh2 triangularize(ref UMesh2 inMesh)
+{
+	UMesh2 tMesh;
+	Vector!4[] newQ;
+	tMesh.nodes = inMesh.nodes;
+
+	foreach(i, element; inMesh.elements)
+	{
+		if(element.length == 3)
+		{
+			tMesh.elements ~= element;
+			newQ ~= inMesh.q[i];
+		}
+		else if(element.length == 4)
+		{
+			auto newEl1 = [element[0], element[1], element[2]];
+			auto newEl2 = [element[0], element[2], element[3]];
+			tMesh.elements ~= newEl1;
+			tMesh.elements ~= newEl2;
+			newQ ~= inMesh.q[i];
+			newQ ~= inMesh.q[i];
+		}
+		else
+		{
+			enforce(false, "Unsupported element type");
+		}
+	}
+
+	tMesh.q = new Vector!4[tMesh.elements.length];
+	tMesh.bNodes = inMesh.bNodes;
+	tMesh.bGroupStart = inMesh.bGroupStart;
+	tMesh.bTags = inMesh.bTags;
+
+	tMesh.buildMesh;
+	tMesh.q = newQ ~ tMesh.q[newQ.length..$];
+	return tMesh;
 }
 
 version(Have_mpi)

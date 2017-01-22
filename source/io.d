@@ -661,7 +661,6 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 	mesh.bNodes = bNodes;
 	mesh.bGroupStart = bGroupStart;
 	mesh.bTags = bTags;
-	//mesh.buildMesh;
 
 	return mesh;
 }
