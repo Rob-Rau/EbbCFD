@@ -5,7 +5,7 @@
 	"authors": ["Robert F. Rau II"],
 	"dependencies": {
 		"numd": "~master",
-		"mpi": "~master"
+		"mpi": {"version": "~master", "optional": true, "default": true}
 	},
 	"configurations": [
 		{

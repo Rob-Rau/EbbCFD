@@ -1,5 +1,7 @@
 /* Converted to D from parmetis.h by htod */
 module parmetis;
+version(Have_mpi)
+{
 /*
  * Copyright 1997-2003, Regents of the University of Minnesota
  *
@@ -226,3 +228,4 @@ void  PARDAMETIS(idxtype *vtxdist, idxtype *xadj, idxtype *vwgt, idxtype *adjncy
 
 
 //C     #endif 
+}

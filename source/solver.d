@@ -26,6 +26,16 @@ import ebb.mpid;
 
 static shared bool interrupted = false;
 
+struct Solution(size_t dims)
+{
+	Vector!dims q;
+}
+
+struct SolverState
+{
+
+}
+
 @nogc @system nothrow extern(C) void handle(int sig)
 {
 	printf("Signal received\n");
@@ -338,11 +348,14 @@ static shared bool interrupted = false;
 		{
 			tmp[] = (now[] - last[])^^2;
 			double tmpSum = tmp.sum;
-			MPI_Allreduce(&tmpSum, &tmpSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			mesh.comm.allreduce(tmpSum, tmpSum, MPI_SUM);
+
 			uint totLen = cast(uint)mesh.interiorCells.length;
-			MPI_Allreduce(&totLen, &totLen, 1, MPI_UINT32_T, MPI_SUM, mesh.comm);
+			mesh.comm.allreduce(totLen, totLen, MPI_SUM);
+
 			double valSum = now.sum;
-			MPI_Allreduce(&valSum, &valSum, 1, MPI_DOUBLE, MPI_SUM, mesh.comm);
+			mesh.comm.allreduce(valSum, valSum, MPI_SUM);
+			
 			return sqrt(cast(double)totLen*tmpSum)/valSum;
 		}
 
@@ -540,7 +553,7 @@ static shared bool interrupted = false;
 	}
 }
 
-MPI_Datatype vec4dataType;
+Datatype vec4dataType;
 
 // Unstructured finite volume solver
 @nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate)
@@ -1029,9 +1042,8 @@ MPI_Datatype vec4dataType;
 		R[i] *= -(1.0/mesh.cells[i].area);
 	}
 
-	MPI_Allreduce(&newDt, &newDt, 1, MPI_DOUBLE, MPI_MIN, mesh.comm);
 	mesh.comm.allreduce(newDt, newDt, MPI_MIN);
-	MPI_Allreduce(&Rmax, &Rmax, 1, MPI_DOUBLE, MPI_MAX, mesh.comm);
+	mesh.comm.allreduce(Rmax, Rmax, MPI_MAX);
 }
 
 void startComputation(Config config, string saveFile, uint p, uint id)
@@ -1058,7 +1070,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			}
 		}
 
-		if(p > 1)
+		version(Have_mpi)
 		{
 			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
 			umesh.comm = MPI_COMM_WORLD;
@@ -1111,7 +1123,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		writeln("Solver encountered an error: ", ce.msg);
 		writeln("	In file ", ce.file);
 		writeln("	On line ", ce.line);
-		MPI_Abort(MPI_COMM_WORLD, 1);
+		MPI_COMM_WORLD.abort(1);
 	}
 	catch(EdgeException ex)
 	{
@@ -1126,24 +1138,20 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		writeln("	cell L = ", ex.edge.cellIdx[0]);
 		writeln("	cell R = ", ex.edge.cellIdx[1]);
 		writeln("	normal = ", ex.edge.normal);
-		MPI_Abort(MPI_COMM_WORLD, 1);
+		MPI_COMM_WORLD.abort(1);
 	}
 	catch(Exception ex)
 	{
 		writeln("Caught unknown exception. Message: ", ex.msg);
 		writeln("	In file ", ex.file);
 		writeln("	On line ", ex.line);
-		MPI_Abort(MPI_COMM_WORLD, 1);
+		MPI_COMM_WORLD.abort(1);
 	}
 	finally
 	{
 		writeln("exiting");
 	}
 }
-
-
-import mpi;
-import mpi.util;
 
 int main(string[] args)
 {
@@ -1152,20 +1160,14 @@ int main(string[] args)
 	string configFile;
 	string saveFile = "";
 
-	int argc = cast(int)args.length;
-	auto argv = args.toArgv;
+	init(args);
 
-	int p;
-	int id;
-
-	MPI_Init(&argc, &argv);
-
-	MPI_Comm_size(MPI_COMM_WORLD, &p);
-	MPI_Comm_rank(MPI_COMM_WORLD, &id);
+	int p = MPI_COMM_WORLD.size;
+	int id = MPI_COMM_WORLD.rank;
 
 	vec4dataType = toMPIType!(Vector!4);
 
-	double startTime = MPI_Wtime();
+	double startTime = wtime;
 
 	signal(SIGINT, &handle);
 	signal(SIGUSR1, &handle);
@@ -1183,7 +1185,7 @@ int main(string[] args)
 	startComputation(config, saveFile, p, id);
 
 	MPI_COMM_WORLD.barrier;
-	double elapsed = MPI_Wtime() - startTime;
+	double elapsed = wtime - startTime;
 	if(id == 0)
 	{
 		writeln("total time: ", elapsed);
