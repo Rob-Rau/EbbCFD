@@ -61,12 +61,12 @@ struct SlnHeader
 	double dt;
 }
 
-@nogc void saveSolution(ref UMesh2 mesh, char* filename, double t, double dt)
+@nogc void saveSolution(Vector!4[] sln, char* filename, double t, double dt)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.interiorCells.length, t: t, dt: dt};
+	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)sln.length, t: t, dt: dt};
 
 	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
@@ -81,12 +81,13 @@ struct SlnHeader
 	buffer.write!double(header.dt, &offset);
 
 	//for(uint i = 0; i < mesh.cells.length; i++)
-	foreach(i; mesh.interiorCells)
+	//foreach(i; mesh.interiorCells)
+	foreach(q; sln)
 	{
-		buffer.write!double(mesh.q[i][0], &offset);
-		buffer.write!double(mesh.q[i][1], &offset);
-		buffer.write!double(mesh.q[i][2], &offset);
-		buffer.write!double(mesh.q[i][3], &offset);
+		buffer.write!double(q[0], &offset);
+		buffer.write!double(q[1], &offset);
+		buffer.write!double(q[2], &offset);
+		buffer.write!double(q[3], &offset);
 	}
 
 	import std.digest.crc : CRC32;

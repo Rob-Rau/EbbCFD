@@ -190,7 +190,7 @@ struct SolverState
 	}
 }
 
-@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile)
+@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, uint[] triMap)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -233,6 +233,7 @@ struct SolverState
 	double[] tmp = cast(double[])Mallocator.instance.allocate(mesh.cells.length*double.sizeof);
 	ubyte[] forceBuffer = cast(ubyte[])Mallocator.instance.allocate(buffSize);
 	Vector!4[] R = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
+	Vector!4[] triQ = cast(Vector!4[])Mallocator.instance.allocate(triMap.length*Vector!4.sizeof);
 
 	lastRho[] = 0.0;
 	thisRho[] = 0.0;
@@ -279,6 +280,7 @@ struct SolverState
 	scope(exit) Mallocator.instance.deallocate(lastE);
 	scope(exit) Mallocator.instance.deallocate(thisE);
 	scope(exit) Mallocator.instance.deallocate(tmp);
+	scope(exit) Mallocator.instance.deallocate(triQ);
 
 	// let the integrator do any neccessary initialization
 	integrator.init(mesh);
@@ -430,10 +432,14 @@ struct SolverState
 				char[512] filename;
 				filename[] = 0;
 				snprintf(filename.ptr, 512, "save_%d_%d.esln", saveItr, mesh.mpiRank);
-				saveSolution(mesh, filename.ptr, t, dt);
-				filename[] = 0;
-				snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
-				saveLimits(mesh, filename.ptr, t, dt);
+				foreach(i, cell; triMap)
+				{
+					triQ[i] = mesh.q[cell];
+				}
+				saveSolution(triQ, filename.ptr, t, dt);
+				//filename[] = 0;
+				//snprintf(filename.ptr, 512, "save_%d_%d.lsln", saveItr, mesh.mpiRank);
+				//saveLimits(mesh, filename.ptr, t, dt);
 				saveItr++;
 			}
 		}
@@ -455,9 +461,13 @@ struct SolverState
 	char[512] filename;
 	filename[] = 0;
 	snprintf(filename.ptr, 512, "final_%d.esln", mesh.mpiRank);
-	saveSolution(mesh, filename.ptr, t, dt);
-	snprintf(filename.ptr, 512, "final_%d.lsln", mesh.mpiRank);
-	saveLimits(mesh, filename.ptr, t, dt);
+	foreach(i, cell; triMap)
+	{
+		triQ[i] = mesh.q[cell];
+	}
+	saveSolution(triQ, filename.ptr, t, dt);
+	//snprintf(filename.ptr, 512, "final_%d.lsln", mesh.mpiRank);
+	//saveLimits(mesh, filename.ptr, t, dt);
 	if(mesh.mpiRank == 0)
 	{
 		printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
@@ -1080,7 +1090,12 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		umesh.buildMesh;
 
 		import std.array : split;
-		saveMatlabMesh(umesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
+		auto triMesh = umesh.triangulate;
+		auto triMap = triMesh[1];
+		auto tMesh = triMesh[0];
+		tMesh.buildMesh;
+		//writeln(tMesh.edges);
+		saveMatlabMesh(tMesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 
 		final switch(config.limiter)
 		{
@@ -1105,7 +1120,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 											writeln("-limiter: "~lim);
 											writeln("-flux: "~fl);
 											writeln("-integrator: "~inte);
-											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile);
+											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, triMap);
 											break;
 									}
 								}

@@ -642,42 +642,47 @@ struct UMesh2
 	}
 }
 
-UMesh2 triangularize(ref UMesh2 inMesh)
+/++
+	Takes a mesh of arbitrary cell types and converts all
+	cells to triangles. Purely for display purposes only
++/
+Tuple!(UMesh2, uint[]) triangulate(ref UMesh2 inMesh)
 {
 	UMesh2 tMesh;
-	Vector!4[] newQ;
-	tMesh.nodes = inMesh.nodes;
 
-	foreach(i, element; inMesh.elements)
+	tMesh.nodes = inMesh.nodes;
+	uint[] triMap;
+
+	foreach(uint i, element; inMesh.elements)
 	{
 		if(element.length == 3)
 		{
 			tMesh.elements ~= element;
-			newQ ~= inMesh.q[i];
-		}
-		else if(element.length == 4)
-		{
-			auto newEl1 = [element[0], element[1], element[2]];
-			auto newEl2 = [element[0], element[2], element[3]];
-			tMesh.elements ~= newEl1;
-			tMesh.elements ~= newEl2;
-			newQ ~= inMesh.q[i];
-			newQ ~= inMesh.q[i];
+			triMap ~= i;
 		}
 		else
 		{
-			enforce(false, "Unsupported element type");
+			foreach(j; 0..(element.length - 2))
+			{
+				tMesh.elements ~= [element[0], element[j + 1], element[j + 2]];
+				triMap ~= i;
+			}
 		}
 	}
 
+	tMesh.cells = new UCell2[tMesh.elements.length];
+	for(uint i = 0; i < tMesh.elements.length; i++)
+	{
+		tMesh.cells[i].nEdges = 3;
+	}
 	tMesh.q = new Vector!4[tMesh.elements.length];
 	tMesh.bNodes = inMesh.bNodes;
 	tMesh.bGroupStart = inMesh.bGroupStart;
 	tMesh.bTags = inMesh.bTags;
 
-	tMesh.buildMesh;
-	tMesh.q = newQ ~ tMesh.q[newQ.length..$];
-	return tMesh;
+	//tMesh.buildMesh;
+
+	return tuple(tMesh, triMap);
 }
 
 version(Have_mpi)
