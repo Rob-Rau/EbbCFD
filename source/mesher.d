@@ -75,7 +75,7 @@ void main(string[] args)
 		writeln("----------------------------Mesh Info----------------------------");
 		writeln("mesh: ", inFile);
 		writeln("Dimensions: ", 2);
-		writeln("cells: ", mesh.cells.length);
+		writeln("cells: ", mesh.interiorCells.length);
 		writeln("D_ave: ", dAve);
 		writeln("D_ave (bounded): ", dxAve);
 		writeln("nodes: ", mesh.nodes.length);

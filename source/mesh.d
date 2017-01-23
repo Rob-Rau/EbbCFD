@@ -782,7 +782,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 				//logln(bigMesh.bGroupStart);
 				uint[] commP;
 
-				// holds the localy mapped edge nodes for comm boundaries.
+				// holds the locally mapped edge nodes for comm boundaries.
 				// first dim matches up with commP, aka the proc to send edge data to
 				CommEdgeNodes[][] commEdgeList;
 				Tuple!(size_t, uint)[] bNodeMap;
@@ -899,10 +899,6 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 				uint[] flatElementMap = localElements.joiner.array;
 				double[] flatNodes = localNodes.joiner.array;
 
-				//localbGroupStart ~= cast(uint)localbNodes.length;
-				//localbNodes ~= commEdges;
-				//localbTag ~= "Comm";
-
 				if(i != 0)
 				{
 					comm.send!uint(2, i, partTag);
@@ -995,7 +991,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 			
 			// unpack elements
 			uint npeIdx = 0;
-			for(uint i = 0; i < flatLocalElements.length; i += nodesPerElement[npeIdx])
+			for(uint i = 0; i < flatLocalElements.length; i += nodesPerElement[npeIdx-1])
 			{
 				uint[] element;
 				for(uint j = 0; j < nodesPerElement[npeIdx]; j++)
@@ -1010,6 +1006,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 				npeIdx++;
 				if(npeIdx >= nodesPerElement.length)
 				{
+					logln("here");
 					npeIdx = cast(uint)nodesPerElement.length - 1;
 				}
 			}
