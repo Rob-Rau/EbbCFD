@@ -72,6 +72,8 @@ static this()
 		{
 			auto ex = cast(T)exceptions[idx][1];
 			ex.msg = msg;
+			ex.line = line;
+			ex.file = file;
 			throw ex;
 		}
 		else

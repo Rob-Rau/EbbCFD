@@ -530,7 +530,11 @@ struct SolverState
 					return j;
 				}
 			}
-			enforce(false, "Could not find match boundary condition tag");
+			char[64] str;
+			str[] = '\0';
+			str[0..tag.length] = tag[];
+			printf("Could not find tag %s\n", str.ptr);
+			enforce(false, "Could not find matching boundary condition tag:");
 			assert(false);
 		}
 
@@ -1067,6 +1071,10 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 
 		if(id == 0)
 		{
+			umesh = importMesh(config.meshFile);
+			umesh.comm = MPI_COMM_SELF;
+			umesh.mpiRank = id;
+			/+
 			if(config.meshFile.canFind(".gri"))
 			{
 				umesh = parseXflowMesh(config.meshFile);
@@ -1078,6 +1086,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 				writeln("Unsupported mesh format, exiting");
 				return;
 			}
+			+/
 		}
 
 		version(Have_mpi)

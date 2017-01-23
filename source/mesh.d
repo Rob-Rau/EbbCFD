@@ -98,7 +98,11 @@ struct UMesh2
 	static const int meshTag = 2000;
 	// Raw mesh data
 	double[][] nodes;
+
+	// elements are 1 indexed
 	uint[][] elements;
+
+	/// bNodes are 0 indexed
 	uint[][] bNodes;
 	string[] bTags;
 	size_t[] bGroupStart;
@@ -629,8 +633,8 @@ struct UMesh2
 					//double p = getPressure(edges[bGroups[bgIdx][i]].q[0]);
 					//double p = getPressure(q[edges[bGroups[bgIdx][i]].cellIdx[0]]);
 					//auto len = edges[bGroups[bgIdx][i]].len;
-					auto pn = Vector!2(edges[bGroups[bgIdx][i]].flux[1], edges[bGroups[bgIdx][i]].flux[2]);
 					//f += p*len*edges[bGroups[bgIdx][i]].bNormal;
+					auto pn = Vector!2(edges[bGroups[bgIdx][i]].flux[1], edges[bGroups[bgIdx][i]].flux[2]);
 					f += pn*edges[bGroups[bgIdx][i]].len;
 				}
 			}
@@ -788,7 +792,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 					if(pa == i)
 					{
 						uint[] localEl;
-						nodesPerElement ~= cast(uint)bigMesh.elements[j].length; 
+						nodesPerElement ~= bigMesh.elements[j].length.to!uint;
 						foreach(uint k, el; bigMesh.elements[j])
 						{
 							// map global node index to new proc local node index

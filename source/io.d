@@ -530,15 +530,292 @@ UMesh2 loadMatlabMesh(string filename)
 	fclose(file);
 }
 
-char[][] readCleanLine(ref File file)
+struct MeshFile
 {
-	return file.readln.strip.chomp.detab.split(' ').filter!(a => a != "").array;
+	File file;
+
+	this(string filename)
+	{
+		file = File(filename);
+		currentLine = 0;
+	}
+
+	int currentLine;
+
+	bool eof()
+	{
+		return file.eof;
+	}
+
+	char[][] readCleanLine()
+	{
+		currentLine++;
+		return file.readln.strip.chomp.detab.split(' ').filter!(a => a != "").array;
+	}	
+}
+
+UMesh2 importMesh(string meshFile, bool chatty = true)
+{
+	UMesh2 mesh;
+
+	if(meshFile.canFind(".gri"))
+	{
+		mesh = parseXflowMesh(meshFile, chatty);
+	}
+	else if(meshFile.canFind(".msh") || meshFile.canFind(".gmsh"))
+	{
+		mesh = parseGmshMesh(meshFile, chatty);
+	}
+	else
+	{
+		enforce(false, "Unsuported mesh format for mesh: "~meshFile);
+	}
+
+	return mesh;
+}
+
+UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
+{
+	// Only officially support mesh format 2.2
+	// Only support ASCII version
+	immutable int supportedMajor = 2;
+	immutable int supportedMinor = 2;
+	immutable int supportedFormat = 0;
+
+	UMesh2 mesh;
+	auto file = MeshFile(meshFile);
+
+	enum GmshSection
+	{
+		Format,
+		PhysicalNames,
+		Nodes,
+		Elements,
+		Unknown
+	}
+
+	GmshSection readSectionHeader()
+	{
+		auto sectionText = file.readCleanLine;
+		while((sectionText.length == 0) && (!file.eof))
+		{
+			sectionText = file.readCleanLine;
+		}
+
+		GmshSection section = GmshSection.Unknown;
+		if(!file.eof)
+		{
+			enforce(sectionText.length == 1, "Incorrectly formatted section header: "~sectionText.join.to!string);
+			enforce(sectionText[0][0] == '$', "Incorrectly formatted section header: "~sectionText[0].to!string);
+
+			string sectionStr = sectionText[0][1..$].to!string;
+			if(sectionStr == "MeshFormat")
+			{
+				section = GmshSection.Format;
+			}
+			else if(sectionStr == "PhysicalNames")
+			{
+				section = GmshSection.PhysicalNames;
+			}
+			else if(sectionStr == "Nodes")
+			{
+				section = GmshSection.Nodes;
+			}
+			else if(sectionStr == "Elements")
+			{
+				section = GmshSection.Elements;
+			}
+			else
+			{
+				section = GmshSection.Unknown;
+				if(chatty) writeln("Unknown GMSH section: "~sectionStr);
+			}
+		}
+
+		return section;
+	}
+
+	void fastForwardSection()
+	{
+		char[][] text;
+		do
+		{
+			enforce(!file.eof, "Unexpected end of file");
+			text = file.readCleanLine;
+		} while(!text[0].to!string.canFind("$End"));
+	}
+
+	void endSection()
+	{
+		auto sectionEnd = file.readCleanLine[0].to!string;
+		enforce(sectionEnd.canFind("$End"), "Expected section end, instead got: "~sectionEnd);
+	}
+
+	void readMeshFormat()
+	{
+		auto mshFormat = file.readCleanLine;
+		int major = mshFormat[0].split('.')[0].to!int;
+		int minor = mshFormat[0].split('.')[1].to!int;
+
+		if((minor != supportedMinor) || (major != supportedMajor))
+		{
+			writeln("WARNING: EbbCFD only officially supports version 2.2 meshes, not version ", mshFormat[0], ". You may experience unexpected results");
+		}
+
+		int format = mshFormat[1].to!int;
+		enforce(format == supportedFormat, "Unsuported mesh format. Expected 0, got "~mshFormat[1].to!string);
+
+		endSection;
+	}
+
+	void readPhysicalNames()
+	{
+		auto numNamesStr = file.readCleanLine;
+		enforce(numNamesStr.length == 1, "Unexpected number of entries on line "~file.currentLine.to!string);
+		auto numNames = numNamesStr[0].to!int;
+
+		foreach(i; 0..numNames)
+		{
+			enforce(!file.eof, "Unexpected end of file");
+			auto nameLine = file.readCleanLine;
+			enforce(nameLine.length == 3, "Expected 3 entries on line "~file.currentLine.to!string~"; instead got "~nameLine.length.to!string);
+			auto dim = nameLine[0].to!int;
+			if(dim == 1)
+			{
+				string bTag = nameLine[2].to!string.strip('\"');
+				mesh.bTags ~= bTag;
+			}
+			else
+			{
+				if(chatty) writeln("WARNING: Ignoring higher dimension physical group: ", nameLine[2].to!string.strip('\"'));
+			}
+		}
+
+		endSection;
+	}
+
+	void readNodes()
+	{
+		auto numNodesStr = file.readCleanLine;
+		enforce(numNodesStr.length == 1, "Unexpected number of entries on line "~file.currentLine.to!string);
+		auto numNodes = numNodesStr[0].to!int;
+
+		foreach(i; 0..numNodes)
+		{
+			enforce(!file.eof, "Unexpected end of file");
+			auto nodeLine = file.readCleanLine;
+			enforce((i + 1) == nodeLine[0].to!int, "Unexpected node number. Expected "~(i+1).to!string~", got "~nodeLine[0].to!string);
+			mesh.nodes ~= nodeLine[1..$-1].to!(double[]);
+		}
+
+		endSection;
+	}
+
+	void readElements()
+	{
+		auto numElementsStr = file.readCleanLine;
+		enforce(numElementsStr.length == 1, "Unexpected number of entries on line "~file.currentLine.to!string);
+		immutable auto numElements = numElementsStr[0].to!int;
+
+		foreach(i; 0..numElements)
+		{
+			enforce(!file.eof, "Unexpected end of file");
+			//elm-number elm-type number-of-tags < tag > … node-number-list
+			auto elementLine = file.readCleanLine.to!(int[]);
+			enforce(elementLine.length > 4, "Element line must have at least 4 entries");
+
+			immutable int elementNum = elementLine[0];
+			enforce((i + 1) == elementNum, "Unexpected element number. Expected "~(i+1).to!string~", got "~elementNum.to!string);
+
+			immutable int elementType = elementLine[1];
+			immutable int numTags = elementLine[2];
+			enforce(numTags >= 1, "Expected at least one element tag for element "~elementNum.to!string);
+
+			if(elementType == 1)
+			{
+				//if(chatty) writeln("Found line element, assuming boundary element");
+				auto bGroup = elementLine[3];
+				auto bNodes = elementLine[(3+numTags)..$].to!(uint[]);
+				bNodes[] -= 1;
+				if(mesh.bGroupStart.length == (bGroup - 1))
+				{
+					//writeln("Adding bGroupStart at element ", elementNum);
+					mesh.bGroupStart ~= mesh.bNodes.length;
+				}
+				mesh.bNodes ~= bNodes;
+			}
+			else if((elementType == 2) || (elementType == 3))
+			{
+				mesh.elements ~= elementLine[(3+numTags)..$].to!(uint[]);
+			}
+			else
+			{
+				enforce(false, "Unsuported element type: "~elementType.to!string);
+			}
+		}
+
+		endSection;
+	}
+
+	while(!file.eof)
+	{
+		immutable section = readSectionHeader;
+		switch(section)
+			with(GmshSection)
+		{
+			case Format:
+				if(chatty) writeln("Reading mesh format");
+				readMeshFormat;
+				break;
+			case PhysicalNames:
+				if(chatty) writeln("Reading physical names");
+				readPhysicalNames;
+				break;
+			case Nodes:
+				if(chatty) writeln("Reading mesh nodes");
+				readNodes;
+				break;
+			case Elements:
+				if(chatty) writeln("Reading mesh elements");
+				readElements;
+				break;
+			default:
+				if(!file.eof)
+				{
+					if(chatty) writeln("Ignoring section, fast forwarding file");
+					fastForwardSection;
+				}
+				break;
+		}
+	}
+
+	mesh.cells = new UCell2[mesh.elements.length];
+	mesh.q = new Vector!4[mesh.elements.length];
+	foreach(i; 0..mesh.elements.length)
+	{
+		mesh.cells[i].nEdges = mesh.elements[i].length.to!uint;
+	}
+/+
+mesh.cells = new UCell2[nElems];
+	mesh.q = new Vector!4[nElems];
+
+	for(uint i = 0; i < nElems; i++)
+	{
+		mesh.cells[i].nEdges = faces;
+	}
+	mesh.elements = elements;
+	mesh.bNodes = bNodes;
+	mesh.bGroupStart = bGroupStart;
+	mesh.bTags = bTags;
++/
+	//enforce(false, "Gmsh importer incomplete");
+	return mesh;
 }
 
 UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 {
 	UMesh2 mesh;
-	auto file = File(meshFile);
+	auto file = MeshFile(meshFile);
 
 	auto headerLine = file.readCleanLine;
 	immutable uint nNodes = headerLine[0].to!uint;
@@ -666,7 +943,7 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 	return mesh;
 }
 
-UMesh2 parseSu2Mesh(string meshFile)
+UMesh2 parseSu2Mesh(string meshFile, bool chatty = true)
 {
 	UMesh2 mesh;
 	auto file = File(meshFile);

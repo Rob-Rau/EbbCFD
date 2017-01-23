@@ -48,35 +48,7 @@ void main(string[] args)
 			return;
 		}
 
-		UMesh2 mesh; 
-
-		if(inFile.canFind("gri"))
-		{
-			writeln("Reading xflow mesh file");
-			mesh = parseXflowMesh(inFile, false);
-		}
-		else if(inFile.canFind("su2"))
-		{
-			//mesh = parseSu2Mesh(inFile);
-			writeln("SU2 mesh not yet supported, exiting");
-			return;
-		}
-		else if(inFile.canFind("emsh"))
-		{
-			writeln("EbbCFD mesh not yet supported lol, exiting");
-			return;
-		}
-		else if(inFile.canFind("mmsh"))
-		{
-			writeln("Loading matlab mesh");
-			mesh = loadMatlabMesh(inFile);
-			return;
-		}
-		else
-		{
-			writeln("Unsupported mesh type, exiting");
-			return;
-		}
+		UMesh2 mesh = importMesh(inFile);
 
 		mesh.buildMesh;
 
@@ -128,28 +100,7 @@ void main(string[] args)
 			return;
 		}
 
-		UMesh2 mesh;
-		if(inFile.canFind("gri"))
-		{
-			writeln("Reading xflow mesh file");
-			mesh = parseXflowMesh(inFile);
-		}
-		else if(inFile.canFind("su2"))
-		{
-			//mesh = parseSu2Mesh(inFile);
-			writeln("SU2 mesh not yet supported, exiting");
-			return;
-		}
-		else if(inFile.canFind("emsh"))
-		{
-			writeln("EbbCFD mesh not yet supported lol, exiting");
-			return;
-		}
-		else
-		{
-			writeln("Unsupported mesh type, exiting");
-			return;
-		}
+		UMesh2 mesh = importMesh(inFile);
 
 		if(outFile.canFind("emsh"))
 		{
