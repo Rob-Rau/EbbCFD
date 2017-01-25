@@ -185,7 +185,7 @@ template toMPIType(T)
 
 						Datatype newDataType;
 
-						long[] offsets;
+						ptrdiff_t[] offsets;
 						Datatype[] dataTypes;
 						int[] blocklengths;
 
