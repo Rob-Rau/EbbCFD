@@ -1074,26 +1074,16 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			umesh = importMesh(config.meshFile);
 			umesh.comm = MPI_COMM_SELF;
 			umesh.mpiRank = id;
-			/+
-			if(config.meshFile.canFind(".gri"))
-			{
-				umesh = parseXflowMesh(config.meshFile);
-				umesh.comm = MPI_COMM_SELF;
-				umesh.mpiRank = id;
-			}
-			else
-			{
-				writeln("Unsupported mesh format, exiting");
-				return;
-			}
-			+/
 		}
 
 		version(Have_mpi)
 		{
-			umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
-			umesh.comm = MPI_COMM_WORLD;
-			umesh.mpiRank = id;
+			if(p > 1)
+			{
+				umesh = partitionMesh(umesh, p, id, MPI_COMM_WORLD);
+				umesh.comm = MPI_COMM_WORLD;
+				umesh.mpiRank = id;
+			}
 		}
 
 		umesh.buildMesh;

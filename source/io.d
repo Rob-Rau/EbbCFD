@@ -70,7 +70,7 @@ struct SlnHeader
 
 	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
+	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(cast(size_t)totSize);
 	scope(exit) Mallocator.instance.deallocate(buffer);
 
 	size_t offset = 0;
@@ -103,10 +103,10 @@ struct SlnHeader
 	buffer.write!ubyte(crc32[3], &offset);
 
 	auto file = fopen(filename, "wb");
-	ulong writeOffset = 0;
+	size_t writeOffset = 0;
 	while(writeOffset < buffer.length)
 	{
-		ulong chunkSize = 1024*1024*1024;
+		size_t chunkSize = 1024*1024*1024;
 		if(buffer.length - writeOffset < chunkSize)
 		{
 			chunkSize = buffer.length - writeOffset;
@@ -126,7 +126,7 @@ struct SlnHeader
 
 	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
+	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(cast(size_t)totSize);
 	scope(exit) Mallocator.instance.deallocate(buffer);
 
 	size_t offset = 0;
@@ -158,10 +158,10 @@ struct SlnHeader
 	buffer.write!ubyte(crc32[3], &offset);
 
 	auto file = fopen(filename, "wb");
-	ulong writeOffset = 0;
+	size_t writeOffset = 0;
 	while(writeOffset < buffer.length)
 	{
-		ulong chunkSize = 1024*1024*1024;
+		size_t chunkSize = 1024*1024*1024;
 		if(buffer.length - writeOffset < chunkSize)
 		{
 			chunkSize = buffer.length - writeOffset;
@@ -263,7 +263,7 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 	//writeln("Reading file ", filename);
 	auto slnFile = File(filename);
 
-	auto fileSize = slnFile.size;
+	auto fileSize = slnFile.size.to!size_t;
 
 	auto buffer = slnFile.rawRead(new ubyte[fileSize]);
 	auto nNodes = buffer.read!ulong;
@@ -343,7 +343,7 @@ UMesh2 loadMatlabMesh(string filename)
 	//writeln("Reading file ", filename);
 	auto meshFile = File(filename);
 
-	auto fileSize = meshFile.size;
+	auto fileSize = meshFile.size.to!size_t;
 
 	auto buffer = meshFile.rawRead(new ubyte[fileSize]);
 	auto nNodes = buffer.read!ulong;
@@ -457,7 +457,7 @@ UMesh2 loadMatlabMesh(string filename)
 
 	ulong totSize = nodeHeaderSize + e2nHeaderSize + ieHeaderSize + beHeaderSize + tagHeaderSize;
 	totSize += nodesSize + e2nSize + ieSize + beSize + bNameSize;
-	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(totSize);
+	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(cast(size_t)totSize);
 	scope(exit) Mallocator.instance.deallocate(buffer);
 
 	size_t offset = 0;
@@ -516,10 +516,10 @@ UMesh2 loadMatlabMesh(string filename)
 	filenamePtr[] = 0;
 	filenamePtr[0..filename.length] = filename[];
 	auto file = fopen(filenamePtr.ptr, "wb");
-	ulong writeOffset = 0;
+	size_t writeOffset = 0;
 	while(writeOffset < buffer.length)
 	{
-		ulong chunkSize = 1024*1024*1024;
+		size_t chunkSize = 1024*1024*1024;
 		if(buffer.length - writeOffset < chunkSize)
 		{
 			chunkSize = buffer.length - writeOffset;
@@ -979,3 +979,4 @@ UMesh2 parseSu2Mesh(string meshFile, bool chatty = true)
 
 	return mesh;
 }
+

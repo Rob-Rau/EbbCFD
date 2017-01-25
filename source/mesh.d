@@ -836,15 +836,13 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 
 				foreach(kvPair; sortedMap)
 				{
-					long bGroup = bigMesh.bGroupStart.countUntil!"b < a"(kvPair[0]) - 1;
+					auto bGroup = bigMesh.bGroupStart.countUntil!"b < a"(kvPair[0]) - 1;
 
 					localbNodes ~= localbNodesUnsorted[kvPair[1]];
 					if(bGroup < 0)
 					{
 						bGroup = bigMesh.bGroups.length - 1;
 					}
-
-					//logln("bIdx = ", kvPair[0], ", unsortedIdx = ", kvPair[1], ", group = ", bigMesh.bTags[bGroup]);
 
 					if(!localbTag.canFind(bigMesh.bTags[bGroup]))
 					{
@@ -1004,11 +1002,6 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 
 				smallMesh.elements ~= element;
 				npeIdx++;
-				if(npeIdx >= nodesPerElement.length)
-				{
-					logln("here");
-					npeIdx = cast(uint)nodesPerElement.length - 1;
-				}
 			}
 		
 			logln("Local elements: ", smallMesh.elements.length);
