@@ -25,7 +25,8 @@ enum BoundaryType
 {
 	FullState,
 	ConstPressure,
-	InviscidWall
+	InviscidWall,
+	ViscousWall
 }
 
 struct Edge
@@ -110,7 +111,9 @@ struct UMesh2
 
 	uint[] commProc;
 	Request[] sendRequests;
+	Request[] sendGradRequests;
 	Request[] recvRequests;
+	Request[] recvGradRequests;
 	Status[] statuses;
 	CommEdgeNodes[][] commEdgeLists;
 
@@ -135,6 +138,11 @@ struct UMesh2
 
 	Vector!4[][] sendStateBuffers;
 	Vector!4[][] recvStateBuffers;
+
+	//Vector!4[][] sendStateBuffers;
+	//Vector!4[][] recvStateBuffers;
+	Matrix!(4,2)[][] sendGradBuffers;
+	Matrix!(4,2)[][] recvGradBuffers;
 
 	this(uint nCells)
 	{
@@ -347,7 +355,7 @@ struct UMesh2
 				yr = otherCell.centroid[1];
 			}
 			cell.centroid = Vector!2(xr, yr);
-
+			cell.gradient[] = Vector!2(0);
 			cell.nNeighborCells = 1;
 			cell.lim[] = Vector!2(1.0);
 			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
@@ -369,8 +377,12 @@ struct UMesh2
 			commCellSendIdx.length++;
 			sendStateBuffers.length++;
 			recvStateBuffers.length++;
+			sendGradBuffers.length++;
+			recvGradBuffers.length++;
 			sendRequests.length++;
 			recvRequests.length++;
+			sendGradRequests.length++;
+			recvGradRequests.length++;
 			statuses.length++;
 			foreach(commEdge; commEdgeList)
 			{
@@ -405,17 +417,34 @@ struct UMesh2
 
 				sendStateBuffers[$-1] = new Vector!4[commCellRecvIdx[$-1].length];
 				recvStateBuffers[$-1] = new Vector!4[commCellRecvIdx[$-1].length];
+
+				sendGradBuffers[$-1] = new Matrix!(4, 2)[commCellRecvIdx[$-1].length];
+				recvGradBuffers[$-1] = new Matrix!(4, 2)[commCellRecvIdx[$-1].length];
 			}
 		}
 
 		for(uint commIdx = 0; commIdx < sendRequests.length; commIdx++)
 		{
-			comm.sendInit!(Vector!4)(sendStateBuffers[commIdx], commProc[commIdx], meshTag, sendRequests[commIdx]);
+			comm.sendInit(sendStateBuffers[commIdx], commProc[commIdx], meshTag, sendRequests[commIdx]);
+			comm.sendInit(sendGradBuffers[commIdx], commProc[commIdx], meshTag, sendGradRequests[commIdx]);
 		}
 
 		for(uint commIdx = 0; commIdx < recvRequests.length; commIdx++)
 		{
-			comm.recvInit!(Vector!4)(recvStateBuffers[commIdx], commProc[commIdx], meshTag, recvRequests[commIdx]);
+			comm.recvInit(recvStateBuffers[commIdx], commProc[commIdx], meshTag, recvRequests[commIdx]);
+			comm.recvInit(recvGradBuffers[commIdx], commProc[commIdx], meshTag, recvGradRequests[commIdx]);
+		}
+
+		auto tmpRecvRequests = new Request[commProc.length];
+		auto tmpRecvStatuses = new Status[commProc.length];
+		Vector!2[][] centroidsRcv;
+		centroidsRcv.length = commProc.length;
+
+		foreach(commIdx, commEdges; commEdgeIdx)
+		{
+			auto commEdgesRcv = commEdgeIdx[commIdx];
+			centroidsRcv[commIdx].length = commEdgesRcv.length;
+			tmpRecvRequests[commIdx] = comm.irecv(centroidsRcv[commIdx], commProc[commIdx], meshTag);
 		}
 
 		// We now need to distribute cell centroids to neighboring 
@@ -430,30 +459,12 @@ struct UMesh2
 			comm.send(centroids, commProc[commIdx], meshTag);
 		}
 
-		// recieve cell centroids
-		for(uint c = 0; c < commProc.length; c++)
+		tmpRecvRequests.waitall(tmpRecvStatuses);
+		foreach(commIdx, commEdges; commEdgeIdx)
 		{
-			Status status;
-			comm.probe(MPI_ANY_SOURCE, meshTag, status);
-
-			// determine which proc this is comming from, will be different order
-			// than commProc
-			if(commProc.canFind(status.MPI_SOURCE))
+			foreach(i, edge; commEdgeIdx[commIdx])
 			{
-				auto commIdx = commProc.countUntil(status.MPI_SOURCE);
-				auto commEdges = commEdgeIdx[commIdx];
-				auto centroids = new Vector!2[commEdges.length];
-
-				comm.recv(centroids, commProc[commIdx], meshTag);
-
-				foreach(i, edge; commEdges)
-				{
-					cells[edges[edge].cellIdx[1]].centroid = centroids[i];
-				}
-			}
-			else
-			{
-				logln("Unexpected source message from ", status.MPI_SOURCE);
+				cells[edges[edge].cellIdx[1]].centroid = centroidsRcv[commIdx][i];
 			}
 		}
 
@@ -777,9 +788,6 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 				uint[][] localbNodesUnsorted;
 				uint[] localbGroupStart;
 				string[] localbTag;
-
-				uint[][] commEdges;
-				//logln(bigMesh.bGroupStart);
 				uint[] commP;
 
 				// holds the locally mapped edge nodes for comm boundaries.
@@ -861,7 +869,6 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 						// map edge nodes
 						uint n1 = edge.nodeIdx[0].localElementMap(localNodes, bigMesh.nodes) - 1;
 						uint n2 = edge.nodeIdx[1].localElementMap(localNodes, bigMesh.nodes) - 1;
-						commEdges ~= [n1, n2];
 
 						uint partIdx = 0;
 						if(part[edge.cellIdx[0]] != i)

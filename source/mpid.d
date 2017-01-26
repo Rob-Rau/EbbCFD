@@ -370,6 +370,17 @@ T recv(T)(Comm comm, uint from, int tag)
 	}
 }
 
+Request irecv(T)(Comm comm, T[] data, uint from, uint tag)
+{
+	Request request;
+	version(Have_mpi)
+	{
+		auto ret = MPI_Irecv(data.ptr, cast(int)data.length, toMPIType!T, from, tag, comm, &request);
+		enforce(ret == MPI_SUCCESS, "MPI_Irecv failed");
+	}
+	return request;
+}
+
 void probe(Comm comm, int source, int tag, ref Status status)
 {
 	version(Have_mpi)

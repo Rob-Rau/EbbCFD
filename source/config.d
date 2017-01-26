@@ -50,7 +50,9 @@ struct PhysicalConfig
 	double Pr;
 	double R;
 	double gamma;
-	double viscosity;
+	double mu;
+	double Re;
+	double L;
 }
 
 struct Config
@@ -77,6 +79,24 @@ struct Config
 	bool localTimestep = false;
 	bool multistageLimiting = false;
 	bool cflAdjust = false;
+	bool viscosity;
+	PhysicalConfig physicalConfig;
+}
+
+static double getDouble(T)(T val)
+{
+	if(val.type == JSON_TYPE.INTEGER)
+	{
+		return val.integer.to!double;
+	}
+	else if(val.type == JSON_TYPE.FLOAT)
+	{
+		return val.floating;
+	}
+	else
+	{
+		assert(false, "invalid type");
+	}
 }
 
 Config loadConfig(string conf)
@@ -84,27 +104,11 @@ Config loadConfig(string conf)
 	JSONValue jConfig = parseJSON(conf);
 	Config config;
 
-	double getDouble(T)(T val)
-	{
-		if(val.type == JSON_TYPE.INTEGER)
-		{
-			return val.integer.to!double;
-		}
-		else if(val.type == JSON_TYPE.FLOAT)
-		{
-			return val.floating;
-		}
-		else
-		{
-			assert(false, "invalid type");
-		}
-	}
-
 	config.meshFile = jConfig["mesh"].str;
 	config.limiter = jConfig["limiter"].str;
 	config.flux = jConfig["flux"].str;
 	config.dt = jConfig["dt"].floating;
-	config.tEnd = getDouble(jConfig["tEnd"]);
+	config.tEnd = jConfig["tEnd"].getDouble;
 	config.saveIter = jConfig["saveIter"].integer;
 	config.plotIter = jConfig["plotIter"].integer;
 
@@ -123,7 +127,7 @@ Config loadConfig(string conf)
 
 	try
 	{
-		config.CFL = getDouble(jConfig["CFL"]);
+		config.CFL = jConfig["CFL"].getDouble;
 	}
 	catch(Exception ex)
 	{
@@ -173,7 +177,7 @@ Config loadConfig(string conf)
 
 	try
 	{
-		config.lpThresh = getDouble(jConfig["lpThresh"]);
+		config.lpThresh = jConfig["lpThresh"].getDouble;
 	}
 	catch(Exception ex)
 	{
@@ -199,7 +203,7 @@ Config loadConfig(string conf)
 
 	try
 	{
-		config.aitkenTol = getDouble(jConfig["aitkenTol"]);
+		config.aitkenTol = jConfig["aitkenTol"].getDouble;
 	}
 	catch(Exception ex)
 	{
@@ -227,11 +231,40 @@ Config loadConfig(string conf)
 		config.cflAdjust = true;
 	}
 
+	try
+	{
+		config.viscosity = (jConfig["viscosity"].type == JSON_TYPE.TRUE);
+	}
+	catch(Exception ex)
+	{
+		writeln("viscosity not provided, disabling");
+		config.viscosity = false;
+	}
+
+	try
+	{
+		auto physConf = jConfig["physicalConfig"];
+		config.physicalConfig.Pr = physConf["Pr"].getDouble;
+		config.physicalConfig.R = physConf["R"].getDouble;
+		config.physicalConfig.gamma = physConf["gamma"].getDouble;
+		config.physicalConfig.Re = physConf["Re"].getDouble;
+		config.physicalConfig.L = physConf["L"].getDouble;
+	}
+	catch(Exception ex)
+	{
+		writeln("physicalConfig not provided, setting to defaults");
+		config.physicalConfig.Pr = 0.7;
+		config.physicalConfig.R = 8.3145;
+		config.physicalConfig.gamma = 1.4;
+		config.physicalConfig.Re = 1000;
+		config.physicalConfig.L = 1;
+	}
+
 	auto ics = jConfig["initialConditions"].array;
-	config.ic[0] = getDouble(ics[0]);
-	config.ic[1] = getDouble(ics[1]);
-	config.ic[2] = getDouble(ics[2]);
-	config.ic[3] = getDouble(ics[3]);
+	config.ic[0] = ics[0].getDouble;
+	config.ic[1] = ics[1].getDouble;
+	config.ic[2] = ics[2].getDouble;
+	config.ic[3] = ics[3].getDouble;
 
 	auto bcs = jConfig["boudaryConditions"].array;
 	for(uint i = 0; i < bcs.length; i++)
@@ -246,13 +279,17 @@ Config loadConfig(string conf)
 		{
 			config.bTypes ~= BoundaryType.InviscidWall;
 		}
+		else if(bType == "viscidWall")
+		{
+			config.bTypes ~= BoundaryType.ViscousWall;
+		}
 		else if(bType == "constP")
 		{
 			config.bTypes ~= BoundaryType.ConstPressure;
 		}
 
 		auto state = bcs[i]["q"].array;
-		config.bc ~= [getDouble(state[0]), getDouble(state[1]), getDouble(state[2]), getDouble(state[3])];
+		config.bc ~= [state[0].getDouble, state[1].getDouble, state[2].getDouble, state[3].getDouble];
 	}
 
 	return config;

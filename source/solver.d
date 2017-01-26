@@ -475,16 +475,22 @@ struct SolverState
 	}
 }
 
-@nogc void ufvmSetup(ref UMesh2 mesh, Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile)
+@nogc void ufvmSetup(ref UMesh2 mesh, ref Config config, double[] lastRho, double[] lastU, double[] lastV, double[] lastE, ref double t, ref double dt, string saveFile)
 {
 	double M = config.ic[0];
 	double aoa = config.ic[1] * (PI/180);
-	double p = 1.0;//config.ic[2];
 	double rho = config.ic[3];
-	double a = sqrt(gamma*(1.0/rho));
-	double U = M*a;
+	double U = 1.0;
+	double a = U/M;
+	double p = (rho*a^^2.0)/gamma;
 	double u = U*cos(aoa);
 	double v = U*sin(aoa);
+
+	if(config.viscosity)
+	{
+		config.physicalConfig.mu = (rho*U*config.physicalConfig.L)/config.physicalConfig.Re;
+		printf("mu = %f\n", config.physicalConfig.mu);
+	}
 
 	printf("M = %f\tU = %f\n", M, U);
 
@@ -493,12 +499,10 @@ struct SolverState
 		// Setup initial conditions
 		foreach(i; mesh.interiorCells)
 		{
-			//mesh.q[i] = buildQ(rho, u, v, p);
 			mesh.q[i][0] = rho;
-			mesh.q[i][1] = rho*M*cos(aoa);
-			mesh.q[i][2] = rho*M*sin(aoa);
-			mesh.q[i][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-			//mesh.q[i][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+			mesh.q[i][1] = rho*u;
+			mesh.q[i][2] = rho*v;
+			mesh.q[i][3] = p/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			lastRho[i] = mesh.q[i][0];
 			lastU[i] = mesh.q[i][1];
 			lastV[i] = mesh.q[i][2];
@@ -547,21 +551,22 @@ struct SolverState
 
 			M = config.bc[bcIdx][0];
 			aoa = config.bc[bcIdx][1] * (PI/180);
-			p = 1.0;//config.bc[bcIdx][2];
 			rho = config.bc[bcIdx][3];
-			a = sqrt(gamma*(1.0/rho));
-			U = M*a;
+
+			U = 1.0;
+			a = U/M;
+			p = (rho*a^^2.0)/gamma;
 			u = U*cos(aoa);
 			v = U*sin(aoa);
+
 			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.bTypes[bcIdx];
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
-				mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*M*cos(aoa);
-				mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*M*sin(aoa);
-				mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/((gamma - 1.0)*gamma) + M^^2.0/2.0;
-				//mesh.edges[mesh.bGroups[i][j]].q[1][3] = 1.0/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+				mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*u;
+				mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*v;
+				mesh.edges[mesh.bGroups[i][j]].q[1][3] = p/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
 			}
 		}
 	}
@@ -757,7 +762,15 @@ Datatype vec4dataType;
 				q[cellIdx2][3] = q[cellIdx][3];
 
 			 	break;
+			case ViscousWall:
+				auto cellIdx = edge.cellIdx[0];
 
+				auto cellIdx2 = edge.cellIdx[1];
+				q[cellIdx2][0] = q[cellIdx][0];
+				q[cellIdx2][1] = -q[cellIdx][1];
+				q[cellIdx2][2] = -q[cellIdx][2];
+				q[cellIdx2][3] = q[cellIdx][3];
+				break;
 			default:
 				enforce(false, "Unsupported boundary type");
 				break;
@@ -776,6 +789,20 @@ Datatype vec4dataType;
 	}
 
 	buildGradients(mesh.needCommCells);
+
+	foreach(commIdx, commCells; mesh.commCellSendIdx)
+	{
+		foreach(i, cell; commCells)
+		{
+			//Vector!2[4] gradient;
+			mesh.sendGradBuffers[commIdx][i] = Matrix!(4, 2)(mesh.cells[cell].gradient[0][0], mesh.cells[cell].gradient[0][1],
+															mesh.cells[cell].gradient[1][0], mesh.cells[cell].gradient[1][1],
+															mesh.cells[cell].gradient[2][0], mesh.cells[cell].gradient[2][1],
+															mesh.cells[cell].gradient[3][0], mesh.cells[cell].gradient[3][1]);
+		}
+	}
+	mesh.sendGradRequests.startall;
+	mesh.recvGradRequests.startall;
 
 	// need to do a half update of comm edges
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
@@ -819,7 +846,7 @@ Datatype vec4dataType;
 			}
 		}
 	}
-	
+
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
 		foreach(i, edge; commEdges)
@@ -876,11 +903,30 @@ Datatype vec4dataType;
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];
 
-				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				if(config.viscosity)
+				{
+					// @nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Vector!2[dims] dq, Vector!2 n)
+					// Vector!2[4] gradient;
+					auto qAve = 0.5*(qL + qR);
+					auto grad1 = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto grad2 = mesh.cells[mesh.edges[i].cellIdx[1]].gradient;
+					Vector!2[dims] dqAve;
+					foreach(j; 0..dims)
+					{
+						dqAve[j] = 0.5*(grad1[j] + grad2[j]);
+					}
+					auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
+					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
+				}
+				else
+				{
+					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				}
 
 				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 				enforce!EdgeException(!haveNan, "Got NaN on fullstate edge", mesh.edges[i]);
 				break;
+
 			case InviscidWall:
 				if(config.order == 1)
 				{
@@ -933,8 +979,74 @@ Datatype vec4dataType;
 				auto qR = q[mesh.edges[i].cellIdx[1]];
 				
 				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
-				enforce!EdgeException(!haveNan, "Got NaN on wall edge", mesh.edges[i]);
+				enforce!EdgeException(!haveNan, "Got NaN on inviscid wall edge", mesh.edges[i]);
 
+				break;
+
+			case ViscousWall:
+				if(config.order == 1)
+				{
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+					auto mid = mesh.edges[i].mid;
+					auto dx = mid[0] - centroid[0];
+					auto dy = mid[1] - centroid[1];
+
+					for(uint j = 0; j < dims; j++)
+					{
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+					}
+
+					if(getPressure(mesh.edges[i].q[0]) < 0)
+					{
+						double[2] lim = [1.0, 1.0];
+						for(uint j = 0; j < dims; j++)
+						{
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
+						}
+
+						for(uint j = 0; j < dims; j++)
+						{
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+						}
+					}
+				}
+
+				auto vel = 0.0;
+				double p = (gamma - 1)*(mesh.edges[i].q[0][3] - 0.5*mesh.edges[i].q[0][0]*vel^^2);
+				double a = sqrt(gamma*(p/mesh.edges[i].q[0][0]));
+				if(p < 0)
+				{
+					p = 1.0e-12;
+					//printf("pressure less than 0 at wall\n");
+				}
+
+				auto qL = mesh.edges[i].q[0];
+				auto qR = qL;//q[mesh.edges[i].cellIdx[1]];
+				qR[1] *= -1;
+				qR[2] *= -1;
+				mesh.edges[i].q[1] = qR;
+
+				auto qAve = 0.5*(qL + qR);
+				qAve[1] = 0.0;
+				qAve[2] = 0.0;
+
+				Vector!2[dims] dqAve = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+
+				auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
+
+				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
+				mesh.edges[i].sMax = std.math.abs(a);
+				
+				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
+				enforce!EdgeException(!haveNan, "Got NaN on viscous wall edge", mesh.edges[i]);
 				break;
 			default:
 				enforce(false, "Unsupported boundary type");
@@ -987,7 +1099,25 @@ Datatype vec4dataType;
 		auto qL = mesh.edges[i].q[0];
 		auto qR = mesh.edges[i].q[1];
 
-		mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+		if(config.viscosity)
+		{
+			// @nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Vector!2[dims] dq, Vector!2 n)
+			// Vector!2[4] gradient;
+			auto qAve = 0.5*(qL + qR);
+			auto grad1 = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+			auto grad2 = mesh.cells[mesh.edges[i].cellIdx[1]].gradient;
+			Vector!2[dims] dqAve;
+			foreach(j; 0..dims)
+			{
+				dqAve[j] = 0.5*(grad1[j] + grad2[j]);
+			}
+			auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
+			mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
+		}
+		else
+		{
+			mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+		}
 
 		immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 		enforce!EdgeException(!haveNan, "Got NaN on interior edge", mesh.edges[i]);
@@ -1002,6 +1132,18 @@ Datatype vec4dataType;
 		}
 	}
 
+	mesh.recvGradRequests.waitall(mesh.statuses);
+	foreach(commIdx, commCells; mesh.commCellRecvIdx)
+	{
+		foreach(i, cell; commCells)
+		{
+			mesh.cells[cell].gradient[0] = Vector!2(mesh.recvGradBuffers[commIdx][i][0, 0], mesh.recvGradBuffers[commIdx][i][0, 1]);
+			mesh.cells[cell].gradient[1] = Vector!2(mesh.recvGradBuffers[commIdx][i][1, 0], mesh.recvGradBuffers[commIdx][i][1, 1]);
+			mesh.cells[cell].gradient[2] = Vector!2(mesh.recvGradBuffers[commIdx][i][2, 0], mesh.recvGradBuffers[commIdx][i][2, 1]);
+			mesh.cells[cell].gradient[3] = Vector!2(mesh.recvGradBuffers[commIdx][i][3, 0], mesh.recvGradBuffers[commIdx][i][3, 1]);
+		}
+	}
+
 	foreach(commIdx, commEdges; mesh.commEdgeIdx)
 	{
 		foreach(i; commEdges)
@@ -1009,7 +1151,27 @@ Datatype vec4dataType;
 			auto qL = mesh.edges[i].q[0];
 			auto qR = mesh.edges[i].q[1];
 
-			mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+			if(config.viscosity)
+			{
+				// @nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Vector!2[dims] dq, Vector!2 n)
+				// Vector!2[4] gradient;
+				auto qAve = 0.5*(qL + qR);
+				auto grad1 = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+				auto grad2 = mesh.cells[mesh.edges[i].cellIdx[1]].gradient;
+				Vector!2[dims] dqAve;
+				foreach(j; 0..dims)
+				{
+					dqAve[j] = 0.5*(grad1[j] + grad2[j]);
+				}
+				auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
+				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
+			}
+			else
+			{
+				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+			}
+
+			//mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 
 			immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 			enforce!EdgeException(!haveNan, "Got NaN on comm edge", mesh.edges[i]);
@@ -1092,10 +1254,12 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		auto triMesh = umesh.triangulate;
 		auto triMap = triMesh[1];
 		auto tMesh = triMesh[0];
+
+		umesh.comm.barrier;
 		tMesh.buildMesh;
-
+		umesh.comm.barrier;
 		saveMatlabMesh(tMesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
-
+		umesh.comm.barrier;
 		final switch(config.limiter)
 		{
 			foreach(lim; limiterList)
