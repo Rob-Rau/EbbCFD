@@ -50,6 +50,73 @@ else
 		sw.start;
 	}
 }
+mixin template GenPrintf(S...)
+{
+	private string genPrintf()
+	{
+		alias pfArgs = AliasSeq!S;
+		string pfString = "@nogc void gpPrintf(S...)(S args)\n{\n\tprintf(\"";
+		string argsString;
+		foreach(i, pfArg; pfArgs)
+		{
+			pragma(msg, pfArg.stringof);
+			static if(is(pfArg: int) && !is(pfArg: uint))
+			{
+				pfString ~= `%d`;
+				argsString ~= `,args[`~i.to!string~`]`;
+			}
+			else static if(is(pfArg: uint))
+			{
+				pfString ~= `%u`;
+				argsString ~= `,args[`~i.to!string~`]`;
+			}
+			else static if(is(pfArg: long) && !is(pfArg: ulong))
+			{
+				pfString ~= `%ld`;
+				argsString ~= `,args[`~i.to!string~`]`;
+			}
+			else static if(is(pfArg: ulong))
+			{
+				pfString ~= `%llu`;
+				argsString ~= `,args[`~i.to!string~`]`;
+			}
+			else static if(is(pfArg: string))
+			{
+				pfString ~= `%s`;
+				argsString ~= `,args[`~i.to!string~`].ptr`;
+			}
+			else static if(isDynamicArray!pfArg)
+			{
+				pragma(msg, "dyn arr");
+			}
+		}
+
+		pfString ~= `\n"`~argsString~`);
+}`;
+		return pfString;
+	}
+	pragma(msg, genPrintf);
+	mixin(genPrintf);
+}
+
+void logln(S...)(S args)
+{
+	import core.stdc.stdio : fopen, fwrite, fopen, printf, snprintf;
+	version(Have_mpi)
+	{
+		int id;
+		MPI_Comm_rank(MPI_COMM_WORLD, &id);
+		//string pfString = GenPrintf!(args);
+		//mixin GenPrintf!(string, int, string, S);
+		//gpPrintf("Proc ", id, ": ", args);
+		//mixin GenPrintf!S;
+		writeln("Proc ", id, ": ", args);
+	}
+	else
+	{
+		writeln("Proc 0: ", args);
+	}
+}
 
 Datatype[string] customDataTypes;
 
@@ -126,20 +193,6 @@ int shutdown()
 	{
 		pragma(msg, "no mpi");
 		return 0;
-	}
-}
-
-void logln(S...)(S args)
-{
-	version(Have_mpi)
-	{
-		int id;
-		MPI_Comm_rank(MPI_COMM_WORLD, &id);
-		writeln("Proc ", id, ": ", args);
-	}
-	else
-	{
-		writeln("Proc 0: ", args);
 	}
 }
 
