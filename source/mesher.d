@@ -40,18 +40,20 @@ void main(string[] args)
 		return;
 	}
 
-	if(info)
+	UMesh2 mesh;
+	if(info || convert)
 	{
 		if(inFile == "")
 		{
 			writeln("No mesh file supplied, exiting");
 			return;
 		}
-
-		UMesh2 mesh = importMesh(inFile);
-
+		mesh = importMesh(inFile, false);
 		mesh.buildMesh;
+	}
 
+	if(info)
+	{
 		auto dAve = mesh.cells.sum!".d"/mesh.cells.length;
 
 		double x1 = -1.5;
@@ -86,21 +88,14 @@ void main(string[] args)
 			writeln("        faces: ", mesh.bGroups[i].length);
 		}
 	}
+	
 	if(convert)
 	{
-		if(inFile == "")
-		{
-			writeln("No file supplied, exiting");
-			return;
-		}
-
 		if(outFile == "")
 		{
 			writeln("No output file supplied, exiting");
 			return;
 		}
-
-		UMesh2 mesh = importMesh(inFile);
 
 		if(outFile.canFind("emsh"))
 		{

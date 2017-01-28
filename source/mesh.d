@@ -117,6 +117,8 @@ struct UMesh2
 	Status[] statuses;
 	CommEdgeNodes[][] commEdgeLists;
 
+	uint[] localToGlobalElementMap;
+
 	uint[][] commEdgeIdx;
 	uint[][] commCellSendIdx;
 	uint[][] commCellRecvIdx;
@@ -139,8 +141,6 @@ struct UMesh2
 	Vector!4[][] sendStateBuffers;
 	Vector!4[][] recvStateBuffers;
 
-	//Vector!4[][] sendStateBuffers;
-	//Vector!4[][] recvStateBuffers;
 	Matrix!(4,2)[][] sendGradBuffers;
 	Matrix!(4,2)[][] recvGradBuffers;
 
@@ -782,6 +782,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 			{
 				uint nElems = 0;
 				uint[][] localElements;
+				uint[] localToGlobalElementMap;
 				uint[] nodesPerElement;
 				double[][] localNodes;
 				uint[][] localbNodes;
@@ -837,6 +838,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 							nElems++;
 						}
 						localElements ~= localEl;
+						localToGlobalElementMap ~= j;
 					}
 				}
 
@@ -928,6 +930,8 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 					{
 						comm.sendArray(commEdge, i, partTag);
 					}
+
+					comm.sendArray(localToGlobalElementMap, i, partTag);
 				}
 				else
 				{
@@ -945,6 +949,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 					smallMesh.bTags = localbTag[];
 					smallMesh.commProc = commP;
 					smallMesh.commEdgeLists = commEdgeList;
+					smallMesh.localToGlobalElementMap = localToGlobalElementMap;
 					logln("Local elements: ", smallMesh.elements.length);
 				}
 
@@ -977,6 +982,8 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 			{
 				commEdgeList ~= comm.recvArray!CommEdgeNodes(0, partTag);
 			}
+
+			smallMesh.localToGlobalElementMap ~= comm.recvArray!uint(0, partTag);
 
 			smallMesh.commProc = commP;
 			smallMesh.commEdgeLists = commEdgeList;
@@ -1032,6 +1039,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 	}
 	else
 	{
+		bigMesh.localToGlobalElementMap = std.range.iota(0, bigMesh.elements.length).array;
 		return bigMesh;
 	}
 }

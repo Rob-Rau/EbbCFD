@@ -11,20 +11,82 @@ def importEbbSolution(slnFile):
 	slnMagic = struct.unpack(">I", slnF.read(4))[0]
 	slnVer = struct.unpack(">I", slnF.read(4))[0]
 	nCells = struct.unpack(">I", slnF.read(4))[0]
-
-	U = np.zeros((nCells, 4))
-
 	t = struct.unpack(">d", slnF.read(8))[0]
 	dt = struct.unpack(">d", slnF.read(8))[0]
 
-	for idx in range(nCells):
-		u1 = struct.unpack(">d", slnF.read(8))[0]
-		u2 = struct.unpack(">d", slnF.read(8))[0]
-		u3 = struct.unpack(">d", slnF.read(8))[0]
-		u4 = struct.unpack(">d", slnF.read(8))[0]
-		U[idx,:] = [u1, u2, u3, u4]
+	order = 1
+	sln = {}
+	sln['version'] = slnVer
 
-	return U
+	if(slnVer == 1):
+		sln['M'] = 4
+		print("version 1")
+		U = np.zeros((nCells, 4))
+
+		for idx in range(nCells):
+			u = []
+			for ui in range(4):
+				u.append(struct.unpack(">d", slnF.read(8))[0])
+			
+			U[idx,:] = u
+
+		sln['U'] = U
+
+	elif(slnVer == 2):
+		print("version 2")
+		M = struct.unpack(">I", slnF.read(4))[0]
+		sln['M'] = M
+		order = struct.unpack(">I", slnF.read(4))[0]
+
+		U = np.zeros((nCells, M))
+		gens = [] # global element numbers
+		edges = []
+		edgeVals = []
+
+		for idx in range(nCells):
+			# read global cell number and number of faces
+			gens.append(struct.unpack(">I", slnF.read(4))[0])
+			edges.append(struct.unpack(">B", slnF.read(1))[0])
+			# read cell average value
+			u = []
+			for ui in range(M):
+				u.append(struct.unpack(">d", slnF.read(8))[0])
+			
+			U[idx,:] = u
+
+			edgeVal = []
+			#read edge values
+			for en in range(edges[-1]):
+				u = []
+				for ui in range(M):
+					u.append(struct.unpack(">d", slnF.read(8))[0])
+
+				edgeVal.append(u)
+
+			edgeVals.append(edgeVal)
+
+		sln['U'] = U
+		sln['gens'] = gens
+		sln['edges'] = edges
+		sln['edgeVals'] = edgeVals
+
+	else:
+		raise Exception("Solution file version "+str(slnVer)+" is not supported")
+
+	sln['order'] = order
+	return sln
+
+def meshTypeSupported(meshFile):
+	if("mmsh" in meshFile):
+		return True
+	else:
+		return False
+
+def importMesh(meshFile):
+	if("mmsh" in meshFile):
+		return importEbbMatlabMesh(meshFile)
+	else:
+		raise Exception("Cannot import "+meshFile+". Unsupported file type")
 
 def importEbbMatlabMesh(meshFile):
 	
@@ -72,6 +134,7 @@ def importEbbMatlabMesh(meshFile):
 	mesh['V'] = V
 	mesh['E'] = E
 	mesh['BE'] = BE
+	mesh['IE'] = IE
 
 	return mesh
 	

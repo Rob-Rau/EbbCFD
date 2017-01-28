@@ -59,16 +59,31 @@ struct SlnHeader
 	uint dataPoints;
 	double t;
 	double dt;
+	uint M; // state vector size
+	uint slnOrder;
 }
 
-@nogc void saveSolution(Vector!4[] sln, char* filename, double t, double dt)
+const uint EbbCFDSolutionVersion = 2;
+
+@nogc void saveSolution(Vector!4[] sln, UMesh2 mesh, char* filename, double t, double dt, uint order)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)sln.length, t: t, dt: dt};
+	SlnHeader header = {slnVersion: EbbCFDSolutionVersion, dataPoints: cast(uint)mesh.interiorCells.length, t: t, dt: dt, M: 4, slnOrder: order};
 
-	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
+	ulong dataSize = 0;
+	foreach(i; mesh.interiorCells)
+	{
+		dataSize += uint.sizeof + ubyte.sizeof;
+		dataSize += 4*double.sizeof;
+		foreach(j; 0..mesh.cells[i].nEdges)
+		{
+			dataSize += 4*double.sizeof;
+		}
+	}
+
+	ulong totSize = SlnHeader.sizeof + dataSize + uint.sizeof + uint.sizeof;
 
 	ubyte[] buffer = cast(ubyte[])Mallocator.instance.allocate(cast(size_t)totSize);
 	scope(exit) Mallocator.instance.deallocate(buffer);
@@ -79,15 +94,43 @@ struct SlnHeader
 	buffer.write!uint(header.dataPoints, &offset);
 	buffer.write!double(header.t, &offset);
 	buffer.write!double(header.dt, &offset);
+	buffer.write!uint(header.M, &offset);
+	buffer.write!uint(header.slnOrder, &offset);
 
-	//for(uint i = 0; i < mesh.cells.length; i++)
-	//foreach(i; mesh.interiorCells)
-	foreach(q; sln)
+	foreach(i; mesh.interiorCells)
 	{
-		buffer.write!double(q[0], &offset);
-		buffer.write!double(q[1], &offset);
-		buffer.write!double(q[2], &offset);
-		buffer.write!double(q[3], &offset);
+		// save global cell num and number of edges of this cell
+		buffer.write!uint(mesh.localToGlobalElementMap[i], &offset);
+		buffer.write!ubyte(cast(ubyte)mesh.cells[i].nEdges, &offset);
+
+		// Save cell average value
+		buffer.write!double(sln[i][0], &offset);
+		buffer.write!double(sln[i][1], &offset);
+		buffer.write!double(sln[i][2], &offset);
+		buffer.write!double(sln[i][3], &offset);
+		// save out edge values
+		foreach(j; 0..mesh.cells[i].nEdges)
+		{
+			auto edge = mesh.edges[mesh.cells[i].edges[j]];
+			Vector!4 q;
+			if(edge.cellIdx[0] == i)
+			{
+				q = edge.q[0];
+			}
+			else if(edge.cellIdx[1] == i)
+			{
+				q = edge.q[1];
+			}
+			else
+			{
+				enforce(false, "Failed to match up edge to cell");
+			}
+
+			buffer.write!double(q[0], &offset);
+			buffer.write!double(q[1], &offset);
+			buffer.write!double(q[2], &offset);
+			buffer.write!double(q[3], &offset);
+		}
 	}
 
 	import std.digest.crc : CRC32;
@@ -172,7 +215,7 @@ struct SlnHeader
 	fclose(file);
 }
 
-@nogc bool loadSolution(ref UMesh2 mesh, ref double t, ref double dt, string filename)
+@nogc bool loadSolution(ref UMesh2 mesh, ref double t, ref double dt, string filename, bool globalMesh = false)
 {
 	import std.algorithm : canFind;
 	import std.bitmanip : peek;
@@ -207,7 +250,7 @@ struct SlnHeader
 	crc.put(buffer[0..4]);
 	uint dataPoints = buffer.peek!uint;
 
-	if(dataPoints != mesh.interiorCells.length)
+	if((dataPoints != mesh.interiorCells.length) && !globalMesh)
 	{
 		return false;
 	}
@@ -219,22 +262,91 @@ struct SlnHeader
 	crc.put(buffer[]);
 	dt = buffer.peek!double;
 
-	//for(uint i = 0; i < mesh.q.length; i++)
-	foreach(i; mesh.interiorCells)
+	if(slnVersion == 1)
 	{
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][0] = buffer.peek!double;
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][1] = buffer.peek!double;
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][2] = buffer.peek!double;
-		fread(buffer.ptr, 1, 8, file);
-		crc.put(buffer[]);
-		mesh.q[i][3] = buffer.peek!double;
+		foreach(i; mesh.interiorCells)
+		{
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			mesh.q[i][0] = buffer.peek!double;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			mesh.q[i][1] = buffer.peek!double;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			mesh.q[i][2] = buffer.peek!double;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			mesh.q[i][3] = buffer.peek!double;
+		}
 	}
+	else if(slnVersion == 2)
+	{
+		fread(buffer.ptr, 1, 4, file);
+		crc.put(buffer[]);
+		uint M = buffer.peek!uint;
+		fread(buffer.ptr, 1, 4, file);
+		crc.put(buffer[]);
+		uint order = buffer.peek!uint;
+
+		@nogc Vector!4 readVector()
+		{
+			Vector!4 q;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			q[0] = buffer.peek!double;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			q[1] = buffer.peek!double;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			q[2] = buffer.peek!double;
+			fread(buffer.ptr, 1, 8, file);
+			crc.put(buffer[]);
+			q[3] = buffer.peek!double;
+			return q;
+		}
+
+		foreach(uint i; 0..dataPoints)
+		{
+			fread(buffer.ptr, 1, 4, file);
+			crc.put(buffer[]);
+			auto gen = buffer.peek!uint;
+			fread(buffer.ptr, 1, 1, file);
+			crc.put(buffer[]);
+			auto N = buffer.peek!ubyte;
+			uint mshIdx = 0;
+			if(globalMesh)
+			{
+				mshIdx = gen;
+			}
+			else
+			{
+				mshIdx = i;
+			}
+
+			mesh.q[mshIdx] = readVector;
+			
+			foreach(j; 0..N)
+			{
+				auto edge = mesh.edges[mesh.cells[mshIdx].edges[j]];
+				Vector!4 q;
+				if(edge.cellIdx[0] == mshIdx)
+				{
+					mesh.edges[mesh.cells[mshIdx].edges[j]].q[0] = readVector;
+				}
+				else if(edge.cellIdx[1] == mshIdx)
+				{
+					mesh.edges[mesh.cells[mshIdx].edges[j]].q[1] = readVector;
+				}
+				else
+				{
+					enforce(false, "Failed to match up edge to cell");
+				}
+			}
+		}
+	}
+
 	//ubyte[4] readCrc32;
 	fread(buffer.ptr, 1, 4, file);
 	auto crc32 = crc.finish();
@@ -795,20 +907,7 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 	{
 		mesh.cells[i].nEdges = mesh.elements[i].length.to!uint;
 	}
-/+
-mesh.cells = new UCell2[nElems];
-	mesh.q = new Vector!4[nElems];
 
-	for(uint i = 0; i < nElems; i++)
-	{
-		mesh.cells[i].nEdges = faces;
-	}
-	mesh.elements = elements;
-	mesh.bNodes = bNodes;
-	mesh.bGroupStart = bGroupStart;
-	mesh.bTags = bTags;
-+/
-	//enforce(false, "Gmsh importer incomplete");
 	return mesh;
 }
 

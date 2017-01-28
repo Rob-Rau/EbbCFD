@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.4
+#!/usr/bin/env python3
 
 import re
 import struct
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
 	state = sys.argv[1]
 
-	meshIndicies = [i for i, s in enumerate(sys.argv) if 'mmsh' in s]
+	meshIndicies = [i for i, s in enumerate(sys.argv) if(eu.meshTypeSupported(s))]
 	slnIndicies = [i for i, s in enumerate(sys.argv) if 'sln' in s]
 
 	meshFiles = []
@@ -84,48 +84,58 @@ if __name__ == "__main__":
 	sort_nicely(meshFiles)
 	sort_nicely(slnFiles)
 
-#	meshFile = sys.argv[1]
-#	slnFile = sys.argv[2]
-#	state = sys.argv[3]
-#	plotSave = ""
-#
-#	if len(sys.argv) == 5:
-#		plotSave = sys.argv[4]
-
-#	mesh = eu.importEbbMatlabMesh(meshFile)
-#	U = eu.importEbbSolution(slnFile)
-#
-#	pu.plotstate(mesh, U, state, plotSave)
-
 	globalMin = float("inf")
 	globalMax = float("-inf")
 
+	combineSln = False
+	mesh = {}
+	
+	if((len(slnFiles) != len(meshFiles)) and (len(meshFiles) == 1)):
+		combineSln = True
+		mesh = eu.importMesh(meshFiles[0])
+	elif(len(slnFiles) != len(meshFiles)):
+		raise Exception("different number of solution files and mesh files! aborting")
+		
+
 	slns = []
+	combinedSln = {}
+	U = []
+	edgeVals = []
+	edges = []
+
+	M = 0
+	uAlloced = False
 	for slnFile in slnFiles:
 		sln = eu.importEbbSolution(slnFile)
-		F = pu.getField(sln, state)
-		minVal = np.min(F)
-		print("minVal = "+str(minVal))
-		globalMin = min(globalMin, minVal)
+		if((sln['version'] == 1) and combineSln):
+			raise Exception("Cannot recombine solution files with file version 1")
 
-		maxVal = np.max(F)
-		print("maxVal = "+str(maxVal))
-		globalMax = max(globalMax, maxVal)
+		if(not combineSln):
+			F = pu.getField(sln['U'], state)
+			minVal = np.min(F)
+			globalMin = min(globalMin, minVal)
 
-		slns.append(sln)
+			maxVal = np.max(F)
+			globalMax = max(globalMax, maxVal)
 
-	globalMin = globalMin - 0.001
-	globalMax = globalMax + 0.001
+			slns.append(sln)
+		else:
+			raise Exception("Recombing solutions not yet supported")
 
 	print("globalMin = "+str(globalMin))
 	print("globalMax = "+str(globalMax))
+	
+	globalMin = globalMin - 0.001
+	globalMax = globalMax + 0.001
+
 	colors = ['k', 'b', 'g', 'c', 'y', 'm', 'r']
 
 	f = plt.figure(figsize=(12,6))
-	
+
 	for idx in range(len(meshFiles)):
-		mesh = eu.importEbbMatlabMesh(meshFiles[idx])
-		plotstate(mesh, slns[idx], state, "", globalMin, globalMax, colors[idx%len(colors)])
+		if(not combineSln):
+			mesh = eu.importMesh(meshFiles[idx])
+		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)])
 		plt.hold(True)
 
 	plt.colorbar()

@@ -12,7 +12,8 @@
 			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/plotter.d",
-				"source/post.d"
+				"source/post.d",
+				"source/reconstruct.d"
 			],
 			"name": "solver",
 			"targetName": "ebb-solve",
@@ -22,7 +23,8 @@
 			"excludedSourceFiles": [
 				"source/solver.d",
 				"source/plotter.d",
-				"source/post.d"
+				"source/post.d",
+				"source/reconstruct.d"
 			],
 			"name": "mesher",
 			"targetName": "ebb-mesh",
@@ -32,7 +34,8 @@
 			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/solver.d",
-				"source/post.d"
+				"source/post.d",
+				"source/reconstruct.d"
 			],
 			"name": "plotter",
 			"targetName": "ebb-plot",
@@ -42,10 +45,22 @@
 			"excludedSourceFiles": [
 				"source/mesher.d",
 				"source/solver.d",
-				"source/plotter.d"
+				"source/plotter.d",
+				"source/reconstruct.d"
 			],
 			"name": "post",
 			"targetName": "ebb-post",
+			"targetType": "executable"
+		},
+		{
+			"excludedSourceFiles": [
+				"source/mesher.d",
+				"source/solver.d",
+				"source/plotter.d",
+				"source/post.d"
+			],
+			"name": "recon",
+			"targetName": "ebb-reconstruct",
 			"targetType": "executable"
 		}
 	],
@@ -63,11 +78,11 @@
 			"dflags": ["-O5", "-I/home/rrau/numd"],
 			"lflags": ["-L/usr/lib64", "-L$HOME/lib", "-L$HOME/ldc2-1.0.0-linux-x86_64/lib", "-L$PARMETIS_LIB", "-L$METIS_LIB", "-L$MPI_HOME/lib"]
 		},
-                "prof-release": {
-                        "buildOptions": ["releaseMode", "inline", "optimize"],
-                        "dflags": ["-I/home/rrau/numd", "-profile"],
-                        "lflags": ["-L/usr/lib64", "-L$HOME/lib", "-L$HOME/ldc2-1.0.0-linux-x86_64/lib", "-L$PARMETIS_LIB", "-L$METIS_LIB", "-L$MPI_HOME/lib"]
-                },
+		"prof-release": {
+				"buildOptions": ["releaseMode", "inline", "optimize"],
+				"dflags": ["-I/home/rrau/numd", "-profile"],
+				"lflags": ["-L/usr/lib64", "-L$HOME/lib", "-L$HOME/ldc2-1.0.0-linux-x86_64/lib", "-L$PARMETIS_LIB", "-L$METIS_LIB", "-L$MPI_HOME/lib"]
+		},
 		"ldc-release-prof": {
 			"buildOptions": ["releaseMode", "inline", "debugInfo"],
 			"dflags": ["-O5"]
