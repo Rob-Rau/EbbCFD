@@ -159,7 +159,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 	}
 	finally
 	{
-		writeln("exiting");
+
 	}
 }
 
@@ -184,9 +184,9 @@ int main(string[] args)
 	mesh.buildMesh;
 
 	double dt, t;
+	
 	foreach(i, slnFile; slnFiles)
 	{
-		writeln("file ", i);
 		enforce(loadSolution(mesh, t, dt, slnFile, true), "Failed to load solution file: "~slnFile);
 	}
 
@@ -194,20 +194,53 @@ int main(string[] args)
 	stepMesh(mesh, config, t, dt);
 	Vector!dims[] nodeVals;
 	uint[] edgeNodeIdx = new uint[mesh.edges.length];
+	double[][] edgeNodes;
+	Vector!dims[] edgeVals;
+	
+	uint[] centroidNodeIdx = new uint[mesh.cells.length];
+	double[][] centroidNodes;
+	//Vector!dims[] centroidVals;
+
+	int[] newNodeMap = new int[mesh.nodes.length];
+	newNodeMap[] = -1;
+	double[][] newNodes;
+	size_t[][] nodeCells;
 	foreach(i, node; mesh.nodes)
 	{
 		size_t[] cells;
 		foreach(j, element; mesh.elements)
 		{
-			auto elIdx = element.canFind(i+1);
+			auto elIdx = element.countUntil(i+1);
 			if(elIdx >= 0)
 			{
 				cells ~= j;
 			}
 		}
+		if(cells.length > 0)
+		{
+			// Not all nodes will neccessarily be associated with an element
+			// so we need to remove orphaned nodes.
+			newNodes ~= node;
+			newNodeMap[i] = newNodes.length.to!int;
+			nodeCells ~= cells;
+		}
+	}
 
+	// Remap element list to new node list
+	foreach(i; 0..mesh.elements.length)
+	{
+		foreach(j; 0..mesh.elements[i].length)
+		{
+			mesh.elements[i][j] = newNodeMap[mesh.elements[i][j]-1].to!uint;
+		}
+	}
+
+	// run through the nodes and compute node averaged values using
+	// second order gradient reconstruction.
+	foreach(i, node; newNodes)
+	{
 		auto nodeVal = Vector!dims(0);
-		foreach(cell; cells)
+		foreach(cell; nodeCells[i])
 		{
 			auto qM = mesh.q[cell];
 			auto grad = mesh.cells[cell].gradient;
@@ -222,12 +255,25 @@ int main(string[] args)
 				nodeVal[j] += qM[j] + mesh.cells[cell].lim[j][0]*grad[j][0]*dx + 
 									  mesh.cells[cell].lim[j][1]*grad[j][1]*dy;
 			}
-
-
 		}
-		nodeVal *= (1.0/cells.length);
+		nodeVal *= (1.0/nodeCells[i].length);
 		nodeVals ~= nodeVal;
 	}
 
+	foreach(i; 0..mesh.edges.length)
+	{
+		edgeNodes ~= [mesh.edges[i].mid[0], mesh.edges[i].mid[0]];
+		edgeVals ~= 0.5*(mesh.edges[i].q[0] + mesh.edges[i].q[1]);
+		edgeNodeIdx ~= (newNodes.length + i).to!uint;
+	}
+
+	foreach(i; 0..mesh.cells.length)
+	{
+		centroidNodes ~= [mesh.cells[i].centroid[0], mesh.cells[i].centroid[0]];
+		//centroidVals ~= 0.5*(mesh.q[i] + mesh.edges[i].q[1]);
+		centroidNodeIdx ~= (newNodes.length + edgeNodes.length + i).to!uint;
+	}
+
+	writeln("exiting");
 	return shutdown;
 }
