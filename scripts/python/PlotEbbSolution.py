@@ -137,8 +137,6 @@ if __name__ == "__main__":
 	for idx in range(len(meshFiles)):
 		if(not combineSln):
 			mesh = eu.importMesh(meshFiles[idx])
-		print(slns[idx]['U'].shape)
-		print(mesh['V'].shape)
 		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)])
 		plt.hold(True)
 

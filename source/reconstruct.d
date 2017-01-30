@@ -185,13 +185,9 @@ int main(string[] args)
 	import std.path : dirName, asAbsolutePath;
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
-	auto meshFile = "/";//configFile.dirName.asAbsolutePath.to!string;
-	writeln(meshFile);
+	auto meshFile = "/";
 	meshFile = configFile.dirName.asAbsolutePath.to!string ~ meshFile;
-	writeln(meshFile);
 	meshFile ~= config.meshFile;
-	writeln("Importing ", meshFile);
-	
 	UMesh2 mesh = importMesh(meshFile);
 	mesh.buildMesh;
 
