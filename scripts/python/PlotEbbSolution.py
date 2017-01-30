@@ -36,8 +36,10 @@ def plotstate(Mesh, U, field, fname, clim1, clim2, color):
 	#f = plt.figure(figsize=(12,6))
 	F = pu.getField(U, field)
 	
-	#plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, edgecolors=color, shading='flat', vmin=clim1, vmax=clim2, linewidth=1)
-	plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat', vmin=clim1, vmax=clim2, linewidth=1)
+	if(F.shape[0] == V.shape[0]):
+		plt.tripcolor(V[:,0], V[:,1], F, triangles=E, shading='gouraud', edgecolors=color, vmin=clim1, vmax=clim2, linewidth=1)
+	else:
+		plt.tripcolor(V[:,0], V[:,1], triangles=E, facecolors=F, shading='flat', vmin=clim1, vmax=clim2, linewidth=1)
 
 	for i in range(len(BE)):
 		x = [V[BE[i,0],0], V[BE[i,1],0]]
@@ -135,6 +137,8 @@ if __name__ == "__main__":
 	for idx in range(len(meshFiles)):
 		if(not combineSln):
 			mesh = eu.importMesh(meshFiles[idx])
+		print(slns[idx]['U'].shape)
+		print(mesh['V'].shape)
 		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)])
 		plt.hold(True)
 

@@ -178,9 +178,21 @@ int main(string[] args)
 	string[] slnFiles = args[2..$];
 	slnFiles = slnFiles.sort!`a.chomp(".esln")[a.lastIndexOf('_')+1..$].to!int < b.chomp(".esln")[b.lastIndexOf('_')+1..$].to!int`.array;
 
+	auto saveNum = slnFiles[0].split("_")[$-2];
+	writeln("saveNum: ", saveNum);
+	string savePrefix = "recon_save_"~saveNum;
+
+	import std.path : dirName, asAbsolutePath;
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
-	UMesh2 mesh = importMesh(config.meshFile);
+	auto meshFile = "/";//configFile.dirName.asAbsolutePath.to!string;
+	writeln(meshFile);
+	meshFile = configFile.dirName.asAbsolutePath.to!string ~ meshFile;
+	writeln(meshFile);
+	meshFile ~= config.meshFile;
+	writeln("Importing ", meshFile);
+	
+	UMesh2 mesh = importMesh(meshFile);
 	mesh.buildMesh;
 
 	double dt, t;
@@ -193,23 +205,24 @@ int main(string[] args)
 	immutable size_t dims = 4;
 	stepMesh(mesh, config, t, dt);
 	Vector!dims[] nodeVals;
-	uint[] edgeNodeIdx = new uint[mesh.edges.length];
+	uint[] edgeNodeIdx;
 	double[][] edgeNodes;
 	Vector!dims[] edgeVals;
 	
-	uint[] centroidNodeIdx = new uint[mesh.cells.length];
+	uint[] centroidNodeIdx;
 	double[][] centroidNodes;
-	//Vector!dims[] centroidVals;
 
 	int[] newNodeMap = new int[mesh.nodes.length];
 	newNodeMap[] = -1;
 	double[][] newNodes;
 	size_t[][] nodeCells;
+	bool[] isBnode;
 	foreach(i, node; mesh.nodes)
 	{
 		size_t[] cells;
 		foreach(j, element; mesh.elements)
 		{
+			enforce(!element.canFind(0), "found 0 element");
 			auto elIdx = element.countUntil(i+1);
 			if(elIdx >= 0)
 			{
@@ -223,6 +236,15 @@ int main(string[] args)
 			newNodes ~= node;
 			newNodeMap[i] = newNodes.length.to!int;
 			nodeCells ~= cells;
+			isBnode ~= false;
+			foreach(bNode; mesh.bNodes)
+			{
+				if(bNode.canFind(i))
+				{
+					isBnode[$-1] = true;
+					break;
+				}
+			}
 		}
 	}
 
@@ -231,48 +253,132 @@ int main(string[] args)
 	{
 		foreach(j; 0..mesh.elements[i].length)
 		{
+			enforce(newNodeMap[mesh.elements[i][j]-1] != -1, "negative mapping at i: "~i.to!string~" j: "~j.to!string);
 			mesh.elements[i][j] = newNodeMap[mesh.elements[i][j]-1].to!uint;
 		}
 	}
 
+	// Remap bNode list to new node list
+	foreach(i; 0..mesh.bNodes.length)
+	{
+		foreach(j; 0..mesh.bNodes[i].length)
+		{
+			enforce(newNodeMap[mesh.bNodes[i][j]] != -1, "negative mapping at i: "~i.to!string~" j: "~j.to!string);
+			mesh.bNodes[i][j] = newNodeMap[mesh.bNodes[i][j]].to!uint - 1;
+		}
+	}
+
+	foreach(i; 0..mesh.edges.length)
+	{
+		edgeNodes ~= [mesh.edges[i].mid[0], mesh.edges[i].mid[1]];
+		edgeVals ~= 0.5*(mesh.edges[i].q[0] + mesh.edges[i].q[1]);
+	}
+
+	writeln("mesh.bNodes.length = ", mesh.bNodes.length);
+	writeln("mesh.boundaryEdges.length = ", mesh.boundaryEdges.length);
 	// run through the nodes and compute node averaged values using
 	// second order gradient reconstruction.
 	foreach(i, node; newNodes)
 	{
 		auto nodeVal = Vector!dims(0);
-		foreach(cell; nodeCells[i])
+		if(!isBnode[i])
 		{
-			auto qM = mesh.q[cell];
-			auto grad = mesh.cells[cell].gradient;
-			auto centroid = mesh.cells[cell].centroid;
-			auto nodeCoords = Vector!2(node[0], node[1]);
-
-			auto dx = nodeCoords[0] - centroid[0];
-			auto dy = nodeCoords[1] - centroid[1];
-
-			for(uint j = 0; j < dims; j++)
+			foreach(cell; nodeCells[i])
 			{
-				nodeVal[j] += qM[j] + mesh.cells[cell].lim[j][0]*grad[j][0]*dx + 
-									  mesh.cells[cell].lim[j][1]*grad[j][1]*dy;
+				auto qM = mesh.q[cell];
+				auto grad = mesh.cells[cell].gradient;
+				auto centroid = mesh.cells[cell].centroid;
+				auto nodeCoords = Vector!2(node[0], node[1]);
+
+				auto dx = nodeCoords[0] - centroid[0];
+				auto dy = nodeCoords[1] - centroid[1];
+
+				for(uint j = 0; j < dims; j++)
+				{
+					nodeVal[j] += qM[j] + mesh.cells[cell].lim[j][0]*grad[j][0]*dx + 
+										mesh.cells[cell].lim[j][1]*grad[j][1]*dy;
+				}
 			}
+			nodeVal *= (1.0/nodeCells[i].length);
+			nodeVals ~= nodeVal;
 		}
-		nodeVal *= (1.0/nodeCells[i].length);
-		nodeVals ~= nodeVal;
+		else
+		{
+			uint numEdges = 0;
+			foreach(cell; nodeCells[i])
+			{
+				foreach(edgeIdx; 0..mesh.cells[cell].nEdges)
+				{
+					auto n1 = mesh.elements[cell][edgeIdx];
+					auto n2 = mesh.elements[cell][(edgeIdx+1)%mesh.cells[cell].nEdges];
+					if(mesh.edges[mesh.cells[cell].edges[edgeIdx]].isBoundary && ((n1 == i+1) || (n2 == i+1)))
+					{
+						nodeVal += edgeVals[mesh.cells[cell].edges[edgeIdx]];
+						numEdges++;
+					}
+				}
+				
+			}
+			enforce(numEdges == 2, "node is connected to more than 2 edges somehow");
+			nodeVal *= (1.0/numEdges);
+			nodeVals ~= nodeVal;
+		}
 	}
 
 	foreach(i; 0..mesh.edges.length)
 	{
-		edgeNodes ~= [mesh.edges[i].mid[0], mesh.edges[i].mid[0]];
-		edgeVals ~= 0.5*(mesh.edges[i].q[0] + mesh.edges[i].q[1]);
-		edgeNodeIdx ~= (newNodes.length + i).to!uint;
+		edgeNodeIdx ~= (newNodes.length + i + 1).to!uint;
+	}
+	enforce(edgeNodeIdx.length == mesh.edges.length, "edge node index map and edges lengths don't match");
+
+	foreach(i; mesh.interiorCells)
+	{
+		centroidNodes ~= [mesh.cells[i].centroid[0], mesh.cells[i].centroid[1]];
+		centroidNodeIdx ~= (newNodes.length + edgeNodes.length + i + 1).to!uint;
+	}
+	enforce(centroidNodeIdx.length == mesh.interiorCells.length, "centroid node index map and edges lengths don't match");
+
+	auto reconNodes = newNodes ~ edgeNodes ~ centroidNodes;
+	auto reconQ = nodeVals ~ edgeVals ~ mesh.q[0..mesh.interiorCells.length];
+
+	enforce(reconNodes.length == reconQ.length, "different number of nodes and solution points");
+	uint[][] reconElements;
+
+	UMesh2 reconMesh;
+	foreach(i, element; mesh.elements)
+	{
+		auto cell = mesh.cells[i];
+		enforce(element.length == cell.nEdges, "Element and edge count don't match");
+		foreach(j; 0..cell.nEdges)
+		{
+			auto n1 = element[j];
+			auto n2 = element[(j + 1)%cell.nEdges];
+			auto edgeIdx = cell.edges[j];
+			auto en = edgeNodeIdx[edgeIdx];
+			auto cn = centroidNodeIdx[i];
+			enforce(![n1, en, cn].canFind(-1), "found negative element 1 indicie: "~[n1, en, cn].to!string);
+			enforce(![en, n2, cn].canFind(-1), "found negative element 2 indicie: "~[n1, en, cn].to!string);
+			enforce(![n1, en, cn].canFind(0), "found zero element 1 indicie: "~[n1, en, cn].to!string);
+			enforce(![en, n2, cn].canFind(0), "found zero element 2 indicie: "~[n1, en, cn].to!string);
+			reconElements ~= [n1, en, cn];
+			reconElements ~= [en, n2, cn];
+		}
 	}
 
-	foreach(i; 0..mesh.cells.length)
+	reconMesh.nodes = reconNodes;
+	reconMesh.elements = reconElements;
+	reconMesh.q = reconQ;
+
+	reconMesh.cells = new UCell2[reconMesh.nodes.length];
+	reconMesh.interiorCells = std.range.iota(0, reconMesh.nodes.length).array.to!(uint[]);
+	reconMesh.localToGlobalElementMap = std.range.iota(0, reconMesh.nodes.length).array.to!(uint[]);
+	foreach(i; 0..reconMesh.cells.length)
 	{
-		centroidNodes ~= [mesh.cells[i].centroid[0], mesh.cells[i].centroid[0]];
-		//centroidVals ~= 0.5*(mesh.q[i] + mesh.edges[i].q[1]);
-		centroidNodeIdx ~= (newNodes.length + edgeNodes.length + i).to!uint;
+		reconMesh.cells[i].nEdges = 0;
 	}
+
+	saveMatlabMesh(reconMesh, "recon_"~config.meshFile.split(".")[0]~".mmsh");
+	saveSolution(reconMesh.q, reconMesh, cast(char*)(savePrefix~".esln").toStringz, t, dt, cast(uint)config.order);
 
 	writeln("exiting");
 	return shutdown;
