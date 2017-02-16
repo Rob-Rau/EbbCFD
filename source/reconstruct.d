@@ -47,19 +47,16 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 		{
 			@nogc uint findBcIndex(string tag)
 			{
-				for(uint j = 0; j < config.bTags.length; j++)
+				auto tagIdx = config.boundaries.countUntil!"a.bTag == b"(tag);
+				if(tagIdx < 0)
 				{
-					if(config.bTags[j] == tag)
-					{
-						return j;
-					}
+					char[64] str;
+					str[] = '\0';
+					str[0..tag.length] = tag[];
+					printf("Could not find tag %s\n", str.ptr);
+					enforce(false, "Could not find matching boundary condition tag");
 				}
-				char[64] str;
-				str[] = '\0';
-				str[0..tag.length] = tag[];
-				printf("Could not find tag %s\n", str.ptr);
-				enforce(false, "Could not find matching boundary condition tag:");
-				assert(false);
+				return cast(uint)tagIdx;
 			}
 
 			uint bcIdx = findBcIndex(mesh.bTags[i]);
@@ -67,11 +64,11 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 			for(uint j = 0; j < mesh.bGroups[i].length; j++)
 			{
 				enforce(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
-				enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.bTags[bcIdx], "Incorrect boundary tag");
+				enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.boundaries[bcIdx].bTag, "Incorrect boundary tag");
 
-				M = config.bc[bcIdx][0];
-				aoa = config.bc[bcIdx][1] * (PI/180);
-				rho = config.bc[bcIdx][3];
+				M = config.boundaries[bcIdx].boundaryData[0];
+				aoa = config.boundaries[bcIdx].boundaryData[1] * (PI/180);
+				rho = config.boundaries[bcIdx].boundaryData[3];
 
 				U = 1.0;
 				a = U/M;
@@ -79,7 +76,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 				u = U*cos(aoa);
 				v = U*sin(aoa);
 
-				mesh.edges[mesh.bGroups[i][j]].boundaryType = config.bTypes[bcIdx];
+				mesh.edges[mesh.bGroups[i][j]].boundaryType = config.boundaries[bcIdx].type;
 
 				if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 				{
@@ -87,6 +84,11 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 					mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*u;
 					mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*v;
 					mesh.edges[mesh.bGroups[i][j]].q[1][3] = p/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+				}
+				else if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.ConstPressure)
+				{
+					enforce(config.boundaries[bcIdx].boundaryData.length == 1, "Constant pressure boundary data should only have one element; the constant pressure");
+					mesh.edges[mesh.bGroups[i][j]].bData = config.boundaries[bcIdx].boundaryData;
 				}
 			}
 		}
@@ -291,8 +293,8 @@ int main(string[] args)
 
 				for(uint j = 0; j < dims; j++)
 				{
-					nodeVal[j] += qM[j] + mesh.cells[cell].lim[j][0]*grad[j][0]*dx + 
-										mesh.cells[cell].lim[j][1]*grad[j][1]*dy;
+					nodeVal[j] += qM[j] + mesh.cells[cell].lim[j][0]*grad[j,0]*dx + 
+										  mesh.cells[cell].lim[j][1]*grad[j,1]*dy;
 				}
 			}
 			nodeVal *= (1.0/nodeCells[i].length);

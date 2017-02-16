@@ -49,10 +49,6 @@ struct Edge
 	// Flux on this edge
 	Vector!4 flux;
 
-	// Values for viscous flux calc
-	Vector!4 qAve;
-	Vector!2[4] gradient;
-
 	// This is a boundary edg1e
 	bool isBoundary;
 	string boundaryTag;
@@ -73,8 +69,9 @@ struct UCell2
 	uint[6] edges;
 	double[6] fluxMultiplier;
 	uint[6] neighborCells;
-	Matrix!(2, 6) gradMat;
-	Vector!2[4] gradient;
+	Matrix!(2,6) gradMat;
+	//Vector!2[4] gradient;
+	Matrix!(4,2) gradient;
 	Vector!2[4] lim;
 	double[4] gradErr;
 	bool[4] useLP;
@@ -359,7 +356,8 @@ struct UMesh2
 				yr = otherCell.centroid[1];
 			}
 			cell.centroid = Vector!2(xr, yr);
-			cell.gradient[] = Vector!2(0);
+			//cell.gradient[] = Vector!2(0);
+			cell.gradient = Matrix!(4, 2)(0);
 			cell.nNeighborCells = 1;
 			cell.lim[] = Vector!2(1.0);
 			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
@@ -1043,7 +1041,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 	}
 	else
 	{
-		bigMesh.localToGlobalElementMap = std.range.iota(0, bigMesh.elements.length).array;
+		bigMesh.localToGlobalElementMap = std.range.iota(0, bigMesh.elements.length).array.to!(uint[]);
 		return bigMesh;
 	}
 }

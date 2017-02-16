@@ -319,7 +319,9 @@ Datatype vec4dataType;
 
 				for(uint j = 0; j < 4; j++)
 				{
-					mesh.cells[i].gradient[j] = mesh.cells[i].gradMat*du[j];
+					auto tmpGrad = mesh.cells[i].gradMat*du[j];
+					mesh.cells[i].gradient[j,0] = tmpGrad[0];
+					mesh.cells[i].gradient[j,1] = tmpGrad[1];
 				}
 
 				if(config.limited && limit)
@@ -340,15 +342,15 @@ Datatype vec4dataType;
 						for(uint k = 0; k < dims; k++)
 						{
 							double s = 1.0;
-							qE[k] = qM[k] + (grad[k][0]*dx + grad[k][1]*dy);
+							qE[k] = qM[k] + (grad[k,0]*dx + grad[k,1]*dy);
 
 							if(qE[k] < minQ[k])
 							{
-								s = (minQ[k] - qM[k])/(grad[k][0]*dx + grad[k][1]*dy);
+								s = (minQ[k] - qM[k])/(grad[k,0]*dx + grad[k,1]*dy);
 							}
 							else if(qE[k] > maxQ[k])
 							{
-								s = (maxQ[k] - qM[k])/(grad[k][0]*dx + grad[k][1]*dy);
+								s = (maxQ[k] - qM[k])/(grad[k,0]*dx + grad[k,1]*dy);
 							}
 
 							if(s < 0)
@@ -374,7 +376,7 @@ Datatype vec4dataType;
 							{
 								auto A = Matrix!(10,2)(0);
 								auto b = Vector!10(0);
-								auto c = Vector!2(-abs(mesh.cells[i].gradient[k][0]), -abs(mesh.cells[i].gradient[k][1]));
+								auto c = Vector!2(-abs(mesh.cells[i].gradient[k,0]), -abs(mesh.cells[i].gradient[k,1]));
 								auto xk = Vector!2(0);
 								A[0,0] = 1;
 								A[0,1] = 0;
@@ -393,13 +395,13 @@ Datatype vec4dataType;
 								{
 									immutable uint cellIdx = mesh.cells[i].neighborCells[j];
 
-									A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
-									A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
+									A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
 									
 									b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
 
-									A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k][0];
-									A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k][1];
+									A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
+									A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
 									
 									b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
 								}
@@ -417,9 +419,9 @@ Datatype vec4dataType;
 				
 					for(uint j = 0; j < 4; j++)
 					{
-						mesh.cells[i].gradErr[j] = -abs(mesh.cells[i].gradient[j][0])*mesh.cells[i].lim[j][0] +
-												-abs(mesh.cells[i].gradient[j][1])*mesh.cells[i].lim[j][1] + 
-													abs(mesh.cells[i].gradient[j][0]) + abs(mesh.cells[i].gradient[j][1]);
+						mesh.cells[i].gradErr[j] = -abs(mesh.cells[i].gradient[j,0])*mesh.cells[i].lim[j][0] +
+												-abs(mesh.cells[i].gradient[j,1])*mesh.cells[i].lim[j][1] + 
+													abs(mesh.cells[i].gradient[j,0]) + abs(mesh.cells[i].gradient[j,1]);
 					}
 				}
 			}
@@ -560,12 +562,10 @@ Datatype vec4dataType;
 	{
 		foreach(i, cell; commCells)
 		{
-			mesh.sendGradBuffers[commIdx][i] = Matrix!(4, 2)(mesh.cells[cell].gradient[0][0], mesh.cells[cell].gradient[0][1],
-															mesh.cells[cell].gradient[1][0], mesh.cells[cell].gradient[1][1],
-															mesh.cells[cell].gradient[2][0], mesh.cells[cell].gradient[2][1],
-															mesh.cells[cell].gradient[3][0], mesh.cells[cell].gradient[3][1]);
+			mesh.sendGradBuffers[commIdx][i] = mesh.cells[cell].gradient;
 		}
 	}
+	
 	mesh.sendGradRequests.startall;
 	mesh.recvGradRequests.startall;
 
@@ -590,8 +590,8 @@ Datatype vec4dataType;
 				
 				for(uint j = 0; j < dims; j++)
 				{
-					mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-													mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+					mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j,0]*dx + 
+													mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j,1]*dy;
 				}
 
 				if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -605,7 +605,7 @@ Datatype vec4dataType;
 
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+						mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[1]*grad[j,1]*dy;
 					}
 				}
 			}
@@ -646,8 +646,8 @@ Datatype vec4dataType;
 					
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j,0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j,1]*dy;
 					}
 
 					if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -660,7 +660,7 @@ Datatype vec4dataType;
 						}
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[0]*grad[j][1]*dy;
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[0]*grad[j,1]*dy;
 						}
 					}
 				}
@@ -670,17 +670,11 @@ Datatype vec4dataType;
 
 				if(config.viscosity)
 				{
-					// @nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Vector!2[dims] dq, Vector!2 n)
-					// Vector!2[4] gradient;
 					auto qAve = 0.5*(qL + qR);
 					auto grad1 = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
 					auto grad2 = mesh.cells[mesh.edges[i].cellIdx[1]].gradient;
+					auto dqAve = 0.5*(grad1 + grad2);
 
-					Vector!2[dims] dqAve;
-					foreach(j; 0..dims)
-					{
-						dqAve[j] = 0.5*(grad1[j] + grad2[j]);
-					}
 					auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
 					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
 				}
@@ -709,8 +703,8 @@ Datatype vec4dataType;
 
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j,0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j,1]*dy;
 					}
 
 					if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -724,7 +718,7 @@ Datatype vec4dataType;
 
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[1]*grad[j,1]*dy;
 						}
 					}
 				}
@@ -765,8 +759,8 @@ Datatype vec4dataType;
 
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j][0]*dx + 
-														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j][1]*dy;
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j,0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j,1]*dy;
 					}
 
 					if(getPressure(mesh.edges[i].q[0]) < 0)
@@ -780,7 +774,7 @@ Datatype vec4dataType;
 
 						for(uint j = 0; j < dims; j++)
 						{
-							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[1]*grad[j,1]*dy;
 						}
 					}
 				}
@@ -804,11 +798,11 @@ Datatype vec4dataType;
 				qAve[1] = 0.0;
 				qAve[2] = 0.0;
 
-				Vector!2[dims] dqAve = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+				auto dqAve = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
 				// modify energy term to be an adiabatic wall.
 				// TODO: Generalize this. Equations in EbbCFD book 1 page 5
-				dqAve[3][0] = (qAve[3]/qAve[0])*dqAve[0][0];
-				dqAve[3][1] = (qAve[3]/qAve[0])*dqAve[0][1];
+				dqAve[3,0] = (qAve[3]/qAve[0])*dqAve[0,0];
+				dqAve[3,1] = (qAve[3]/qAve[0])*dqAve[0,1];
 				auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
 
 				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
@@ -828,6 +822,10 @@ Datatype vec4dataType;
 				mesh.edges[i].flux = convectiveFlux!4(p, u, v, q[cellIdx2][0], q[cellIdx2][3], mesh.edges[i].normal);
 				//mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
 				mesh.edges[i].sMax = std.math.abs(a);
+				break;
+
+			case Symmetry:
+			
 				break;
 			default:
 				enforce(false, "Unsupported boundary type");
@@ -856,8 +854,8 @@ Datatype vec4dataType;
 
 				for(uint j = 0; j < dims; j++)
 				{
-					mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j][0]*dx + 
-													mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j][1]*dy;
+					mesh.edges[i].q[k][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][0]*grad[j,0]*dx + 
+													mesh.cells[mesh.edges[i].cellIdx[k]].lim[j][1]*grad[j,1]*dy;
 				}
 
 				if(getPressure(mesh.edges[i].q[k]) < 0)
@@ -871,7 +869,7 @@ Datatype vec4dataType;
 
 					for(uint j = 0; j < dims; j++)
 					{
-						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j][0]*dx + lim[1]*grad[j][1]*dy;
+						mesh.edges[i].q[k][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[1]*grad[j,1]*dy;
 					}
 				}
 			}
@@ -882,16 +880,11 @@ Datatype vec4dataType;
 
 		if(config.viscosity)
 		{
-			// @nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Vector!2[dims] dq, Vector!2 n)
-			// Vector!2[4] gradient;
 			auto qAve = 0.5*(qL + qR);
 			auto grad1 = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
 			auto grad2 = mesh.cells[mesh.edges[i].cellIdx[1]].gradient;
-			Vector!2[dims] dqAve;
-			foreach(j; 0..dims)
-			{
-				dqAve[j] = 0.5*(grad1[j] + grad2[j]);
-			}
+			auto dqAve = 0.5*(grad1 + grad2);
+
 			auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
 			mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
 		}
@@ -918,10 +911,7 @@ Datatype vec4dataType;
 	{
 		foreach(i, cell; commCells)
 		{
-			mesh.cells[cell].gradient[0] = Vector!2(mesh.recvGradBuffers[commIdx][i][0, 0], mesh.recvGradBuffers[commIdx][i][0, 1]);
-			mesh.cells[cell].gradient[1] = Vector!2(mesh.recvGradBuffers[commIdx][i][1, 0], mesh.recvGradBuffers[commIdx][i][1, 1]);
-			mesh.cells[cell].gradient[2] = Vector!2(mesh.recvGradBuffers[commIdx][i][2, 0], mesh.recvGradBuffers[commIdx][i][2, 1]);
-			mesh.cells[cell].gradient[3] = Vector!2(mesh.recvGradBuffers[commIdx][i][3, 0], mesh.recvGradBuffers[commIdx][i][3, 1]);
+			mesh.cells[cell].gradient = mesh.recvGradBuffers[commIdx][i];
 		}
 	}
 
@@ -934,16 +924,11 @@ Datatype vec4dataType;
 
 			if(config.viscosity)
 			{
-				// @nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Vector!2[dims] dq, Vector!2 n)
-				// Vector!2[4] gradient;
 				auto qAve = 0.5*(qL + qR);
 				auto grad1 = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
 				auto grad2 = mesh.cells[mesh.edges[i].cellIdx[1]].gradient;
-				Vector!2[dims] dqAve;
-				foreach(j; 0..dims)
-				{
-					dqAve[j] = 0.5*(grad1[j] + grad2[j]);
-				}
+
+				auto dqAve = 0.5*(grad1 + grad2);
 				auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
 				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
 			}
@@ -951,8 +936,6 @@ Datatype vec4dataType;
 			{
 				mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 			}
-
-			//mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
 
 			immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 			enforce!EdgeException(!haveNan, "Got NaN on comm edge", mesh.edges[i]);

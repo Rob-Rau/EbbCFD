@@ -337,6 +337,11 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 				umesh.comm = MPI_COMM_WORLD;
 				umesh.mpiRank = id;
 			}
+			else
+			{
+				import std.array : array;
+				umesh.localToGlobalElementMap = std.range.iota(0, umesh.elements.length).array.to!(uint[]);
+			}
 		}
 
 		umesh.buildMesh;
