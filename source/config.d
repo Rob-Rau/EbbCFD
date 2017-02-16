@@ -298,6 +298,10 @@ Config loadConfig(string conf)
 		{
 			config.boundaries[i].type = BoundaryType.ConstPressure;
 		}
+		else if(bType == "symmetry")
+		{
+			config.boundaries[i].type = BoundaryType.Symmetry;
+		}
 
 		auto state = bcs[i]["q"].array;
 		//config.bc ~= [state[0].getDouble, state[1].getDouble, state[2].getDouble, state[3].getDouble];

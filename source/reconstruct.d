@@ -324,7 +324,7 @@ int main(string[] args)
 			enforce(numEdges == 2, "node is connected to more than 2 boundary edges somehow");
 			nodeVal *= (1.0/numEdges);
 			immutable bool haveNan = (nodeVal[0].isNaN || nodeVal[1].isNaN || nodeVal[2].isNaN || nodeVal[3].isNaN);
-			enforce(!haveNan, "New node value is NaN");
+			enforce(!haveNan, "New boundary node value is NaN");
 			nodeVals ~= nodeVal;
 		}
 	}

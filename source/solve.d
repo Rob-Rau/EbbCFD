@@ -255,20 +255,20 @@ struct SolverState
 			enforce(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
 			enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.boundaries[bcIdx].bTag, "Incorrect boundary tag");
 
-			M = config.boundaries[bcIdx].boundaryData[0];
-			aoa = config.boundaries[bcIdx].boundaryData[1] * (PI/180);
-			rho = config.boundaries[bcIdx].boundaryData[3];
-
-			U = 1.0;
-			a = U/M;
-			p = (rho*a^^2.0)/gamma;
-			u = U*cos(aoa);
-			v = U*sin(aoa);
-
 			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.boundaries[bcIdx].type;
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
+				M = config.boundaries[bcIdx].boundaryData[0];
+				aoa = config.boundaries[bcIdx].boundaryData[1] * (PI/180);
+				rho = config.boundaries[bcIdx].boundaryData[3];
+
+				U = 1.0;
+				a = U/M;
+				p = (rho*a^^2.0)/gamma;
+				u = U*cos(aoa);
+				v = U*sin(aoa);
+
 				mesh.edges[mesh.bGroups[i][j]].q[1][0] = rho;
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*u;
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*v;
@@ -812,6 +812,40 @@ Datatype vec4dataType;
 				enforce!EdgeException(!haveNan, "Got NaN on viscous wall edge", mesh.edges[i]);
 				break;
 			case ConstPressure:
+				if(config.order == 1)
+				{
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+					auto mid = mesh.edges[i].mid;
+					auto dx = mid[0] - centroid[0];
+					auto dy = mid[1] - centroid[1];
+
+					for(uint j = 0; j < dims; j++)
+					{
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j,0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j,1]*dy;
+					}
+
+					if(getPressure(mesh.edges[i].q[0]) < 0)
+					{
+						double[2] lim = [1.0, 1.0];
+						for(uint j = 0; j < dims; j++)
+						{
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
+						}
+
+						for(uint j = 0; j < dims; j++)
+						{
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[1]*grad[j,1]*dy;
+						}
+					}
+				}
 				//convectiveFlux(size_t dims)(double p, double u, double v, double rho, double e, Vector!2 n)
 				auto cellIdx2 = mesh.edges[i].cellIdx[1];
 
@@ -819,13 +853,103 @@ Datatype vec4dataType;
 				auto u = q[cellIdx2][1]/q[cellIdx2][0];
 				auto v = q[cellIdx2][2]/q[cellIdx2][0];
 				double a = sqrt(gamma*(p/q[cellIdx2][0]));
+				mesh.edges[i].q[1] = q[cellIdx2];
 				mesh.edges[i].flux = convectiveFlux!4(p, u, v, q[cellIdx2][0], q[cellIdx2][3], mesh.edges[i].normal);
 				//mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
 				mesh.edges[i].sMax = std.math.abs(a);
 				break;
 
 			case Symmetry:
-			
+				if(config.order == 1)
+				{
+					mesh.edges[i].q[0] = q[mesh.edges[i].cellIdx[0]];
+				}
+				else
+				{
+					auto qM = q[mesh.edges[i].cellIdx[0]];
+					auto grad = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
+					auto centroid = mesh.cells[mesh.edges[i].cellIdx[0]].centroid;
+					auto mid = mesh.edges[i].mid;
+					auto dx = mid[0] - centroid[0];
+					auto dy = mid[1] - centroid[1];
+
+					for(uint j = 0; j < dims; j++)
+					{
+						mesh.edges[i].q[0][j] = qM[j] + mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]*grad[j,0]*dx + 
+														mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]*grad[j,1]*dy;
+					}
+
+					if(getPressure(mesh.edges[i].q[0]) < 0)
+					{
+						double[2] lim = [1.0, 1.0];
+						for(uint j = 0; j < dims; j++)
+						{
+							lim[0] = fmin(lim[0], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][0]);
+							lim[1] = fmin(lim[1], mesh.cells[mesh.edges[i].cellIdx[0]].lim[j][1]);
+						}
+
+						for(uint j = 0; j < dims; j++)
+						{
+							mesh.edges[i].q[0][j] = qM[j] + lim[0]*grad[j,0]*dx + lim[1]*grad[j,1]*dy;
+						}
+					}
+				}
+
+				auto edge = mesh.edges[i];
+				auto v = Vector!2(mesh.edges[i].q[0][1]/mesh.edges[i].q[0][0], mesh.edges[i].q[0][2]/mesh.edges[i].q[0][0]);
+				immutable double x1 = mesh.nodes[edge.nodeIdx[0]][0];
+				immutable double y1 = mesh.nodes[edge.nodeIdx[0]][1];
+				immutable double x2 = mesh.nodes[edge.nodeIdx[1]][0];
+				immutable double y2 = mesh.nodes[edge.nodeIdx[1]][1];
+				auto newV = Vector!2(0.0);
+				if(x1 != x2)
+				{
+					immutable double m = (y2 - y1)/(x2 - x1);
+					auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
+					newV = reflection*v;
+				}
+				else
+				{
+					newV[0] = -v[0];
+					newV[1] = v[1];
+				}
+
+				mesh.edges[i].q[1][0] = mesh.edges[i].q[0][0];
+				mesh.edges[i].q[1][1] = mesh.edges[i].q[0][0]*newV[0];
+				mesh.edges[i].q[1][2] = mesh.edges[i].q[0][0]*newV[1];
+				mesh.edges[i].q[1][3] = mesh.edges[i].q[0][3];
+
+				auto qL = mesh.edges[i].q[0];
+				auto qR = mesh.edges[i].q[1];
+
+				if(config.viscosity)
+				{
+					auto qAve = 0.5*(qL + qR);
+					auto cellIdx = mesh.edges[i].cellIdx[0];
+					auto gradp = mesh.cells[cellIdx].gradient;
+					auto nOuter = edge.normal*edge.normal.transpose;
+					auto A = Matrix!(dims,dims).Identity;
+					auto V = Matrix!(dims-2,dims-2).Identity - nOuter;
+					A[1,1] = V[0,0];
+					A[1,2] = V[0,1];
+					A[2,1] = V[1,0];
+					A[2,2] = V[1,1];
+					auto tmp1 = A*gradp;
+					auto tmp2 = Matrix!(dims-2,dims-2).Identity - 2*nOuter;
+					auto tmp3 = tmp1*tmp2;
+					auto bGrad = gradp*nOuter + tmp3;
+
+					auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, bGrad, mesh.edges[i].normal);
+					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax) - Fv;
+				}
+				else
+				{
+					mesh.edges[i].flux = F!dims(qL, qR, mesh.edges[i].normal, mesh.edges[i].sMax);
+				}
+
+				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
+				enforce!EdgeException(!haveNan, "Got NaN on interior edge", mesh.edges[i]);
+
 				break;
 			default:
 				enforce(false, "Unsupported boundary type");
