@@ -26,7 +26,8 @@ enum BoundaryType
 	FullState,
 	ConstPressure,
 	InviscidWall,
-	ViscousWall
+	ViscousWall,
+	Symmetry
 }
 
 struct Edge
@@ -57,6 +58,8 @@ struct Edge
 	string boundaryTag;
 	BoundaryType boundaryType;
 	Vector!2 bNormal;
+	// data that may be needed for this boundary
+	double[] bData;
 }
 
 struct CommEdgeNodes

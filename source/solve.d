@@ -236,19 +236,16 @@ struct SolverState
 	{
 		@nogc uint findBcIndex(string tag)
 		{
-			for(uint j = 0; j < config.bTags.length; j++)
+			auto tagIdx = config.boundaries.countUntil!"a.bTag == b"(tag);
+			if(tagIdx < 0)
 			{
-				if(config.bTags[j] == tag)
-				{
-					return j;
-				}
+				char[64] str;
+				str[] = '\0';
+				str[0..tag.length] = tag[];
+				printf("Could not find tag %s\n", str.ptr);
+				enforce(false, "Could not find matching boundary condition tag");
 			}
-			char[64] str;
-			str[] = '\0';
-			str[0..tag.length] = tag[];
-			printf("Could not find tag %s\n", str.ptr);
-			enforce(false, "Could not find matching boundary condition tag:");
-			assert(false);
+			return cast(uint)tagIdx;
 		}
 
 		uint bcIdx = findBcIndex(mesh.bTags[i]);
@@ -256,11 +253,11 @@ struct SolverState
 		for(uint j = 0; j < mesh.bGroups[i].length; j++)
 		{
 			enforce(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
-			enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.bTags[bcIdx], "Incorrect boundary tag");
+			enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.boundaries[bcIdx].bTag, "Incorrect boundary tag");
 
-			M = config.bc[bcIdx][0];
-			aoa = config.bc[bcIdx][1] * (PI/180);
-			rho = config.bc[bcIdx][3];
+			M = config.boundaries[bcIdx].boundaryData[0];
+			aoa = config.boundaries[bcIdx].boundaryData[1] * (PI/180);
+			rho = config.boundaries[bcIdx].boundaryData[3];
 
 			U = 1.0;
 			a = U/M;
@@ -268,7 +265,7 @@ struct SolverState
 			u = U*cos(aoa);
 			v = U*sin(aoa);
 
-			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.bTypes[bcIdx];
+			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.boundaries[bcIdx].type;
 
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
@@ -276,6 +273,11 @@ struct SolverState
 				mesh.edges[mesh.bGroups[i][j]].q[1][1] = rho*u;
 				mesh.edges[mesh.bGroups[i][j]].q[1][2] = rho*v;
 				mesh.edges[mesh.bGroups[i][j]].q[1][3] = p/(gamma - 1.0) + 0.5*rho*(u^^2.0 + v^^2.0);
+			}
+			else if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.ConstPressure)
+			{
+				enforce(config.boundaries[bcIdx].boundaryData.length == 1, "Constant pressure boundary data should only have one element; the constant pressure");
+				mesh.edges[mesh.bGroups[i][j]].bData = config.boundaries[bcIdx].boundaryData;
 			}
 		}
 	}
@@ -480,6 +482,61 @@ Datatype vec4dataType;
 				q[cellIdx2][2] = -q[cellIdx][2];
 				q[cellIdx2][3] = q[cellIdx][3];
 				break;
+			case ConstPressure:
+				auto cellIdx = edge.cellIdx[0];
+				auto cellIdx2 = edge.cellIdx[1];
+
+				double rhop = q[cellIdx][0];
+				double up = q[cellIdx][1]/q[cellIdx][0];
+				double vp = q[cellIdx][2]/q[cellIdx][0];
+				auto Vp = Vector!2(up, vp);
+				double pp = getPressure(q[cellIdx]); // lol
+				double ap = sqrt(gamma*(pp/rhop));
+				double Jp = up + (2.0*ap)/(gamma - 1);
+				double Sp = pp/(rhop^^gamma);
+				double pb = edge.bData[0];
+				double rhob = (pb/Sp)^^(1.0/gamma);
+				double ab = sqrt(gamma*(pb/rhob));
+				double ub = Jp - (2.0*ab)/(gamma - 1);
+				double vb = vp;
+				auto Vb = Vector!2(ub, vb);
+				double rEb = pb/(gamma - 1) + 0.5*rhob*Vb.magnitude^^2.0;
+				auto Vbg = Vp - Vp.dot(edge.normal)*edge.normal + Vb.dot(edge.normal)*edge.normal;
+
+				q[cellIdx2][0] = rhob;
+				q[cellIdx2][1] = rhob*Vbg[0];
+				q[cellIdx2][2] = rhob*Vbg[1];
+				q[cellIdx2][3] = rEb;
+
+				break;
+
+			case Symmetry:
+				auto cellIdx = edge.cellIdx[0];
+				auto v = Vector!2(q[cellIdx][1]/q[cellIdx][0], q[cellIdx][2]/q[cellIdx][0]);
+				immutable double x1 = mesh.nodes[edge.nodeIdx[0]][0];
+				immutable double y1 = mesh.nodes[edge.nodeIdx[0]][1];
+				immutable double x2 = mesh.nodes[edge.nodeIdx[1]][0];
+				immutable double y2 = mesh.nodes[edge.nodeIdx[1]][1];
+				auto newV = Vector!2(0.0);
+				if(x1 != x2)
+				{
+					immutable double m = (y2 - y1)/(x2 - x1);
+					auto reflection = Matrix!(2,2)(1 - m^^2.0, 2.0*m, 2.0*m, m^^2.0 - 1)*1.0/(1 + m^^2.0);
+					newV = reflection*v;
+				}
+				else
+				{
+					newV[0] = -v[0];
+					newV[1] = v[1];
+				}
+
+				auto cellIdx2 = edge.cellIdx[1];
+				q[cellIdx2][0] = q[cellIdx][0];
+				q[cellIdx2][1] = q[cellIdx][0]*newV[0];
+				q[cellIdx2][2] = q[cellIdx][0]*newV[1];
+				q[cellIdx2][3] = q[cellIdx][3];
+				break;
+				
 			default:
 				enforce(false, "Unsupported boundary type");
 				break;
@@ -759,6 +816,18 @@ Datatype vec4dataType;
 				
 				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 				enforce!EdgeException(!haveNan, "Got NaN on viscous wall edge", mesh.edges[i]);
+				break;
+			case ConstPressure:
+				//convectiveFlux(size_t dims)(double p, double u, double v, double rho, double e, Vector!2 n)
+				auto cellIdx2 = mesh.edges[i].cellIdx[1];
+
+				auto p = getPressure(q[cellIdx2]);
+				auto u = q[cellIdx2][1]/q[cellIdx2][0];
+				auto v = q[cellIdx2][2]/q[cellIdx2][0];
+				double a = sqrt(gamma*(p/q[cellIdx2][0]));
+				mesh.edges[i].flux = convectiveFlux!4(p, u, v, q[cellIdx2][0], q[cellIdx2][3], mesh.edges[i].normal);
+				//mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
+				mesh.edges[i].sMax = std.math.abs(a);
 				break;
 			default:
 				enforce(false, "Unsupported boundary type");

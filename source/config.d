@@ -55,6 +55,13 @@ struct PhysicalConfig
 	double L;
 }
 
+struct BoundaryData
+{
+	double[] boundaryData;
+	string bTag;
+	BoundaryType type;
+}
+
 struct Config
 {
 	string meshFile;
@@ -72,9 +79,12 @@ struct Config
 	long order;
 	double CFL;
 	double[4] ic;
+	/+
 	string[] bTags;
 	BoundaryType[] bTypes;
 	double[][] bc;
+	+/
+	BoundaryData[] boundaries;
 	double aitkenTol = -1;
 	bool localTimestep = false;
 	bool multistageLimiting = false;
@@ -267,29 +277,35 @@ Config loadConfig(string conf)
 	config.ic[3] = ics[3].getDouble;
 
 	auto bcs = jConfig["boudaryConditions"].array;
+	config.boundaries.length = bcs.length;
 	for(uint i = 0; i < bcs.length; i++)
 	{
-		config.bTags ~= bcs[i]["tag"].str;
+		config.boundaries[i].bTag = bcs[i]["tag"].str;
 		immutable string bType = bcs[i]["type"].str;
 		if(bType == "fullState")
 		{
-			config.bTypes ~= BoundaryType.FullState;
+			config.boundaries[i].type = BoundaryType.FullState;
 		}
 		else if(bType == "inviscidWall")
 		{
-			config.bTypes ~= BoundaryType.InviscidWall;
+			config.boundaries[i].type = BoundaryType.InviscidWall;
 		}
 		else if(bType == "viscidWall")
 		{
-			config.bTypes ~= BoundaryType.ViscousWall;
+			config.boundaries[i].type = BoundaryType.ViscousWall;
 		}
 		else if(bType == "constP")
 		{
-			config.bTypes ~= BoundaryType.ConstPressure;
+			config.boundaries[i].type = BoundaryType.ConstPressure;
 		}
 
 		auto state = bcs[i]["q"].array;
-		config.bc ~= [state[0].getDouble, state[1].getDouble, state[2].getDouble, state[3].getDouble];
+		//config.bc ~= [state[0].getDouble, state[1].getDouble, state[2].getDouble, state[3].getDouble];
+		//config.boundaries[i].boundaryData = state;
+		foreach(bc; bcs[i]["q"].array)
+		{
+			config.boundaries[i].boundaryData ~= bc.getDouble;
+		}
 	}
 
 	return config;
