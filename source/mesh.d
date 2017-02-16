@@ -312,6 +312,7 @@ struct UMesh2
 
 			interiorCells ~= i;
 			cells[i].area *= 0.5;
+			enforce(cells[i].area > 0, "Computed cell "~i.to!string~" area negative");
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
 			cells[i].centroid[0] *= 1/(6*cells[i].area);
 			cells[i].centroid[1] *= 1/(6*cells[i].area);

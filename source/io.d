@@ -823,11 +823,12 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 		endSection;
 	}
 
-	void readElements()
+	void readElements(ref uint[][] bNodes, ref uint[][] bGroups)
 	{
 		auto numElementsStr = file.readCleanLine;
 		enforce(numElementsStr.length == 1, "Unexpected number of entries on line "~file.currentLine.to!string);
 		immutable auto numElements = numElementsStr[0].to!int;
+		int currentGroup = -1;
 
 		foreach(i; 0..numElements)
 		{
@@ -845,16 +846,16 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 
 			if(elementType == 1)
 			{
-				//if(chatty) writeln("Found line element, assuming boundary element");
 				auto bGroup = elementLine[3];
-				auto bNodes = elementLine[(3+numTags)..$].to!(uint[]);
-				bNodes[] -= 1;
-				if(mesh.bGroupStart.length == (bGroup - 1))
+				auto bNode = elementLine[(3+numTags)..$].to!(uint[]);
+				bNode[] -= 1;
+				if(bGroup != currentGroup)
 				{
-					//writeln("Adding bGroupStart at element ", elementNum);
-					mesh.bGroupStart ~= mesh.bNodes.length;
+					currentGroup = bGroup;
+					bGroups.length++;
 				}
-				mesh.bNodes ~= bNodes;
+				bGroups[$-1] ~= bGroup;
+				bNodes ~= bNode;
 			}
 			else if((elementType == 2) || (elementType == 3))
 			{
@@ -869,6 +870,8 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 		endSection;
 	}
 
+	uint[][] bNodes;
+	uint[][] bGroups;
 	while(!file.eof)
 	{
 		immutable section = readSectionHeader;
@@ -889,7 +892,7 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 				break;
 			case Elements:
 				if(chatty) writeln("Reading mesh elements");
-				readElements;
+				readElements(bNodes, bGroups);
 				break;
 			default:
 				if(!file.eof)
@@ -901,11 +904,86 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 		}
 	}
 
+	import ebb.integrators : sum;
+	// Check if boundary groups got split apart in the mesh.
+	// aparently this will happen.
+	if(bGroups.length != mesh.bTags.length)
+	{
+		uint[][] newbNodes;
+		uint[][] newbGroups;
+		foreach(i, bGroup; bGroups)
+		{
+			auto currGroup = bGroup[0];
+			auto oldGroupIdx = newbGroups.countUntil!"a[0] == b"(currGroup);
+			auto nodeStart = i == 0 ? 0 : bGroups[0..i].sum!".length".to!size_t;
+			auto nodeEnd = bGroups[0..i+1].sum!".length".to!size_t;
+
+			enforce(nodeEnd <= bNodes.length, "Computed node end index is out of bounds");
+			enforce(nodeStart < bNodes.length, "Computed node start index is greater than or equal to boundary node list length");
+
+			if(oldGroupIdx >= 0)
+			{
+				auto newNodeEnd = newbGroups[0..oldGroupIdx+1].sum!".length".to!size_t;
+
+				newbGroups[oldGroupIdx] ~= bGroup;
+				// splice in boundary nodes from old list
+				newbNodes = newbNodes[0..newNodeEnd] ~ bNodes[nodeStart..nodeEnd] ~ newbNodes[newNodeEnd..$];
+			}
+			else
+			{
+				newbGroups ~= bGroup;
+				newbNodes ~= bNodes[nodeStart..nodeEnd];
+			}
+		}
+
+		enforce(bNodes.length == newbNodes.length, "Reordered boundary node array length does not match old boundary node array");
+		bNodes = newbNodes;
+		bGroups = newbGroups;
+	}
+
+	enforce(bGroups.length == mesh.bTags.length, "Number of boundary groups does not match the number of boundary tags");
+
+	// Reorder the boundary nodes so they match the ordering of the boundary tags
+	foreach(i; 0..bGroups.length)
+	{
+		auto groupIdx = bGroups.countUntil!"a[0] == b"(i+1);
+		enforce(groupIdx >= 0, "Could not determine boundary group");
+		
+		auto nodeEnd = bGroups[0..groupIdx+1].sum!".length".to!size_t;
+		enforce(nodeEnd <= bNodes.length, "Computed node end index is out of bounds");
+		
+		auto nodeStart = groupIdx == 0 ? 0 : bGroups[0..groupIdx].sum!".length".to!size_t;
+		enforce(nodeStart < bNodes.length, "Computed node start index is greater than or equal to boundary node list length");
+
+		mesh.bGroupStart ~= mesh.bNodes.length;
+		mesh.bNodes ~= bNodes[nodeStart..nodeEnd];
+	}
+
 	mesh.cells = new UCell2[mesh.elements.length];
 	mesh.q = new Vector!4[mesh.elements.length];
 	foreach(i; 0..mesh.elements.length)
 	{
 		mesh.cells[i].nEdges = mesh.elements[i].length.to!uint;
+	}
+
+	// Run through mesh and correct any clockwise elements (gmsh documentation lies about this).
+	foreach(i, element; mesh.elements)
+	{
+		double area = 0;
+		foreach(j, n; element)
+		{
+			auto n1 = element[j] - 1;
+			auto n2 = element[(j + 1)%element.length] - 1;
+			auto mat = Matrix!(2, 2)(mesh.nodes[n1][0], mesh.nodes[n2][0], mesh.nodes[n1][1], mesh.nodes[n2][1]);
+			area += mat.determinant;
+		}
+
+		if(area < 0)
+		{
+			auto el = element.dup;
+			std.algorithm.reverse(el);
+			mesh.elements[i][] = el[];
+		}
 	}
 
 	return mesh;

@@ -25,3 +25,6 @@ refinementStudy
 *.blg
 *.bbl
 .idea
+*.esln
+*.mmsh
+*.frc

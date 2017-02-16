@@ -748,7 +748,10 @@ Datatype vec4dataType;
 				qAve[2] = 0.0;
 
 				Vector!2[dims] dqAve = mesh.cells[mesh.edges[i].cellIdx[0]].gradient;
-
+				// modify energy term to be an adiabatic wall.
+				// TODO: Generalize this. Equations in EbbCFD book 1 page 5
+				dqAve[3][0] = (qAve[3]/qAve[0])*dqAve[0][0];
+				dqAve[3][1] = (qAve[3]/qAve[0])*dqAve[0][1];
 				auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
 
 				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
