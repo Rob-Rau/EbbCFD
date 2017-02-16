@@ -43,6 +43,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 			config.physicalConfig.mu = (rho*U*config.physicalConfig.L)/config.physicalConfig.Re;
 			writeln("mu = ", config.physicalConfig.mu);
 		}
+
 		for(uint i = 0; i < mesh.bGroups.length; i++)
 		{
 			@nogc uint findBcIndex(string tag)
@@ -92,6 +93,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 				}
 			}
 		}
+
 		auto R = new Vector!4[mesh.interiorCells.length];
 		final switch(config.limiter)
 		{
@@ -298,6 +300,8 @@ int main(string[] args)
 				}
 			}
 			nodeVal *= (1.0/nodeCells[i].length);
+			immutable bool haveNan = (nodeVal[0].isNaN || nodeVal[1].isNaN || nodeVal[2].isNaN || nodeVal[3].isNaN);
+			enforce(!haveNan, "New node value is NaN");
 			nodeVals ~= nodeVal;
 		}
 		else
@@ -317,8 +321,10 @@ int main(string[] args)
 				}
 				
 			}
-			enforce(numEdges == 2, "node is connected to more than 2 edges somehow");
+			enforce(numEdges == 2, "node is connected to more than 2 boundary edges somehow");
 			nodeVal *= (1.0/numEdges);
+			immutable bool haveNan = (nodeVal[0].isNaN || nodeVal[1].isNaN || nodeVal[2].isNaN || nodeVal[3].isNaN);
+			enforce(!haveNan, "New node value is NaN");
 			nodeVals ~= nodeVal;
 		}
 	}

@@ -737,7 +737,7 @@ Datatype vec4dataType;
 				
 				auto qL = mesh.edges[i].q[0];
 				auto qR = q[mesh.edges[i].cellIdx[1]];
-				
+				mesh.edges[i].q[1] = qR;
 				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 				enforce!EdgeException(!haveNan, "Got NaN on inviscid wall edge", mesh.edges[i]);
 
