@@ -27,7 +27,8 @@ enum BoundaryType
 	ConstPressure,
 	InviscidWall,
 	ViscousWall,
-	Symmetry
+	Symmetry,
+	TempPresInflow
 }
 
 struct Edge

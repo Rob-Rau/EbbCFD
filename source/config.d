@@ -302,6 +302,10 @@ Config loadConfig(string conf)
 		{
 			config.boundaries[i].type = BoundaryType.Symmetry;
 		}
+		else if(bType == "tpInflow")
+		{
+			config.boundaries[i].type = BoundaryType.TempPresInflow;
+		}
 
 		auto state = bcs[i]["q"].array;
 		//config.bc ~= [state[0].getDouble, state[1].getDouble, state[2].getDouble, state[3].getDouble];
