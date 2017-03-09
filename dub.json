@@ -9,58 +9,51 @@
 	},
 	"configurations": [
 		{
-			"excludedSourceFiles": [
-				"source/mesher.d",
-				"source/plotter.d",
-				"source/post.d",
-				"source/reconstruct.d"
+			"sourceFiles": [
+				"app/solver.d"
 			],
 			"name": "solver",
 			"targetName": "ebb-solve",
 			"targetType": "executable"
 		},
 		{
-			"excludedSourceFiles": [
-				"source/solver.d",
-				"source/plotter.d",
-				"source/post.d",
-				"source/reconstruct.d"
+			"sourceFiles": [
+				"app/mesher.d"
 			],
 			"name": "mesher",
 			"targetName": "ebb-mesh",
 			"targetType": "executable"
 		},
 		{
-			"excludedSourceFiles": [
-				"source/mesher.d",
-				"source/solver.d",
-				"source/post.d",
-				"source/reconstruct.d"
+			"sourceFiles": [
+				"app/plotter.d"
 			],
 			"name": "plotter",
 			"targetName": "ebb-plot",
 			"targetType": "executable"
 		},
 		{
-			"excludedSourceFiles": [
-				"source/mesher.d",
-				"source/solver.d",
-				"source/plotter.d",
-				"source/reconstruct.d"
+			"sourceFiles": [
+				"app/post.d"
 			],
 			"name": "post",
 			"targetName": "ebb-post",
 			"targetType": "executable"
 		},
 		{
-			"excludedSourceFiles": [
-				"source/mesher.d",
-				"source/solver.d",
-				"source/plotter.d",
-				"source/post.d"
+			"sourceFiles": [
+				"app/reconstruct.d"
 			],
 			"name": "recon",
 			"targetName": "ebb-reconstruct",
+			"targetType": "executable"
+		},
+		{
+			"sourceFiles": [
+				"app/ms.d"
+			],
+			"name": "ms",
+			"targetName": "ebb-manufacture",
 			"targetType": "executable"
 		}
 	],
