@@ -7,6 +7,7 @@ import std.conv;
 import std.file : dirEntries, DirEntry, mkdir, readText, SpanMode;
 import std.getopt;
 import std.math;
+import std.random;
 import std.stdio;
 import std.string;
 
@@ -23,31 +24,29 @@ import ebb.io;
 import ebb.mpid;
 import ebb.solve;
 
+immutable double ar = 0.9;
+immutable double br = 0.04;
+immutable double cr = -2;
+immutable double dr = 1;
+immutable double au = 0.1;
+immutable double bu = 0.02;
+immutable double cu = 1;
+immutable double du = 1;
+immutable double av = 0.05;
+immutable double bv = -0.1;
+immutable double cv = 0.7;
+immutable double dv = 1.3;
+immutable double ap = 1;
+immutable double bp = 0.05;
+immutable double cp = 2;
+immutable double dp = -1;
+
 Vector!4 sourceTerm(double x, double y, Config config)
 {
 	auto S = Vector!4(0);
 	
 	double mu = config.physicalConfig.mu;
 	double Pr = config.physicalConfig.Pr;
-	double ar = 0.9;
-	double br = 0.04;
-	double cr = -2;
-	double dr = 1;
-
-	double au = 0.1;
-	double bu = 0.02;
-	double cu = 1;
-	double du = 1;
-	
-	double av = 0.05;
-	double bv = -0.1;
-	double cv = 0.7;
-	double dv = 1.3;
-
-	double ap = 1;
-	double bp = 0.05;
-	double cp = 2;
-	double dp = -1;
 
 	S[0] = br*cr*cos(cr*x + dr*y)*(au + bu*cos(cu*x + du*y)) + br*dr*cos(cr*x + dr*y)*(av + bv*cos(cv*x + dv*y)) - bu*cu*sin(cu*x + du*y)*(ar + br*sin(cr*x + dr*y)) - bv*dv*sin(cv*x + dv*y)*(ar + br*sin(cr*x + dr*y));
 
@@ -89,11 +88,197 @@ Vector!4 sourceTerm(double x, double y, Config config)
 	return S;
 }
 
-void addSourceTerm(Vector!4[] R, ref UMesh2 mesh, Config config)
+unittest
+{
+	UMesh2 mesh;
+	mesh.nodes ~= [0, 0];
+	mesh.nodes ~= [3.5, 0];
+	mesh.nodes ~= [3, 2.5];
+	mesh.nodes ~= [1, 1.5];
+	mesh.elements ~= [1, 2, 3, 4];
+	mesh.q ~= Vector!4(0);
+	mesh.cells = new UCell2[1];
+	mesh.cells[0].nEdges = 4;
+	mesh.buildMesh;
+
+	double x1 = 0;
+	double y1 = 1;
+	assert(!pointIsInPolygon(x1, y1, mesh, mesh.cells[0]), "Point should be outside polygon");
+
+	double x2 = 3;
+	double y2 = 1;
+	assert(pointIsInPolygon(x2, y2, mesh, mesh.cells[0]), "Point should be inside polygon");
+
+	double x3 = 2;
+	double y3 = 2.5;
+	assert(!pointIsInPolygon(x3, y3, mesh, mesh.cells[0]), "Point should be outside polygon");
+
+	double x4 = 4;
+	double y4 = 1;
+	assert(!pointIsInPolygon(x4, y4, mesh, mesh.cells[0]), "Point should be outside polygon");
+
+	double x5 = 3;
+	double y5 = 1;
+	assert(pointIsInPolygon(x5, y5, mesh, mesh.cells[0]), "Point should be inside polygon");
+
+	writeln("pointIsInPolygon test done");
+}
+
+bool pointIsInPolygon(double x, double y, ref UMesh2 mesh, ref UCell2 cell)
+{
+	uint edgeIntersections = 0;
+	foreach(i; 0..cell.nEdges)
+	{
+		auto n1 = mesh.edges[cell.edges[i]].nodeIdx[0];
+		auto n2 = mesh.edges[cell.edges[i]].nodeIdx[1];
+
+		immutable double x1 = mesh.nodes[n1][0];
+		immutable double y1 = mesh.nodes[n1][1];
+		immutable double x2 = mesh.nodes[n2][0];
+		immutable double y2 = mesh.nodes[n2][1];
+
+		immutable double yMin = min(y1, y2);
+		immutable double yMax = max(y1, y2);
+
+		//writeln("yMin = ", yMin, "\t yMax = ", yMax);
+
+		// test point must be within the y-axis bounds
+		// of the edge
+		if((yMin <= y) && (y <= yMax))
+		{
+			// special case verticle edge
+			if(abs(x2 - x1) <= 1.0e-10)
+			{
+				if(x <= x1)
+				{
+					edgeIntersections++;
+					continue;
+				}
+			}
+
+			immutable double xMin = min(x1, x2);
+			immutable double xMax = max(x1, x2);
+
+			immutable double m = (y2 - y1)/(x2 - x1);
+			immutable double b = y1 - m*x1;
+			immutable double x_i = (1.0/m)*(y - b);
+
+			//writeln("x_i = ", x_i, "\tm = ", m);
+
+			// test point must be to the left of the intersection point
+			// also if x_i is nan m was likely 0 so there would be no
+			// intersection
+			if((x <= x_i) && !x_i.isNaN)
+			{
+				// The intersection point must lie inbetween the edge
+				// nodes
+				if((xMin <= x_i) && (x_i <= xMax))
+				{
+					edgeIntersections++;
+				}
+			}
+		}
+	}
+
+	// If there are an even number of edge intersections
+	// than this point lies outside of the polygon.
+	if(edgeIntersections%2 == 0)
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+	
+}
+
+void addSourceTerm(ref Vector!4[] R, ref UMesh2 mesh, Config config)
 {
 	foreach(i; mesh.interiorCells)
 	{
+		double xMin = double.infinity;
+		double xMax = -double.infinity;
+		double yMin = double.infinity;
+		double yMax = -double.infinity;
+
+		// compute the bounding box around the polygon
+		foreach(j; 0..mesh.cells[i].nEdges)
+		{
+			auto n1 = mesh.edges[mesh.cells[i].edges[j]].nodeIdx[0];
+			auto n2 = mesh.edges[mesh.cells[i].edges[j]].nodeIdx[1];
+			double tmpXmin = min(mesh.nodes[n1][0], mesh.nodes[n2][0]);
+			double tmpYmin = min(mesh.nodes[n1][1], mesh.nodes[n2][1]);
+
+			double tmpXmax = max(mesh.nodes[n1][0], mesh.nodes[n2][0]);
+			double tmpYmax = max(mesh.nodes[n1][1], mesh.nodes[n2][1]);
+
+			xMin = min(xMin, tmpXmin);
+			xMax = max(xMax, tmpXmax);
+			yMin = min(yMin, tmpYmin);
+			yMax = max(yMax, tmpYmax);
+		}
+
+		const uint samplePoints = 100;
+		uint currentSampledPoints = 0;
+		auto I = Vector!4(0);
+		//writeln("Adding source term to cell ", i);
+		//writeln("yMin: ", yMin, "\tyMax: ", yMax);
+		//writeln("xMin: ", xMin, "\txMax: ", xMax);
+		//writeln;
+
+		Mt19937 rando;
+		while(currentSampledPoints < samplePoints)
+		{
+			double x = uniform(xMin, xMax, rando);
+			double y = uniform(yMin, yMax, rando);
+			if(pointIsInPolygon(x, y, mesh, mesh.cells[i]))
+			{
+				currentSampledPoints++;
+
+				I += (1.0/samplePoints.to!double)*sourceTerm(x, y, config);
+			}
+			else
+			{
+				writeln("point (", x, ", ", y, ") not in poly");
+			}
+		}
+
+		//I *= mesh.cells[i].area;
+
+		R[i] += I;
+		//R[i] -= I;
 	}
+}
+
+double computeL2(ref Vector!4[] R, ref UMesh2 mesh, uint dim)
+{
+	double L2 = 0;
+	foreach(i; mesh.interiorCells)
+	{
+		L2 += R[i][dim]^^2;
+	}
+
+	L2 = sqrt(L2);
+
+	return L2;
+}
+
+@nogc Vector!4 solution(double x, double y)
+{
+	auto q = Vector!4(0);
+
+	double rho = ar + br*sin(cr*x + dr*y);
+	double u = au + bu*cos(cu*x + du*y);
+	double v = av + bv*cos(cv*x + dv*y);
+	double p = ap + bp*cos(cp*x + dp*y);
+
+	q[0] = rho;
+	q[1] = rho*u;
+	q[2] = rho*v;
+	q[3] = p/(gamma - 1) + 0.5*rho*(u^^2 + v^^2);
+
+	return q;
 }
 
 void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
@@ -141,6 +326,8 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 				enforce(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
 				enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.boundaries[bcIdx].bTag, "Incorrect boundary tag");
 
+				mesh.edges[mesh.bGroups[i][j]].bIdx = bcIdx;
+
 				M = config.boundaries[bcIdx].boundaryData[0];
 				aoa = config.boundaries[bcIdx].boundaryData[1] * (PI/180);
 				rho = config.boundaries[bcIdx].boundaryData[3];
@@ -165,7 +352,18 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 					enforce(config.boundaries[bcIdx].boundaryData.length == 1, "Constant pressure boundary data should only have one element; the constant pressure");
 					mesh.edges[mesh.bGroups[i][j]].bData = config.boundaries[bcIdx].boundaryData;
 				}
+				else if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.Dirichlet)
+				{
+					auto mid = mesh.edges[mesh.bGroups[i][j]].mid;
+					mesh.edges[mesh.bGroups[i][j]].q[1] = solution(mid[0], mid[1]);
+					config.boundaries[bcIdx].dFunc = &solution;
+				}
 			}
+		}
+
+		foreach(i; mesh.interiorCells)
+		{
+			mesh.q[i] = solution(mesh.cells[i].centroid[0], mesh.cells[i].centroid[1]);
 		}
 
 		auto R = new Vector!4[mesh.interiorCells.length];
@@ -192,9 +390,47 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 											writeln("-limiter: "~lim);
 											writeln("-flux: "~fl);
 											writeln("-integrator: "~inte);
-											double Rmax;
-											ufvmSolver!(mixin(lim), mixin(fl), 4)(R, mesh.q, mesh, config, t, Rmax, config.limited, false);
-											addSourceTerm(R, mesh, config);
+											double Rmax = -double.infinity;
+											double newDt = double.infinity;
+											dt = config.dt;
+											uint iterations = 0;
+											while((abs(Rmax) > 1.0e-8) && (iterations < 10000))
+											{
+												Rmax = 0;
+												//solver(R, mesh.q, mesh, config, newDt, Rmax, true, true);
+												ufvmSolver!(mixin(lim), mixin(fl), 4)(R, mesh.q, mesh, config, newDt, Rmax, config.limited, true);
+												addSourceTerm(R, mesh, config);
+
+												foreach(i; mesh.interiorCells)
+												{
+													if(!config.localTimestep)
+													{
+														mesh.q[i] = mesh.q[i] + dt*R[i];
+													}
+													else
+													{
+														mesh.q[i] = mesh.q[i] + mesh.cells[i].dt*R[i];
+													}
+												}
+
+												dt = newDt;
+												if(iterations % config.plotIter == 0)
+												{
+													writeln("Rmax = ", Rmax, " dt = ", dt);
+												}
+
+												iterations++;
+											}
+											auto rhoL2 = computeL2(R, mesh, 0);
+											auto rhouL2 = computeL2(R, mesh, 1);
+											auto rhovL2 = computeL2(R, mesh, 2);
+											auto rhoEL2 = computeL2(R, mesh, 3);
+
+											writeln("rho   L2: ", rhoL2);
+											writeln("rho u L2: ", rhouL2);
+											writeln("rho v L2: ", rhovL2);
+											writeln("rho E L2: ", rhoEL2);
+
 											break;
 									}
 								}
@@ -244,20 +480,16 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 
 int main(string[] args)
 {
-	//if(args.length < 3)
-	//{
-	//	writeln("Not enough input arguments");
-	//	writeln("Usage: ebb-reconstruct configFile save_#_*");
-	//	return -1;
-	//}
+	if(args.length < 2)
+	{
+		writeln("Not enough input arguments");
+		writeln("Usage: ebb-reconstruct configFile save_#_*");
+		return -1;
+	}
 
 	init(args);
 
 	string configFile = args[1];
-
-	//auto saveNum = slnFiles[0].split("_")[$-2];
-	//writeln("saveNum: ", saveNum);
-	//string savePrefix = "recon_save_"~saveNum;
 
 	import std.path : dirName, asAbsolutePath;
 	auto configStr = readText(configFile);
@@ -268,36 +500,11 @@ int main(string[] args)
 	UMesh2 mesh = importMesh(meshFile);
 	mesh.buildMesh;
 
-	double M = config.ic[0];
-	double aoa = config.ic[1] * (PI/180);
-	double rho = config.ic[3];
-	double U = 1.0;
-	double a = U/M;
-	double p = (rho*a^^2.0)/gamma;
-	double u = U*cos(aoa);
-	double v = U*sin(aoa);
-	if(config.viscosity)
-	{
-		config.physicalConfig.mu = (rho*U*config.physicalConfig.L)/config.physicalConfig.Re;
-		writeln("mu = ", config.physicalConfig.mu);
-	}
-
 	double dt, t;
 
-	immutable size_t dims = 4;
 	stepMesh(mesh, config, t, dt);
-	Vector!4 S;
-	double tmp = 0;
-	int num = 1000000;
-	foreach(i; 0..num)
-	{
-		S = sourceTerm(i.to!double, i.to!double, config);
-		tmp += (S[0] + S[1] + S[2] + S[3])/num.to!double;
-	}
-
-	writeln(tmp);
 
 	writeln("exiting");
-	shutdown;
-	return tmp.to!int;
+
+	return shutdown;
 }

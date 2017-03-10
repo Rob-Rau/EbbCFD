@@ -257,6 +257,8 @@ struct SolverState
 
 			mesh.edges[mesh.bGroups[i][j]].boundaryType = config.boundaries[bcIdx].type;
 
+			mesh.edges[mesh.bGroups[i][j]].bIdx = bcIdx;
+
 			if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.FullState)
 			{
 				M = config.boundaries[bcIdx].boundaryData[0];
@@ -488,6 +490,10 @@ Datatype vec4dataType;
 		switch(edge.boundaryType)
 			with(BoundaryType)
 		{
+			case Dirichlet:
+				auto centroid = mesh.cells[i].centroid;
+				q[i] = config.boundaries[edge.bIdx].dFunc(centroid[0], centroid[1]);
+				break;
 			case FullState:
 				q[edge.cellIdx[1]] = q[edge.cellIdx[0]];
 				break;
@@ -734,6 +740,29 @@ Datatype vec4dataType;
 		switch(mesh.edges[i].boundaryType)
 			with(BoundaryType)
 		{
+			case Dirichlet:
+				double h = mesh.cells[mesh.edges[i].cellIdx[0]].d/4;
+				auto sln = config.boundaries[mesh.edges[i].bIdx].dFunc;
+				auto grad = Matrix!(4,2)(0);
+				double x = mesh.cells[mesh.edges[i].cellIdx[1]].centroid[0];
+				double y = mesh.cells[mesh.edges[i].cellIdx[1]].centroid[1];
+
+				auto dx = (sln(x + h, y) - sln(x - h, y))/(2.0*h);
+				auto dy = (sln(x, y + h) - sln(x, y - h))/(2.0*h);
+
+				grad[0,0] = dx[0];
+				grad[1,0] = dx[1];
+				grad[2,0] = dx[2];
+				grad[3,0] = dx[3];
+
+				grad[0,1] = dy[0];
+				grad[1,1] = dy[1];
+				grad[2,1] = dy[2];
+				grad[3,1] = dy[3];
+
+				mesh.cells[mesh.edges[i].cellIdx[1]].gradient = grad;
+				goto case FullState;
+
 			case FullState:
 				auto qL = mesh.edges[i].q[0];
 				auto qR = mesh.edges[i].q[1];

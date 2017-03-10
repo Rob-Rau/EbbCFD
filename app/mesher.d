@@ -55,7 +55,7 @@ void main(string[] args)
 	if(info)
 	{
 		auto dAve = mesh.cells.sum!".d"/mesh.cells.length;
-
+		auto areaAve = mesh.cells.sum!".area"/mesh.cells.length;
 		double x1 = -1.5;
 		double y1 = 1.5;
 		double x2 = 10;
@@ -80,6 +80,7 @@ void main(string[] args)
 		writeln("cells: ", mesh.interiorCells.length);
 		writeln("D_ave: ", dAve);
 		writeln("D_ave (bounded): ", dxAve);
+		writeln("A_ave: ", areaAve);
 		writeln("nodes: ", mesh.nodes.length);
 		writeln("boundaries: ", mesh.bTags.length);
 		for(uint i = 0; i < mesh.bTags.length; i++)

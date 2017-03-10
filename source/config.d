@@ -4,6 +4,8 @@ import std.conv;
 import std.json;
 import std.stdio;
 
+import numd.linearalgebra.matrix;
+
 import ebb.mesh;
 /+
 {
@@ -55,11 +57,14 @@ struct PhysicalConfig
 	double L;
 }
 
+alias @nogc Vector!4 function(double x, double y) DirichletFunc;
+
 struct BoundaryData
 {
 	double[] boundaryData;
 	string bTag;
 	BoundaryType type;
+	DirichletFunc dFunc;
 }
 
 struct Config
@@ -79,11 +84,6 @@ struct Config
 	long order;
 	double CFL;
 	double[4] ic;
-	/+
-	string[] bTags;
-	BoundaryType[] bTypes;
-	double[][] bc;
-	+/
 	BoundaryData[] boundaries;
 	double aitkenTol = -1;
 	bool localTimestep = false;
@@ -305,6 +305,10 @@ Config loadConfig(string conf)
 		else if(bType == "tpInflow")
 		{
 			config.boundaries[i].type = BoundaryType.TempPresInflow;
+		}
+		else if(bType == "dirichlet")
+		{
+			config.boundaries[i].type = BoundaryType.Dirichlet;
 		}
 
 		auto state = bcs[i]["q"].array;

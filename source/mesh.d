@@ -28,7 +28,8 @@ enum BoundaryType
 	InviscidWall,
 	ViscousWall,
 	Symmetry,
-	TempPresInflow
+	TempPresInflow,
+	Dirichlet
 }
 
 struct Edge
@@ -53,6 +54,7 @@ struct Edge
 	// This is a boundary edg1e
 	bool isBoundary;
 	string boundaryTag;
+	uint bIdx;
 	BoundaryType boundaryType;
 	Vector!2 bNormal;
 	// data that may be needed for this boundary
