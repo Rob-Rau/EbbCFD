@@ -19,6 +19,7 @@ import ebb.flux;
 import ebb.integrators;
 import ebb.limiters;
 import ebb.mesh;
+import ebb.manufacturedsolution;
 import ebb.io;
 import ebb.mpid;
 import ebb.solve;
@@ -67,6 +68,8 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 				enforce(mesh.edges[mesh.bGroups[i][j]].isBoundary, "Edge not boundary edge but should be");
 				enforce(mesh.edges[mesh.bGroups[i][j]].boundaryTag == config.boundaries[bcIdx].bTag, "Incorrect boundary tag");
 
+				mesh.edges[mesh.bGroups[i][j]].bIdx = bcIdx;
+
 				M = config.boundaries[bcIdx].boundaryData[0];
 				aoa = config.boundaries[bcIdx].boundaryData[1] * (PI/180);
 				rho = config.boundaries[bcIdx].boundaryData[3];
@@ -90,6 +93,12 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 				{
 					enforce(config.boundaries[bcIdx].boundaryData.length == 1, "Constant pressure boundary data should only have one element; the constant pressure");
 					mesh.edges[mesh.bGroups[i][j]].bData = config.boundaries[bcIdx].boundaryData;
+				}
+				else if(mesh.edges[mesh.bGroups[i][j]].boundaryType == BoundaryType.Dirichlet)
+				{
+					auto mid = mesh.edges[mesh.bGroups[i][j]].mid;
+					mesh.edges[mesh.bGroups[i][j]].q[1] = solution(mid[0], mid[1]);
+					config.boundaries[bcIdx].dFunc = &solution;
 				}
 			}
 		}
@@ -189,9 +198,12 @@ int main(string[] args)
 	import std.path : dirName, asAbsolutePath;
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);
-	auto meshFile = "/";
+	string meshFile = "/";
+	writeln(meshFile);
 	meshFile = configFile.dirName.asAbsolutePath.to!string ~ meshFile;
+	writeln(meshFile);
 	meshFile ~= config.meshFile;
+	writeln(meshFile);
 	UMesh2 mesh = importMesh(meshFile);
 	mesh.buildMesh;
 
