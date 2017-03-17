@@ -214,8 +214,8 @@ enum fluxDir
 	immutable double s1 = 0.5*(lam1 + lam2);
 	immutable double s2 = 0.5*(lam1 - lam2);
 
-	immutable double q = sqrt(vel[0]^^2 + vel[1]^^2);
-	immutable double G1 = (gamma - 1)*((q^^2/2)*dRho - vel.dot(dRhoV) + dRhoE);
+	immutable double q = sqrt(vel[0]^^2.0 + vel[1]^^2.0);
+	immutable double G1 = (gamma - 1)*(((q^^2.0)/2.0)*dRho - vel.dot(dRhoV) + dRhoE);
 	immutable double G2 = -u*dRho + dRhoV.dot(n);
 
 	immutable double C1 = (G1/a^^2)*(s1 - lam3) + G2/a*s2;
@@ -224,6 +224,9 @@ enum fluxDir
 	auto fL = convectiveFlux!dims(pL, uL, vL, rhoL, qL[3], n);
 	auto fR = convectiveFlux!dims(pR, uR, vR, rhoR, qR[3], n);
 
-	auto flux = 0.5*(fL + fR) - 0.5*Vector!4(lam3*dRho + C1, lam3*(dRhoV[0]) + C1*vel[0] + C2*n[0], lam3*(dRhoV[1]) + C1*vel[1] + C2*n[1], lam3*dRhoE + C1*h + C2*u);
+	auto flux = 0.5*(fL + fR) - 0.5*Vector!4(lam3*dRho + C1,
+											 lam3*dRhoV[0] + C1*vel[0] + C2*n[0],
+											 lam3*dRhoV[1] + C1*vel[1] + C2*n[1],
+											 lam3*dRhoE + C1*h + C2*u);
 	return flux;
 }

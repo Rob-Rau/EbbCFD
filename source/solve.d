@@ -292,7 +292,7 @@ struct SolverState
 
 Datatype vec4dataType;
 
-@nogc updateBoundaryEdge(size_t dims)(ref UMesh2 mesh, Vector!4[] q, uint i, Config config)
+@nogc updateBoundaryEdge(size_t dims)(ref UMesh2 mesh, Vector!dims[] q, uint i, Config config)
 {
 	if(config.order == 1)
 	{
@@ -331,7 +331,7 @@ Datatype vec4dataType;
 }
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate)
+@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!dims[] R, ref Vector!dims[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate)
 {
 	@nogc void buildGradients(uint[] cellList)
 	{
@@ -340,8 +340,8 @@ Datatype vec4dataType;
 		{
 			foreach(i; cellList)
 			{
-				Vector!6[4] du;
-				for(uint j = 0; j < 4; j++)
+				Vector!6[dims] du;
+				for(uint j = 0; j < dims; j++)
 				{
 					du[j] = Vector!6(0); 
 				}
@@ -353,7 +353,7 @@ Datatype vec4dataType;
 				{
 					uint idx = mesh.cells[i].neighborCells[j];
 					
-					for(uint k = 0; k < 4; k++)
+					for(uint k = 0; k < dims; k++)
 					{
 						mesh.cells[i].minQ[k] = fmin(mesh.cells[i].minQ[k], q[idx][k]);
 						mesh.cells[i].maxQ[k] = fmax(mesh.cells[i].maxQ[k], q[idx][k]);
@@ -362,7 +362,7 @@ Datatype vec4dataType;
 					}
 				}
 
-				for(uint j = 0; j < 4; j++)
+				for(uint j = 0; j < dims; j++)
 				{
 					auto tmpGrad = mesh.cells[i].gradMat*du[j];
 					mesh.cells[i].gradient[j,0] = tmpGrad[0];
@@ -383,7 +383,7 @@ Datatype vec4dataType;
 						auto minQ = mesh.cells[i].minQ;
 						auto maxQ = mesh.cells[i].maxQ;
 						
-						auto qE = Vector!4(0);
+						auto qE = Vector!dims(0);
 						for(uint k = 0; k < dims; k++)
 						{
 							double s = 1.0;
@@ -462,7 +462,7 @@ Datatype vec4dataType;
 						}
 					}
 				
-					for(uint j = 0; j < 4; j++)
+					for(uint j = 0; j < dims; j++)
 					{
 						mesh.cells[i].gradErr[j] = -abs(mesh.cells[i].gradient[j,0])*mesh.cells[i].lim[j][0] +
 												-abs(mesh.cells[i].gradient[j,1])*mesh.cells[i].lim[j][1] + 
@@ -741,26 +741,10 @@ Datatype vec4dataType;
 			with(BoundaryType)
 		{
 			case Dirichlet:
-				double h = mesh.cells[mesh.edges[i].cellIdx[0]].d/4;
-				auto sln = config.boundaries[mesh.edges[i].bIdx].dFunc;
-				auto grad = Matrix!(4,2)(0);
 				double x = mesh.cells[mesh.edges[i].cellIdx[1]].centroid[0];
 				double y = mesh.cells[mesh.edges[i].cellIdx[1]].centroid[1];
 
-				auto dx = (sln(x + h, y) - sln(x - h, y))/(2.0*h);
-				auto dy = (sln(x, y + h) - sln(x, y - h))/(2.0*h);
-
-				grad[0,0] = dx[0];
-				grad[1,0] = dx[1];
-				grad[2,0] = dx[2];
-				grad[3,0] = dx[3];
-
-				grad[0,1] = dy[0];
-				grad[1,1] = dy[1];
-				grad[2,1] = dy[2];
-				grad[3,1] = dy[3];
-
-				mesh.cells[mesh.edges[i].cellIdx[1]].gradient = grad;
+				mesh.cells[mesh.edges[i].cellIdx[1]].gradient = config.boundaries[mesh.edges[i].bIdx].dFuncDerivative(x, y);
 				goto case FullState;
 
 			case FullState:
@@ -796,7 +780,7 @@ Datatype vec4dataType;
 					p = 1.0e-12;
 					//printf("pressure less than 0 at wall\n");
 				}
-				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
+				mesh.edges[i].flux = Vector!dims(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0);
 				mesh.edges[i].sMax = std.math.abs(a);
 				
 				auto qL = mesh.edges[i].q[0];
@@ -837,7 +821,7 @@ Datatype vec4dataType;
 				dqAve[3,1] = (qAve[3]/qAve[0])*dqAve[0,1];
 				auto Fv = diffusiveFlux!dims(config.physicalConfig.Pr, config.physicalConfig.mu, qAve, dqAve, mesh.edges[i].normal);
 
-				mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
+				mesh.edges[i].flux = Vector!dims(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
 				mesh.edges[i].sMax = std.math.abs(a);
 				
 				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
@@ -852,7 +836,7 @@ Datatype vec4dataType;
 				double a = sqrt(gamma*(p/q[cellIdx2][0]));
 				mesh.edges[i].q[1] = q[cellIdx2];
 				mesh.edges[i].flux = convectiveFlux!4(p, u, v, q[cellIdx2][0], q[cellIdx2][3], mesh.edges[i].normal);
-				//mesh.edges[i].flux = Vector!4(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
+				//mesh.edges[i].flux = Vector!dims(0, p*mesh.edges[i].normal[0], p*mesh.edges[i].normal[1], 0) - Fv;
 				mesh.edges[i].sMax = std.math.abs(a);
 				immutable bool haveNan = (mesh.edges[i].flux[0].isNaN || mesh.edges[i].flux[1].isNaN || mesh.edges[i].flux[2].isNaN || mesh.edges[i].flux[3].isNaN);
 				enforce!EdgeException(!haveNan, "Got NaN on viscous wall edge", mesh.edges[i]);
@@ -1061,7 +1045,7 @@ Datatype vec4dataType;
 
 	foreach(i; mesh.interiorCells)
 	{
-		R[i] = Vector!4(0);
+		R[i] = Vector!dims(0);
 		double sAve = 0;
 		// integrate fluxes over cell edges
 		for(uint j = 0; j < mesh.cells[i].nEdges; j++)

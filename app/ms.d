@@ -79,8 +79,6 @@ bool pointIsInPolygon(double x, double y, ref UMesh2 mesh, ref UCell2 cell)
 		immutable double yMin = min(y1, y2);
 		immutable double yMax = max(y1, y2);
 
-		//writeln("yMin = ", yMin, "\t yMax = ", yMax);
-
 		// test point must be within the y-axis bounds
 		// of the edge
 		if((yMin <= y) && (y <= yMax))
@@ -101,8 +99,6 @@ bool pointIsInPolygon(double x, double y, ref UMesh2 mesh, ref UCell2 cell)
 			immutable double m = (y2 - y1)/(x2 - x1);
 			immutable double b = y1 - m*x1;
 			immutable double x_i = (1.0/m)*(y - b);
-
-			//writeln("x_i = ", x_i, "\tm = ", m);
 
 			// test point must be to the left of the intersection point
 			// also if x_i is nan m was likely 0 so there would be no
@@ -158,43 +154,52 @@ void addSourceTerm(ref Vector!4[] R, ref UMesh2 mesh, Config config)
 			yMax = max(yMax, tmpYmax);
 		}
 
-		const uint samplePoints = 100;
-		uint currentSampledPoints = 0;
-		auto I = Vector!4(0);
-
-		Mt19937 rando;
-		while(currentSampledPoints < samplePoints)
-		{
-			double x = uniform(xMin, xMax, rando);
-			double y = uniform(yMin, yMax, rando);
-			if(pointIsInPolygon(x, y, mesh, mesh.cells[i]))
-			{
-				currentSampledPoints++;
-
-				I += (1.0/samplePoints.to!double)*sourceTerm(x, y, config);
-			}
-			else
-			{
-				writeln("point (", x, ", ", y, ") not in poly");
-			}
-		}
-
-		//I *= mesh.cells[i].area;
-
+		double x = mesh.cells[i].centroid[0];
+		double y = mesh.cells[i].centroid[1];
+		auto I = sourceTerm(x, y, config);
 		R[i] += I;
-		//R[i] -= I;
 	}
 }
 
-double computeL2(ref Vector!4[] R, ref UMesh2 mesh, uint dim)
+Vector!4[] computeError(ref UMesh2 mesh)
 {
-	double L2 = 0;
+	auto e = new Vector!4[mesh.interiorCells.length];
 	foreach(i; mesh.interiorCells)
 	{
-		L2 += R[i][dim]^^2;
+		double x = mesh.cells[i].centroid[0];
+		double y = mesh.cells[i].centroid[1];
+
+		auto q = solution(x, y);
+		auto tmp = q - mesh.q[i];
+		e[i][0] = tmp[0]/q[0];
+		e[i][1] = tmp[1]/q[1];
+		e[i][2] = tmp[2]/q[2];
+		e[i][3] = tmp[3]/q[3];
 	}
 
-	L2 = sqrt(L2);
+	return e;
+}
+
+Vector!4 computeL2(ref UMesh2 mesh)
+{
+	auto L2 = Vector!4(0);
+	foreach(i; mesh.interiorCells)
+	{
+		double x = mesh.cells[i].centroid[0];
+		double y = mesh.cells[i].centroid[1];
+
+		auto q = solution(x, y);
+		auto tmp = q - mesh.q[i];
+		L2[0] += abs(tmp[0]/q[0])^^2;
+		L2[1] += abs(tmp[1]/q[1])^^2;
+		L2[2] += abs(tmp[2]/q[2])^^2;
+		L2[3] += abs(tmp[3]/q[3])^^2;
+	}
+
+	L2[0] = sqrt(L2[0]);
+	L2[1] = sqrt(L2[1]);
+	L2[2] = sqrt(L2[2]);
+	L2[3] = sqrt(L2[3]);
 
 	return L2;
 }
@@ -275,6 +280,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 					auto mid = mesh.edges[mesh.bGroups[i][j]].mid;
 					mesh.edges[mesh.bGroups[i][j]].q[1] = solution(mid[0], mid[1]);
 					config.boundaries[bcIdx].dFunc = &solution;
+					config.boundaries[bcIdx].dFuncDerivative = &solutionGradient;
 				}
 			}
 		}
@@ -314,7 +320,6 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 											uint iterations = 0;
 											while(abs(Rmax) > 1.0e-8)
 											{
-												//solver(R, mesh.q, mesh, config, newDt, Rmax, true, true);
 												ufvmSolver!(mixin(lim), mixin(fl), 4)(R, mesh.q, mesh, config, newDt, Rmax, config.limited, true);
 												addSourceTerm(R, mesh, config);
 
@@ -350,20 +355,25 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 
 												iterations++;
 											}
-											auto rhoL2 = computeL2(R, mesh, 0);
-											auto rhouL2 = computeL2(R, mesh, 1);
-											auto rhovL2 = computeL2(R, mesh, 2);
-											auto rhoEL2 = computeL2(R, mesh, 3);
 
-											writeln("rho   L2: ", rhoL2);
-											writeln("rho u L2: ", rhouL2);
-											writeln("rho v L2: ", rhovL2);
-											writeln("rho E L2: ", rhoEL2);
+											auto l2 = computeL2(mesh);
+
+											writeln("rho   L2: ", l2[0]);
+											writeln("rho u L2: ", l2[1]);
+											writeln("rho v L2: ", l2[2]);
+											writeln("rho E L2: ", l2[3]);
+
+											auto e = computeError(mesh);
 
 											import std.range : iota;
 											mesh.localToGlobalElementMap = iota(0, mesh.elements.length).array.to!(uint[]);
 											auto filename = config.meshFile.split(".")[0]~".esln";
 											saveSolution(mesh.q, mesh, cast(char*)filename.toStringz, t, dt, cast(uint)config.order);
+
+											//import std.range : iota;
+											//mesh.localToGlobalElementMap = iota(0, mesh.elements.length).array.to!(uint[]);
+											//auto filename = config.meshFile.split(".")[0]~".esln";
+											//saveSolution(mesh.q, mesh, cast(char*)filename.toStringz, t, dt, cast(uint)config.order);
 
 											break;
 									}

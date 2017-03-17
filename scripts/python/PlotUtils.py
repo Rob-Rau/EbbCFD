@@ -1,6 +1,41 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+ar = 0.9
+br = 0.04
+cr = -2
+dr = 1
+au = 0.1
+bu = 0.02
+cu = 1
+du = 1
+av = 0.05
+bv = -0.1
+cv = 0.7
+dv = 1.3
+ap = 1
+bp = 0.05
+cp = 2
+dp = -1
+
+def rho_a(x, y):
+	return ar + br*np.sin(cr*x + dr*y)
+
+def u_a(x, y):
+	return au + bu*np.cos(cu*x + du*y)
+
+def v_a(x, y):
+	return av + bv*np.cos(cv*x + dv*y)
+
+def p_a(x, y):
+	return ap + bp*np.sin(cp*x + dp*y)
+
+def rE_a(x, y):
+	return p_a(x, y)/(1.4 - 1) + 0.5*rho_a(x, y)*(u_a(x, y)**2 + v_a(x, y)**2)
+
+def E_a(x, y):
+	return p_a(x, y)/(rho_a(x, y)*(1.4 - 1)) + 0.5*(u_a(x, y)**2 + v_a(x, y)**2)
+
 #-----------------------------------------------------------
 def getField(U, field):
 	r = U[:,0]
@@ -28,6 +63,8 @@ def getField(U, field):
 		return rv
 	elif (s == 'energy'):
 		return rE/r
+	elif (s == 'renergy'):
+		return rE		
 	elif (s == 'xvelocity'):
 		return ru/r
 	elif (s == 'yvelocity'):

@@ -1,5 +1,5 @@
 {
-	"mesh": "ms_refine_0.msh",
+	"mesh": "ms_refine_1.msh",
 	"dt": 0.00001,
 	"dynamicDt": true,
 	"localTimestep": false,
@@ -17,7 +17,7 @@
 	"limited": false,
 	"order": 2,
 	"initialConditions": [0.1, 0, 1.1, 1],
-	"viscosity": false,
+	"viscosity": true,
 	"physicalConfig": {
 		"Pr": 0.71,
 		"R": 1,

@@ -99,6 +99,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 					auto mid = mesh.edges[mesh.bGroups[i][j]].mid;
 					mesh.edges[mesh.bGroups[i][j]].q[1] = solution(mid[0], mid[1]);
 					config.boundaries[bcIdx].dFunc = &solution;
+					config.boundaries[bcIdx].dFuncDerivative = &solutionGradient;
 				}
 			}
 		}

@@ -1,5 +1,5 @@
 {
-	"mesh": "ms_refine_0.msh",
+	"mesh": "ms_refine_3.msh",
 	"dt": 0.00001,
 	"dynamicDt": true,
 	"localTimestep": false,
@@ -10,14 +10,14 @@
 	"plotIter": 100,
 	"saveIter": 1000,
 	"solver": "ufvmSolver",
-	"CFL": 0.2,
+	"CFL": 0.1,
 	"cflAdjust": false,
 	"integrator": "Euler",
 	"forceBoundary": "Wall",
 	"limited": false,
 	"order": 2,
 	"initialConditions": [0.1, 0, 1.1, 1],
-	"viscosity": false,
+	"viscosity": true,
 	"physicalConfig": {
 		"Pr": 0.71,
 		"R": 1,

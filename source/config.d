@@ -58,6 +58,7 @@ struct PhysicalConfig
 }
 
 alias @nogc Vector!4 function(double x, double y) DirichletFunc;
+alias @nogc Matrix!(4, 2) function(double x, double y) DirichletFuncDerivative;
 
 struct BoundaryData
 {
@@ -65,6 +66,7 @@ struct BoundaryData
 	string bTag;
 	BoundaryType type;
 	DirichletFunc dFunc;
+	DirichletFuncDerivative dFuncDerivative;
 }
 
 struct Config
