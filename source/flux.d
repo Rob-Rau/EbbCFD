@@ -148,6 +148,84 @@ enum fluxDir
 	return flux;
 }
 
+unittest 
+{
+	import ebb.manufacturedsolution;
+	import std.stdio : writeln;
+	immutable double eps = 1.0e-5;
+
+	double x1 = 1;
+	double y1 = 1;
+	double x2 = 2;
+	double y2 = 1;
+
+	auto n = Vector!2(1, 0);
+	double sMax;
+
+	auto qL = solution(x1, y1);
+	auto qR = solution(x2, y2);
+	auto F = roeFlux!4(qL, qR, n, sMax);
+
+	writeln(abs(F[0] - 0.087503926254201));
+	writeln(abs(F[1] - 1.039732984117400));
+	writeln(abs(F[2] - 0.008215342318582));
+	writeln(abs(F[3] - 0.367160441647966));
+	writeln;
+	//writeln(F.ToString);
+
+	x1 = 1;
+	y1 = 1;
+	x2 = 1;
+	y2 = 2;
+
+	n = Vector!2(0, 1);
+	qL = solution(x1, y1);
+	qR = solution(x2, y2);
+	F = roeFlux!4(qL, qR, n, sMax);
+
+	writeln(abs(F[0] - 0.117173193168260));
+	writeln(abs(F[1] - 0.010523092695679));
+	writeln(abs(F[2] - 1.005792391773638));
+	writeln(abs(F[3] - 0.482469106067425));
+	writeln;
+	//writeln(F.ToString);
+
+	x1 = 1;
+	y1 = 1;
+	x2 = 2;
+	y2 = 2;
+
+	n = Vector!2(sqrt(2.0)/2.0, sqrt(2.0)/2.0);
+	qL = solution(x1, y1);
+	qR = solution(x2, y2);
+	F = roeFlux!4(qL, qR, n, sMax);
+
+	writeln(abs(F[0] - 0.116317039552757));
+	writeln(abs(F[1] - 0.743804395816748));
+	writeln(abs(F[2] - 0.743854568709977));
+	writeln(abs(F[3] - 0.490010270963920));
+	writeln;
+	//writeln(F.ToString);
+
+	x1 = 1;
+	y1 = 1;
+	x2 = 1.1;
+	y2 = 1.1;
+
+	n = Vector!2(sqrt(2.0)/2.0, sqrt(2.0)/2.0);
+	qL = solution(x1, y1);
+	qR = solution(x2, y2);
+	F = roeFlux!4(qL, qR, n, sMax);
+
+	writeln(abs(F[0] - 0.115207589649517));
+	writeln(abs(F[1] - 0.744728044864156));
+	writeln(abs(F[2] - 0.744751077184082));
+	writeln(abs(F[3] - 0.485506505793277));
+	writeln;
+	//writeln(F.ToString);
+
+}
+
 /++
 	Uses my matrix operations
 +/
@@ -172,15 +250,15 @@ enum fluxDir
 	immutable double aR = sqrt(gamma*(pR/rhoR));
 	immutable double hR = (qR[3] + pR)/rhoR;
 
+	immutable double di = sqrt(rhoR/rhoL);
+	immutable double d1 = 1.0/(1.0 + di);
 	// average values
-	immutable double rho = sqrt(rhoL*rhoR);
 	auto vel = Vector!2(0);
-	vel[0] = (sqrt((rhoL))*uL + sqrt((rhoR))*uR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	vel[1] = (sqrt((rhoL))*vL + sqrt((rhoR))*vR)/(sqrt((rhoL)) + sqrt((rhoR)));
+	vel[0] = (di*uR + uL)*d1;
+	vel[1] = (di*vR + vL)*d1;
 	immutable double u = vel.dot(n);
-	immutable double p = (sqrt(rhoL)*pL + sqrt(rhoR)*pR)/(sqrt(rhoL) + sqrt(rhoR));
-	immutable double h = (sqrt((rhoL))*hL + sqrt((rhoR))*hR)/(sqrt((rhoL)) + sqrt((rhoR)));
-	immutable double a = sqrt(gamma*(p/rho));
+	immutable double h = (di*hR + hL)*d1;
+	immutable double a = sqrt((gamma - 1.0)*(h - 0.5*(vel[0]*vel[0] + vel[1]*vel[1])));
 
 	auto dRhoV = rhoVelR - rhoVelL;
 	auto dRho = rhoR - rhoL;
@@ -228,5 +306,6 @@ enum fluxDir
 											 lam3*dRhoV[0] + C1*vel[0] + C2*n[0],
 											 lam3*dRhoV[1] + C1*vel[1] + C2*n[1],
 											 lam3*dRhoE + C1*h + C2*u);
+
 	return flux;
 }

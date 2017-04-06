@@ -28,14 +28,17 @@ immutable double ar = 0.9;
 immutable double br = 0.04;
 immutable double cr = -2;
 immutable double dr = 1;
+
 immutable double au = 0.1;
 immutable double bu = 0.02;
 immutable double cu = 1;
 immutable double du = 1;
+
 immutable double av = 0.05;
 immutable double bv = -0.1;
 immutable double cv = 0.7;
 immutable double dv = 1.3;
+
 immutable double ap = 1;
 immutable double bp = 0.05;
 immutable double cp = 2;
@@ -106,19 +109,14 @@ immutable double dp = -1;
 	return -bv*cv*sin(cv*x + dv*y);
 }
 
-@nogc double d2vdx2(double x, double y)
-{
-	return -bv*cv^^2.0*cos(cv*x + dv*y);
-}
-
-@nogc double d2vdxy(double x, double y)
-{
-	return -bv*cv*dv*cos(cv*x + dv*y);
-}
-
 @nogc double dvdy(double x, double y)
 {
 	return -bv*dv*sin(cv*x + dv*y);
+}
+
+@nogc double d2vdx2(double x, double y)
+{
+	return -bv*cv^^2.0*cos(cv*x + dv*y);
 }
 
 @nogc double d2vdy2(double x, double y)
@@ -126,6 +124,12 @@ immutable double dp = -1;
 	return -bv*dv^^2.0*cos(cv*x + dv*y);
 }
 
+@nogc double d2vdxy(double x, double y)
+{
+	return -bv*cv*dv*cos(cv*x + dv*y);
+}
+
+/++/
 @nogc double p(double x, double y)
 {
 	return ap + bp*sin(cp*x + dp*y);
@@ -153,33 +157,45 @@ immutable double dp = -1;
 
 Vector!4 sourceTerm(double x, double y, Config config)
 {
-	auto S = Vector!4(0);
-
 	auto q = solution(x, y);
 	auto dq = solutionGradient(x, y);
 
 	auto dFxdx = Vector!4(0);
 	auto dFydy = Vector!4(0);
 
-	auto u = u(x, y);
-	auto v = v(x, y);
-	auto p = p(x, y);
-	auto dudx = dudx(x, y);
-	auto dvdy = dvdy(x, y);
-	auto dpdx = dpdx(x, y);
-	auto dpdy = dpdy(x, y);
+	immutable auto r = q[0];
+	immutable auto u = q[1]/q[0];
+	immutable auto v = q[2]/q[0];
+	immutable auto ru = q[1];
+	immutable auto rv = q[2];
+	immutable auto drdx = dq[0,0];
+	immutable auto drdy = dq[0,1];
+	immutable auto drudx = dq[1,0];
+	immutable auto drvdy = dq[2,1];
+	
+	immutable auto p = getPressure(q);
+	immutable auto dudx = dudx(x, y);
+	immutable auto dudy = dudy(x, y);
+	immutable auto dvdy = dvdy(x, y);
+	immutable auto dvdx = dvdx(x, y);
+	immutable auto dpdx = dpdx(x, y);
+	immutable auto dpdy = dpdy(x, y);
 
-	dFxdx[0] = dq[1,0];
-	dFxdx[1] = 2*q[1]*dudx + u^^2*dq[0,0] + dpdx;
-	dFxdx[2] = v*dFxdx[0] + q[1]*dvdx(x, y);
-	dFxdx[3] = u*dq[3,0] + q[3]*dudx + u*dpdx + p*dudx;
+	immutable auto dredx = dq[3,0];
+	immutable auto dredy = dq[3,1];
+	immutable auto rE = q[3];
 
-	dFydy[0] = dq[2,1];
-	dFydy[1] = v*dq[1,1] + q[1]*dvdy;
-	dFydy[2] = 2*q[2]*dvdy + v^^2*dq[0,1] + dpdy;
-	dFydy[3] = v*dq[3,1] + q[3]*dvdy + v*dpdy + p*dvdy;
+	dFxdx[0] = drudx;
+	dFxdx[1] = 2.0*ru*dudx + u^^2.0*drdx + dpdx;
+	dFxdx[2] = u*v*drdx + r*u*dvdx + r*v*dudx;
+	dFxdx[3] = u*dredx + rE*dudx + u*dpdx + p*dudx;
 
-	S = dFxdx + dFydy;
+	dFydy[0] = drvdy;
+	dFydy[1] = u*v*drdy + r*u*dvdy + r*v*dudy;
+	dFydy[2] = 2.0*rv*dvdy + v^^2.0*drdy + dpdy;
+	dFydy[3] = v*dredy + rE*dvdy + v*dpdy + p*dvdy;
+
+	auto S = dFxdx + dFydy;
 	
 	if(config.viscosity)
 	{
@@ -190,12 +206,10 @@ Vector!4 sourceTerm(double x, double y, Config config)
 		immutable double Pr = config.physicalConfig.Pr;
 		immutable double k = (gamma*R*mu)/((gamma - 1)*Pr);
 
-		immutable auto dudy = dudy(x, y);
 		immutable auto d2udx2 = d2udx2(x, y);
 		immutable auto d2udy2 = d2udy2(x, y);
 		immutable auto d2udxy = d2udxy(x, y);
 
-		immutable auto dvdx = dvdx(x, y);
 		immutable auto d2vdx2 = d2vdx2(x, y);
 		immutable auto d2vdy2 = d2vdy2(x, y);
 		immutable auto d2vdxy = d2vdxy(x, y);
@@ -203,9 +217,6 @@ Vector!4 sourceTerm(double x, double y, Config config)
 		immutable auto d2pdx2 = d2pdx2(x, y);
 		immutable auto d2pdy2 = d2pdy2(x, y);
 		
-		immutable auto r = q[0];
-		immutable auto drdx = dq[0,0];
-		immutable auto drdy = dq[0,1];
 		immutable auto d2rdx2 = d2rdx2(x, y);
 		immutable auto d2rdy2 = d2rdy2(x, y);
 
@@ -237,7 +248,7 @@ Vector!4 sourceTerm(double x, double y, Config config)
 	q[0] = rho(x, y);
 	q[1] = rho(x, y)*u(x, y);
 	q[2] = rho(x, y)*v(x, y);
-	q[3] = p(x, y)/(gamma - 1) + 0.5*rho(x, y)*(u(x, y)^^2 + v(x, y)^^2);
+	q[3] = p(x, y)/(gamma - 1.0) + 0.5*rho(x, y)*(u(x, y)^^2.0 + v(x, y)^^2.0);
 
 	return q;
 }
@@ -259,8 +270,14 @@ Vector!4 sourceTerm(double x, double y, Config config)
 	grad[2,1] = v(x, y)*drdy(x, y) + rho(x, y)*dvdy(x, y);
 
 	// d(rE)
-	grad[3,0] = 1/(gamma - 1)*dpdx(x, y) + 0.5*(2*rho(x, y)*u(x, y)*dudx(x, y) + u(x, y)^^2*drdx(x, y) + 2*rho(x, y)*v(x, y)*dvdx(x, y) + v(x, y)^^2*drdx(x, y));
-	grad[3,1] = 1/(gamma - 1)*dpdy(x, y) + 0.5*(2*rho(x, y)*u(x, y)*dudy(x, y) + u(x, y)^^2*drdy(x, y) + 2*rho(x, y)*v(x, y)*dvdy(x, y) + v(x, y)^^2*drdy(x, y));
+	auto dru2dx = 2.0*rho(x, y)*u(x, y)*dudx(x, y) + u(x, y)^^2.0*drdx(x, y);
+	auto dru2dy = 2.0*rho(x, y)*u(x, y)*dudy(x, y) + u(x, y)^^2.0*drdy(x, y);
+
+	auto drv2dx = 2.0*rho(x, y)*v(x, y)*dvdx(x, y) + v(x, y)^^2.0*drdx(x, y);
+	auto drv2dy = 2.0*rho(x, y)*v(x, y)*dvdy(x, y) + v(x, y)^^2.0*drdy(x, y);
+
+	grad[3,0] = 1.0/(gamma - 1.0)*dpdx(x, y) + 0.5*(dru2dx + drv2dx);
+	grad[3,1] = 1.0/(gamma - 1.0)*dpdy(x, y) + 0.5*(dru2dy + drv2dy);
 	
 	return grad;
 }

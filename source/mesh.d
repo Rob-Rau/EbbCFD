@@ -21,6 +21,7 @@ import parmetis;
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
 
+immutable uint MAX_EDGES = 6;
 enum BoundaryType
 {
 	FullState,
@@ -69,10 +70,10 @@ struct CommEdgeNodes
 
 struct UCell2
 {
-	uint[6] edges;
-	double[6] fluxMultiplier;
-	uint[6] neighborCells;
-	Matrix!(2,6) gradMat;
+	uint[MAX_EDGES] edges;
+	double[MAX_EDGES] fluxMultiplier;
+	uint[MAX_EDGES] neighborCells;
+	Matrix!(2,MAX_EDGES) gradMat;
 	//Vector!2[4] gradient;
 	Matrix!(4,2) gradient;
 	Vector!2[4] lim;
@@ -475,9 +476,9 @@ struct UMesh2
 
 		foreach(i; interiorCells)
 		{
-			cells[i].gradMat = Matrix!(2, 6)(0);
-			auto tmpMat = Matrix!(6, 2)(0);
-
+			cells[i].gradMat = Matrix!(2, MAX_EDGES)(0);
+			auto tmpMat = Matrix!(MAX_EDGES, 2)(0);
+			cells[i].nNeighborCells = 0;
 			// Run through the edges and find indecies
 			// of cell neighbors
 			for(uint j = 0; j < cells[i].nEdges; j++)
@@ -487,7 +488,7 @@ struct UMesh2
 				auto v1 = edge.mid - cells[i].centroid;
 
 				auto eDot = v1.dot(edge.normal);
-				cells[i].fluxMultiplier[j] = eDot/abs(eDot);
+				//cells[i].fluxMultiplier[j] = eDot/abs(eDot);
 
 				if(edge.cellIdx[0] == i)
 				{
@@ -497,7 +498,7 @@ struct UMesh2
 				{
 					cells[i].neighborCells[cells[i].nNeighborCells] = edge.cellIdx[0];
 				}
-				uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
+				immutable uint idx = cells[i].neighborCells[cells[i].nNeighborCells];
 
 				tmpMat[cells[i].nNeighborCells, 0] = cells[idx].centroid[0] - cells[i].centroid[0];
 				tmpMat[cells[i].nNeighborCells, 1] = cells[idx].centroid[1] - cells[i].centroid[1];
@@ -631,7 +632,9 @@ struct UMesh2
 			
 			auto a = tmpMat.transpose;
 			auto b = a*tmpMat;
-			cells[i].gradMat = b.Inverse*tmpMat.transpose;
+			auto c = b.Inverse;
+			//cells[i].gradMat = b.Inverse*tmpMat.transpose;
+			cells[i].gradMat = c*a;
 		}		
 	}
 

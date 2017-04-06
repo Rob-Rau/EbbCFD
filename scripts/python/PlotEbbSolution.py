@@ -28,43 +28,52 @@ def sort_nicely(l):
     l.sort(key=alphanum_key)
 
 #-----------------------------------------------------------
-def plotstate(Mesh, U, field, fname, clim1, clim2, color):
+def plotstate(Mesh, U, field, fname, clim1, clim2, color, plotExact, plotError):
 	V = Mesh['V']
 	E = Mesh['E']
 	BE = Mesh['BE']
 
 	#f = plt.figure(figsize=(12,6))
 	F = pu.getField(U, field)
-	'''
-	s = field.lower()
-	if (s == 'pressure'):
-		pr = pu.p_a(V[:,0], V[:,1])
-		F = ((pr - F)/pr)*100.
-	elif (s == 'density'):
-		rho_a = pu.rho_a(V[:,0], V[:,1])
-		F = ((rho_a - F)/rho_a)*100.
-	elif (s == 'xmomentum'):
-		ru_a = pu.rho_a(V[:,0], V[:,1])*pu.u_a(V[:,0], V[:,1])
-		F = ((ru_a - F)/ru_a)*100.
-	elif (s == 'ymomentum'):
-		rv_a = pu.rho_a(V[:,0], V[:,1])*pu.v_a(V[:,0], V[:,1])
-		F = ((rv_a - F)/rv_a)*100.
-	elif (s == 'energy'):
-		E_a = pu.E_a(V[:,0], V[:,1])
-		F = ((E_a - F)/E_a)*100.
-	elif (s == 'renergy'):
-		rE_a = pu.rE_a(V[:,0], V[:,1])
-		F = ((rE_a - F)/rE_a)*100.
-	elif (s == 'xvelocity'):
-		u_a = pu.u_a(V[:,0], V[:,1])
-		F = ((u_a - F)/u_a)*100.
-	elif (s == 'yvelocity'):
-		v_a = pu.v_a(V[:,0], V[:,1])
-		F = ((v_a - F)/v_a)*100.
 
-	clim1 = np.min(F)
-	clim2 = np.max(F)
-	'''
+	if((plotExact == True) or (plotError == True)):
+		Exact = F
+		s = field.lower()
+		if (s == 'pressure'):
+			Exact = pu.p_a(V[:,0], V[:,1])
+			#F = ((pr - F)/pr)*100.
+		elif (s == 'density'):
+			Exact = pu.rho_a(V[:,0], V[:,1])
+			#F = ((rho_a - F)/rho_a)*100.
+		elif (s == 'xmomentum'):
+			Exact = pu.rho_a(V[:,0], V[:,1])*pu.u_a(V[:,0], V[:,1])
+			#F = ((ru_a - F)/ru_a)*100.
+		elif (s == 'ymomentum'):
+			Exact = pu.rho_a(V[:,0], V[:,1])*pu.v_a(V[:,0], V[:,1])
+			#F = ((rv_a - F)/rv_a)*100.
+		elif (s == 'energy'):
+			Exact = pu.E_a(V[:,0], V[:,1])
+			#F = ((E_a - F)/E_a)*100.
+		elif (s == 'renergy'):
+			Exact = pu.rE_a(V[:,0], V[:,1])
+			#F = ((rE_a - F)/rE_a)*100.
+		elif (s == 'xvelocity'):
+			Exact = pu.u_a(V[:,0], V[:,1])
+			#F = ((u_a - F)/u_a)*100.
+		elif (s == 'yvelocity'):
+			Exact = pu.v_a(V[:,0], V[:,1])
+			#F = ((v_a - F)/v_a)*100.
+
+		if(plotError == True):
+			F = np.abs(Exact - F)
+			#F = ((Exact - F)/Exact)*100.
+
+		if(plotExact == True):
+			F = Exact
+
+		clim1 = np.min(F)
+		clim2 = np.max(F)
+
 	if(F.shape[0] == V.shape[0]):
 		plt.tripcolor(V[:,0], V[:,1], F, triangles=E, shading='gouraud', edgecolors=color, vmin=clim1, vmax=clim2, linewidth=1)
 		#plt.tripcolor(V[:,0], V[:,1], F, triangles=E, shading='flat', edgecolors=color, vmin=clim1, vmax=clim2, linewidth=1)
@@ -85,7 +94,13 @@ def plotstate(Mesh, U, field, fname, clim1, clim2, color):
 	#plt.colorbar()
 	#plt.clim(0, 0.7)
 	#plt.clim(9, 12)
-	plt.title(field, fontsize=16)
+
+	if(plotError == True):
+		plt.title(field+' error', fontsize=16)
+	elif(plotExact == True):
+		plt.title(field+' exact', fontsize=16)
+	else:
+		plt.title(field, fontsize=16)
 
 	#f.tight_layout()
 	#plt.show(block=(not dosave))
@@ -167,9 +182,33 @@ if __name__ == "__main__":
 	for idx in range(len(meshFiles)):
 		if(not combineSln):
 			mesh = eu.importMesh(meshFiles[idx])
-		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)])
+		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)], False, False)
 		plt.hold(True)
 
 	plt.colorbar()
+	plt.show(block=False)
+	#plt.close(f)
+
+	'''
+	f = plt.figure(figsize=(12,6))
+	for idx in range(len(meshFiles)):
+		if(not combineSln):
+			mesh = eu.importMesh(meshFiles[idx])
+		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)], True, False)
+		plt.hold(True)
+
+	plt.colorbar()
+	plt.show(block=False)
+	#plt.close(f)
+
+	f = plt.figure(figsize=(12,6))
+	for idx in range(len(meshFiles)):
+		if(not combineSln):
+			mesh = eu.importMesh(meshFiles[idx])
+		plotstate(mesh, slns[idx]['U'], state, "", globalMin, globalMax, colors[idx%len(colors)], False, True)
+		plt.hold(True)
+	
+	plt.colorbar()
 	plt.show(block=True)
+	'''
 	plt.close(f)

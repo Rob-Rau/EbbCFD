@@ -132,31 +132,10 @@ void addSourceTerm(ref Vector!4[] R, ref UMesh2 mesh, Config config)
 {
 	foreach(i; mesh.interiorCells)
 	{
-		double xMin = double.infinity;
-		double xMax = -double.infinity;
-		double yMin = double.infinity;
-		double yMax = -double.infinity;
-
-		// compute the bounding box around the polygon
-		foreach(j; 0..mesh.cells[i].nEdges)
-		{
-			auto n1 = mesh.edges[mesh.cells[i].edges[j]].nodeIdx[0];
-			auto n2 = mesh.edges[mesh.cells[i].edges[j]].nodeIdx[1];
-			double tmpXmin = min(mesh.nodes[n1][0], mesh.nodes[n2][0]);
-			double tmpYmin = min(mesh.nodes[n1][1], mesh.nodes[n2][1]);
-
-			double tmpXmax = max(mesh.nodes[n1][0], mesh.nodes[n2][0]);
-			double tmpYmax = max(mesh.nodes[n1][1], mesh.nodes[n2][1]);
-
-			xMin = min(xMin, tmpXmin);
-			xMax = max(xMax, tmpXmax);
-			yMin = min(yMin, tmpYmin);
-			yMax = max(yMax, tmpYmax);
-		}
-
 		double x = mesh.cells[i].centroid[0];
 		double y = mesh.cells[i].centroid[1];
 		auto I = sourceTerm(x, y, config);
+
 		R[i] += I;
 	}
 }
@@ -183,25 +162,53 @@ Vector!4[] computeError(ref UMesh2 mesh)
 Vector!4 computeL2(ref UMesh2 mesh)
 {
 	auto L2 = Vector!4(0);
+	auto tmp = new Vector!4[mesh.interiorCells.length];
+
 	foreach(i; mesh.interiorCells)
 	{
 		double x = mesh.cells[i].centroid[0];
 		double y = mesh.cells[i].centroid[1];
 
 		auto q = solution(x, y);
-		auto tmp = q - mesh.q[i];
-		L2[0] += abs(tmp[0]/q[0])^^2;
-		L2[1] += abs(tmp[1]/q[1])^^2;
-		L2[2] += abs(tmp[2]/q[2])^^2;
-		L2[3] += abs(tmp[3]/q[3])^^2;
+		tmp[i] = abs(q - mesh.q[i]);
+
+		tmp[i][0] = tmp[i][0]^^2.0;
+		tmp[i][1] = tmp[i][1]^^2.0;
+		tmp[i][2] = tmp[i][2]^^2.0;
+		tmp[i][3] = tmp[i][3]^^2.0;
 	}
 
-	L2[0] = sqrt(L2[0]);
-	L2[1] = sqrt(L2[1]);
-	L2[2] = sqrt(L2[2]);
-	L2[3] = sqrt(L2[3]);
+	L2 = tmp.sum!("", "", Vector!4);
+	L2[0] = sqrt(L2[0]/mesh.interiorCells.length.to!double);
+	L2[1] = sqrt(L2[1]/mesh.interiorCells.length.to!double);
+	L2[2] = sqrt(L2[2]/mesh.interiorCells.length.to!double);
+	L2[3] = sqrt(L2[3]/mesh.interiorCells.length.to!double);
 
 	return L2;
+}
+
+Vector!4 computeL1(ref UMesh2 mesh)
+{
+	auto L1 = Vector!4(0);
+	auto tmp = new Vector!4[mesh.interiorCells.length];
+
+	foreach(i; mesh.interiorCells)
+	{
+		double x = mesh.cells[i].centroid[0];
+		double y = mesh.cells[i].centroid[1];
+
+		auto q = solution(x, y);
+		tmp[i] = abs(q - mesh.q[i]);
+		
+		tmp[i][0] = tmp[i][0];
+		tmp[i][1] = tmp[i][1];
+		tmp[i][2] = tmp[i][2];
+		tmp[i][3] = tmp[i][3];
+	}
+
+	L1 = tmp.sum!("", "", Vector!4)/mesh.interiorCells.length.to!double;
+
+	return L1;
 }
 
 void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
@@ -318,7 +325,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 											double newDt = double.infinity;
 											dt = config.dt;
 											uint iterations = 0;
-											while(abs(Rmax) > 1.0e-8)
+											while(abs(Rmax) > 1.0e-10)
 											{
 												ufvmSolver!(mixin(lim), mixin(fl), 4)(R, mesh.q, mesh, config, newDt, Rmax, config.limited, true);
 												addSourceTerm(R, mesh, config);
@@ -340,10 +347,7 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 												{
 													for(uint j = 0; j < 4; j++)
 													{
-														if(std.math.abs(R[i][j]) > Rmax)
-														{
-															Rmax = std.math.abs(R[i][j]);
-														}
+														Rmax = max(R[i][j], Rmax);
 													}
 												}
 
@@ -357,23 +361,21 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 											}
 
 											auto l2 = computeL2(mesh);
-
+											auto l1 = computeL1(mesh);
 											writeln("rho   L2: ", l2[0]);
 											writeln("rho u L2: ", l2[1]);
 											writeln("rho v L2: ", l2[2]);
 											writeln("rho E L2: ", l2[3]);
-
-											auto e = computeError(mesh);
+											writeln;
+											writeln("rho   L1: ", l1[0]);
+											writeln("rho u L1: ", l1[1]);
+											writeln("rho v L1: ", l1[2]);
+											writeln("rho E L1: ", l1[3]);
 
 											import std.range : iota;
 											mesh.localToGlobalElementMap = iota(0, mesh.elements.length).array.to!(uint[]);
 											auto filename = config.meshFile.split(".")[0]~".esln";
 											saveSolution(mesh.q, mesh, cast(char*)filename.toStringz, t, dt, cast(uint)config.order);
-
-											//import std.range : iota;
-											//mesh.localToGlobalElementMap = iota(0, mesh.elements.length).array.to!(uint[]);
-											//auto filename = config.meshFile.split(".")[0]~".esln";
-											//saveSolution(mesh.q, mesh, cast(char*)filename.toStringz, t, dt, cast(uint)config.order);
 
 											break;
 									}

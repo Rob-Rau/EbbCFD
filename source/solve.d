@@ -340,10 +340,10 @@ Datatype vec4dataType;
 		{
 			foreach(i; cellList)
 			{
-				Vector!6[dims] du;
+				Vector!MAX_EDGES[dims] du;
 				for(uint j = 0; j < dims; j++)
 				{
-					du[j] = Vector!6(0); 
+					du[j] = Vector!MAX_EDGES(0); 
 				}
 				mesh.cells[i].minQ = q[i];
 				mesh.cells[i].maxQ = q[i];
@@ -419,45 +419,91 @@ Datatype vec4dataType;
 						{
 							if(mesh.cells[i].lim[k][0] < config.lpThresh)
 							{
-								auto A = Matrix!(10,2)(0);
-								auto b = Vector!10(0);
-								auto c = Vector!2(-abs(mesh.cells[i].gradient[k,0]), -abs(mesh.cells[i].gradient[k,1]));
-								auto xk = Vector!2(0);
-								A[0,0] = 1;
-								A[0,1] = 0;
-								A[1,0] = 0;
-								A[1,1] = 1;
-								A[2,0] = -1;
-								A[2,1] = 0;
-								A[3,0] = 0;
-								A[3,1] = -1;
-								b[0] = 0;
-								b[1] = 0;
-								b[2] = -1;
-								b[3] = -1;
-
-								for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
+								if(mesh.cells[i].nNeighborCells == 3)
 								{
-									immutable uint cellIdx = mesh.cells[i].neighborCells[j];
+									auto A = Matrix!(10,2)(0);
+									auto b = Vector!10(0);
+									auto c = Vector!2(-abs(mesh.cells[i].gradient[k,0]), -abs(mesh.cells[i].gradient[k,1]));
+									auto xk = Vector!2(0);
+									A[0,0] = 1;
+									A[0,1] = 0;
+									A[1,0] = 0;
+									A[1,1] = 1;
+									A[2,0] = -1;
+									A[2,1] = 0;
+									A[3,0] = 0;
+									A[3,1] = -1;
+									b[0] = 0;
+									b[1] = 0;
+									b[2] = -1;
+									b[3] = -1;
 
-									A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
-									A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
-									
-									b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
+									for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
+									{
+										immutable uint cellIdx = mesh.cells[i].neighborCells[j];
 
-									A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
-									A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
-									
-									b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
+										A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
+										A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
+										
+										b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
+
+										A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
+										A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
+										
+										b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
+									}
+
+									LP!10(A, b, c, xk);
+
+									mesh.cells[i].lim[k][0] = xk[0];
+									mesh.cells[i].lim[k][1] = xk[1];
+
+									assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
+									assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
 								}
+								else if(mesh.cells[i].nNeighborCells == 4)
+								{
+									immutable matsize = 4 + 8;
+									auto A = Matrix!(matsize,2)(0);
+									auto b = Vector!matsize(0);
+									auto c = Vector!2(-abs(mesh.cells[i].gradient[k,0]), -abs(mesh.cells[i].gradient[k,1]));
+									auto xk = Vector!2(0);
+									A[0,0] = 1;
+									A[0,1] = 0;
+									A[1,0] = 0;
+									A[1,1] = 1;
+									A[2,0] = -1;
+									A[2,1] = 0;
+									A[3,0] = 0;
+									A[3,1] = -1;
+									b[0] = 0;
+									b[1] = 0;
+									b[2] = -1;
+									b[3] = -1;
 
-								LP!10(A, b, c, xk);
+									for(uint j = 0, cIdx = 0; j < mesh.cells[i].nNeighborCells; j++, cIdx += 2)
+									{
+										immutable uint cellIdx = mesh.cells[i].neighborCells[j];
 
-								mesh.cells[i].lim[k][0] = xk[0];
-								mesh.cells[i].lim[k][1] = xk[1];
+										A[cIdx+4,0] = (mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
+										A[cIdx+4,1] = (mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
+										
+										b[cIdx+4] = mesh.cells[i].minQ[k] - q[i][k];
 
-								assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
-								assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
+										A[cIdx+5,0] = -(mesh.cells[cellIdx].centroid[0] - mesh.cells[i].centroid[0])*mesh.cells[i].gradient[k,0];
+										A[cIdx+5,1] = -(mesh.cells[cellIdx].centroid[1] - mesh.cells[i].centroid[1])*mesh.cells[i].gradient[k,1];
+										
+										b[cIdx+5] = q[i][k] - mesh.cells[i].maxQ[k];
+									}
+
+									LP!matsize(A, b, c, xk);
+
+									mesh.cells[i].lim[k][0] = xk[0];
+									mesh.cells[i].lim[k][1] = xk[1];
+
+									assert((xk[0] >= -10e-16) && (xk[0] <= (1.0 + 1e-12)));
+									assert((xk[1] >= -10e-16) && (xk[1] <= (1.0 + 1e-12)));
+								}
 							}
 						}
 					}
