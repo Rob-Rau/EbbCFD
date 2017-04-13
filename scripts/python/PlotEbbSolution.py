@@ -90,7 +90,7 @@ def plotstate(Mesh, U, field, fname, clim1, clim2, color, plotExact, plotError):
 	plt.axis('equal')
 
 	#plt.axis([-100, 100,-100, 100])
-	#plt.axis([-2, 10,-4, 4])
+	#plt.axis([-0.5, 1.5, -0.75, 1.5])
 	#plt.colorbar()
 	#plt.clim(0, 0.7)
 	#plt.clim(9, 12)
@@ -186,7 +186,7 @@ if __name__ == "__main__":
 		plt.hold(True)
 
 	plt.colorbar()
-	plt.show(block=False)
+	plt.show(block=True)
 	#plt.close(f)
 
 	'''

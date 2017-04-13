@@ -90,10 +90,33 @@
 	\maketitle
 
 	\section{Introduction}
-		In the last three months I have developed EbbCFD to incorporate the beginnings of a Navier-Stokes finite volume solver.
-		Additionally to aid in future development, the method of Manufactured solutions has been implemented. EbbCFD has now been
-		more thoroughly tested with quadrilateral elements and mixed element meshes.
+		The last three months of work on EbbCFD have focused on 3 primary goals: Improvements to the plotting system in order to
+		better display higher order results, impliment viscous flux terms in order to compute the full comressible Navier-Stokes 
+		equations, and finally to empiricaly demonstrate the accuracy and convergence rate of EbbCFD.
 
+	\section{High Order Plotting}
+		Previously, EbbCFD could only plot cell averaged values, throwing away any additional information used used by the solver.
+		The current solver also uses cell centered solution gradients and edge mid-point solution values. With this information
+		a better solution estimate can be displayed.
+		
+		To address this ebb-reconstruct was developed in order to generate higher order visualizations. To do this, ebb-reconstruct
+		breaks up each $N$ edge cell into $2N$ triangles. The verticies used for these new triangles are the cell centroid, the edge
+		mid-points and the actual cell verticies. It then uses the cell centered gradients to interpolate solution values to the new
+		verticies. Edge mid-points and cell verticies have multiple values associated with them after this step so the final value is
+		the average of all values associated with a point.
+
+		\begin{figure}[H]
+			\centering
+			\begin{subfigure}{0.4\textwidth}
+				\hspace*{-2cm}\includegraphics[scale=0.2,trim={7cm 2cm 10cm 2cm},clip]{CellAvgPlot.pdf}
+				\hspace*{-2cm}\caption{Displaying only cell average values}
+			\end{subfigure}
+			\begin{subfigure}{0.4\textwidth}
+				\hspace*{1cm}\includegraphics[scale=0.2,trim={7cm 2cm 10cm 2cm},clip]{ReconstructedPlot.pdf}
+				\hspace*{1cm}\caption{Displaying reconstructed solution}
+			\end{subfigure}
+		\end{figure}
+		
 	\section{Navier-Stokes}
 		The current Navier-Stokes implementation is a rather naive approach. It modifies the convective flux terms by adding a
 		viscous flux term. The viscous term is computed as
@@ -106,6 +129,13 @@
 		This provides a stable scheme at low Reynolds numbers, but does not show favorable convergence, as shown later. To address convergence I plan
 		on implementing a version of the Bassi-Rebay 2 viscous discritization adapted for finite volumes.
 
+		To show that the Navier-Stokes solution is accurate a flat plate simulation was performed and the drag results were compared to the
+		Blassius solution.
+
+		\begin{figure}[H]
+			\includegraphics[width=\textwidth]{FlatPlate.pdf}
+		\end{figure}
+		
 	\section{Method of Manufactured Solutions}
 		To show that EbbCFD had correctly implimented its discritization, I employed the Method of Manufactured Solutions.
 		The exact solution chosen was
@@ -116,4 +146,7 @@
 			p &= a_p + b_p \sin(c_p x + d_p y)
 		\end{align}
 
+		\begin{figure}[H]
+			\includegraphics[width=\textwidth]{ConvergencePlot.pdf}
+		\end{figure}
 \end{document}

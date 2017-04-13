@@ -28,6 +28,9 @@ print("rho ns end               l2: "+str(log(rl2_ns[2]/rl2_ns[3])/log(dx[2]/dx[
 
 plt.figure()
 hlines = plt.loglog(dx, rl2_euler, dx, rl2_ns, dx, rl2_euler_limited, dx, rl2_euler_lp_limited, dx_tri, rl2_euler_tri, dx_tri, rl2_euler_tri_limited, dx_pert[0:3], rl2_euler_tri_pert[0:3])
+plt.rc('text', usetex=True)
+plt.xlabel("Grid size")
+plt.ylabel("$L_2$ error")
 plt.legend(hlines, ["euler", "navier-stokes", "euler scalar limited", "euler lp limited", "euler tri", "euler tri limited", "euler tri pert"])
 plt.grid(True,which="both")
 plt.show()
