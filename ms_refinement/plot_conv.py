@@ -14,7 +14,7 @@ rl2_euler_tri_limited = [0.00234712, 0.000548344, 0.000139978, 3.56414e-05]
 rl2_euler_lp_tri_limited = [0.00242227, 0.000586065, 0.000140727]
 rl2_euler_limited = [0.00187271, 0.000435096, 0.000120633, 2.90233e-05]
 rl2_euler_lp_limited = [0.00180033, 0.000422567, 0.000120477, 2.90644e-05]
-rl2_ns = [0.0005766, 0.000132884, 7.07771e-05, 6.70342e-05]
+rl2_ns = [0.000576472, 0.000132735, 7.0506e-05, 6.67272e-05]
 
 print("rho euler                l2: "+str(log(rl2_euler[2]/rl2_euler[3])/log(dx[2]/dx[3])))
 print("rho euler tri            l2: "+str(log(rl2_euler_tri[2]/rl2_euler_tri[3])/log(dx_tri[2]/dx_tri[3])))

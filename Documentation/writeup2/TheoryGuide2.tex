@@ -1,0 +1,119 @@
+\documentclass[12pt,parskip=full]{article}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage[left=1.0in,right=1.0in,top=0.5in,bottom=1.0in]{geometry}
+\geometry{letterpaper}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{soul}
+\usepackage{textcomp}
+\usepackage{marvosym}
+\usepackage{wasysym}
+\usepackage{latexsym}
+\usepackage{amssymb}
+\usepackage{apacite}
+\usepackage{tabu}
+\usepackage[svgnames]{xcolor}
+\usepackage{tikz}
+\usepackage[linktoc=all]{hyperref}
+\usepackage{cleveref}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{array}
+\usepackage{apacite}
+\usepackage{natbib}
+\usepackage{multicol}
+\usepackage{subcaption}
+\usepackage{mathtools}
+\usetikzlibrary{arrows}
+
+\pgfdeclarelayer{edgelayer}
+\pgfdeclarelayer{nodelayer}
+\pgfsetlayers{edgelayer,nodelayer,main}
+
+\tikzstyle{none}=[inner sep=0pt]
+\tikzstyle{waypt}=[circle,fill=Black,draw=Black,scale=0.4]
+\tikzstyle{Helobody}=[circle,fill=White,draw=Black,scale=4.0]
+\tikzstyle{Tailrotor}=[circle,fill=White,draw=Black,scale=1.0]
+\tikzstyle{ForceVector}=[->,draw=Indigo,fill=Indigo]
+\tikzstyle{Coordinate}=[->,draw=Red,fill=Red,fill opacity=1.0]
+\tikzstyle{angle}=[->]
+\tikzstyle{MeasureMark}=[|-|]
+\newlength{\imagewidth}
+\newlength{\imagescale}
+
+\setlength{\parskip}{11pt}
+%\setlength{\parindent}{15pt}
+\usepackage{bookmark}
+\makeatletter
+%\renewcommand\@seccntformat[1]{}
+\makeatother
+
+\lstset
+{
+	language=c,
+	keywords={break,case,catch,continue,else,for,
+		if,return,switch,try,while,int,void},
+	basicstyle=\ttfamily,
+	keywordstyle=\color{blue},
+	commentstyle=\color{ForestGreen},
+	stringstyle=\color{purple},
+	numbers=left,
+	numberstyle=\tiny\color{gray},
+	stepnumber=1,
+	numbersep=10pt,
+	backgroundcolor=\color{white},
+	tabsize=4,
+	showspaces=false,
+	showstringspaces=false
+}
+
+\renewcommand{\thesection}{\arabic{section}}
+
+\renewcommand{\thesubsection}{\thesection\alph{subsection}}
+\renewcommand{\theequation}{\thesubsection\arabic{equation}}
+\newcommand*\circled[1]{\tikz[baseline=(char.base)]{
+			\node[shape=circle,draw,inner sep=1pt] (char) {#1};}}
+			
+\numberwithin{subsection}{section}
+
+\begin{document}
+	\vspace{-4ex}
+	\title{EbbCFD Theory Guide Part 2\vspace{-3.5ex}}
+	\author{Rob Rau\vspace{-4ex}}
+	\date{\today\vspace{-4ex}}
+	\maketitle
+
+	\section{Introduction}
+		In the last three months I have developed EbbCFD to incorporate the beginnings of a Navier-Stokes finite volume solver.
+		Additionally to aid in future development, the method of Manufactured solutions has been implemented. EbbCFD has now been
+		more thoroughly tested with quadrilateral elements and mixed element meshes.
+
+	\section{Navier-Stokes}
+		The current Navier-Stokes implementation is a rather naive approach. It modifies the convective flux terms by adding a
+		viscous flux term. The viscous term is computed as
+		\begin{equation}
+		\end{equation}
+		This involves making a approximation of the solution gradient at the cell interface. EbbCFD currently does this by simply
+		taking the average of the solution gradient of the neighboring cells.
+		
+		
+		This provides a stable scheme at low Reynolds numbers, but does not show favorable convergence, as shown later. To address convergence I plan
+		on implementing a version of the Bassi-Rebay 2 viscous discritization adapted for finite volumes.
+
+	\section{Method of Manufactured Solutions}
+		To show that EbbCFD had correctly implimented its discritization, I employed the Method of Manufactured Solutions.
+		The exact solution chosen was
+		\begin{align}
+			\rho &= a_\rho + b_\rho \sin(c_\rho x + d_\rho y) \\
+			u &= a_u + b_u \cos(c_u x + d_u y) \\
+			v &= a_v + b_v \cos(c_v x + d_v y) \\
+			p &= a_p + b_p \sin(c_p x + d_p y)
+		\end{align}
+
+\end{document}

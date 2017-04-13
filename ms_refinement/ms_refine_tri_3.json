@@ -1,0 +1,35 @@
+{
+	"mesh": "ms_refine_tri_3.msh",
+	"dt": 0.00001,
+	"dynamicDt": true,
+	"localTimestep": false,
+	"lpThresh": 1,
+	"tEnd": 10000,
+	"limiter": "minmodS",
+	"flux": "roeFlux",
+	"plotIter": 100,
+	"saveIter": 1000,
+	"solver": "ufvmSolver",
+	"CFL": 0.2,
+	"cflAdjust": false,
+	"integrator": "Euler",
+	"forceBoundary": "Wall",
+	"limited": true,
+	"order": 2,
+	"initialConditions": [0.1, 0, 1.1, 1],
+	"viscosity": false,
+	"physicalConfig": {
+		"Pr": 0.71,
+		"R": 1,
+		"gamma": 1.4,
+		"Re": 1000,
+		"L": 1
+	},
+	"boudaryConditions": [
+		{
+			"tag": "Freestream",
+			"type": "dirichlet",
+			"q": [0.1, 0, 1.1, 1]
+		}
+	]
+}

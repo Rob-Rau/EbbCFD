@@ -32,9 +32,8 @@ enum fluxDir
 
 /++
 +/
-@nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Matrix!(4,2) dq, Vector!2 n)
+@nogc Vector!dims diffusiveFlux(size_t dims)(double Pr, double mu, Vector!dims q, Matrix!(dims,2) dq, Vector!2 n)
 {
-	Vector!dims f;
 	double rho = q[0];
 	double u = q[1]/q[0];
 	double v = q[2]/q[0];
@@ -52,7 +51,7 @@ enum fluxDir
 	auto A01 = (mu/rho)*Matrix!(dims, dims)(0, 0, 0, 0,
 											2.0/3.0*v, 0, -2.0/3.0, 0,
 											-u, 1, 0, 0,
-											(2.0/3.0 - 1.0)*u*v, u*v, -2.0/3.0*u, 0);
+											(2.0/3.0 - 1.0)*u*v, v, -2.0/3.0*u, 0);
 
 	auto G0 = A00*dqdx + A01*dqdy;
 

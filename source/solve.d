@@ -791,6 +791,8 @@ Datatype vec4dataType;
 				double y = mesh.cells[mesh.edges[i].cellIdx[1]].centroid[1];
 
 				mesh.cells[mesh.edges[i].cellIdx[1]].gradient = config.boundaries[mesh.edges[i].bIdx].dFuncDerivative(x, y);
+				auto mid = mesh.edges[i].mid;
+				mesh.edges[i].q[1] = config.boundaries[mesh.edges[i].bIdx].dFunc(mid[0], mid[1]);
 				goto case FullState;
 
 			case FullState:
