@@ -340,7 +340,8 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 			else
 			{
 				import std.array : array;
-				umesh.localToGlobalElementMap = std.range.iota(0, umesh.elements.length).array.to!(uint[]);
+				import std.range : iota;
+				umesh.localToGlobalElementMap = iota(0, umesh.elements.length).array.to!(uint[]);
 			}
 		}
 

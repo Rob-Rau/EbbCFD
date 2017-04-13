@@ -1,7 +1,7 @@
 /+ Copyright (c) 2017 Robert F. Rau II +/
 module ebb.ms;
 
-import std.algorithm : canFind, filter, sort;
+import std.algorithm : canFind, countUntil, filter, sort, max, min;
 import std.array : array, split;
 import std.conv;
 import std.file : dirEntries, DirEntry, mkdir, readText, SpanMode;
