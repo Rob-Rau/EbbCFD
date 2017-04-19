@@ -11,6 +11,7 @@ import std.string;
 
 import numd.linearalgebra.matrix;
 
+import ebb.math;
 import ebb.mesh;
 import ebb.integrators;
 import ebb.io;
