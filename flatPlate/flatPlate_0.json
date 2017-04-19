@@ -1,0 +1,50 @@
+{
+	"mesh": "flatPlate_0.msh",
+	"dt": 0.00001,
+	"dynamicDt": true,
+	"localTimestep": false,
+	"lpThresh": -1,
+	"tEnd": 10000,
+	"limiter": "minmodS",
+	"flux": "roeFlux",
+	"plotIter": 1000,
+	"saveIter": 1000,
+	"solver": "ufvmSolver",
+	"CFL": 0.3,
+	"cflAdjust": false,
+	"integrator": "Euler",
+	"forceBoundary": "Wall",
+	"limited": false,
+	"order": 2,
+	"initialConditions": [0.1, 0, 1.1, 1],
+	"viscosity": true,
+	"physicalConfig": {
+		"Pr": 0.7,
+		"R": 8.3145,
+		"gamma": 1.4,
+		"Re": 1000,
+		"L": 2
+	},
+	"boudaryConditions": [
+		{
+			"tag": "Freestream",
+			"type": "fullState",
+			"q": [0.1, 0, 1.1, 1]
+		},
+		{
+			"tag": "Wall",
+			"type": "viscidWall",
+			"q": [0.1, 0, 1.1, 1]
+		},
+		{
+			"tag": "Outflow",
+			"type": "constP",
+			"q": [71.429]
+		},
+		{
+			"tag": "Symmetric",
+			"type": "symmetry",
+			"q": [71.429]
+		}
+	]
+}
