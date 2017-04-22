@@ -331,7 +331,7 @@ Datatype vec4dataType;
 }
 
 // Unstructured finite volume solver
-@nogc void ufvmSolver(alias S, alias F, size_t dims)(ref Vector!dims[] R, ref Vector!dims[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate)
+@nogc void ufvmSolver(alias F, size_t dims)(ref Vector!dims[] R, ref Vector!dims[] q, ref UMesh2 mesh, Config config, ref double newDt, ref double Rmax, bool limit, bool dtUpdate)
 {
 	@nogc void buildGradients(uint[] cellList)
 	{

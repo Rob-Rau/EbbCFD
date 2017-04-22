@@ -75,7 +75,6 @@ struct Config
 	double dt;
 	bool dynamicDt;
 	double tEnd;
-	string limiter;
 	string flux;
 	long saveIter;
 	long plotIter;
@@ -87,7 +86,6 @@ struct Config
 	double CFL;
 	double[4] ic;
 	BoundaryData[] boundaries;
-	double aitkenTol = -1;
 	bool localTimestep = false;
 	bool multistageLimiting = false;
 	bool cflAdjust = false;
@@ -117,7 +115,6 @@ Config loadConfig(string conf)
 	Config config;
 
 	config.meshFile = jConfig["mesh"].str;
-	config.limiter = jConfig["limiter"].str;
 	config.flux = jConfig["flux"].str;
 	config.dt = jConfig["dt"].floating;
 	config.tEnd = jConfig["tEnd"].getDouble;
@@ -211,16 +208,6 @@ Config loadConfig(string conf)
 	{
 		writeln("Order option not provided, setting order 2");
 		config.order = 2;
-	}
-
-	try
-	{
-		config.aitkenTol = jConfig["aitkenTol"].getDouble;
-	}
-	catch(Exception ex)
-	{
-		writeln("Aitken accelerator tolerance not supplied, disabling (-1)");
-		config.aitkenTol = -1;
 	}
 
 	try

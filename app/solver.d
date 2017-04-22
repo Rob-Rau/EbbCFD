@@ -9,7 +9,9 @@ import std.algorithm : canFind, countUntil, min, map, max, reduce, sum;
 import std.conv;
 import std.file;
 import std.math;
+import std.meta;
 import std.stdio;
+import std.string;
 
 import numd.utility;
 import numd.linearalgebra.matrix;
@@ -92,25 +94,6 @@ static shared bool interrupted = false;
 	Vector!4[] q1;
 	Vector!4[] q2;
 	Vector!4[] dem;
-	if(config.aitkenTol > 0)
-	{
-		q0 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
-		q1 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
-		q2 = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
-		dem = cast(Vector!4[])Mallocator.instance.allocate(mesh.cells.length*Vector!4.sizeof);
-
-		for(uint i = 0; i < mesh.cells.length; i++)
-		{
-			q0[i] = Vector!4(0);
-			q1[i] = Vector!4(0);
-			q2[i] = Vector!4(0);
-			dem[i] = Vector!4(0);
-		}
-		scope(exit) Mallocator.instance.deallocate(q0);
-		scope(exit) Mallocator.instance.deallocate(q1);
-		scope(exit) Mallocator.instance.deallocate(q2);
-		scope(exit) Mallocator.instance.deallocate(dem);
-	}
 
 	scope(exit) Mallocator.instance.deallocate(forceBuffer);
 	scope(exit) Mallocator.instance.deallocate(R);
@@ -138,29 +121,7 @@ static shared bool interrupted = false;
 		double Rmax = 0;
 		double newDt = dt;
 
-		if((config.aitkenTol < 0) || ((config.aitkenTol > 0) && (iterations < 500)))
-		{
-			integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax);
-		}
-		else
-		{
-			q0[] = mesh.q[];
-
-			integrator.step!solver(R, q1, mesh, config, newDt, Rmax);
-			newDt = dt;
-			mesh.q[] = q1[];
-
-			integrator.step!solver(R, q2, mesh, config, newDt, Rmax);
-
-			for(uint i = 0; i < mesh.cells.length; i++)
-			{
-				for(uint k = 0; k < 4; k++)
-				{
-					printf("%f, %f, %f\n", q0[i][k], q1[i][k], q2[i][k]);
-				}
-				printf("\n");
-			}
-		}
+		integrator.step!solver(R, mesh.q, mesh, config, newDt, Rmax);
 
 		if(config.dynamicDt)
 		{
@@ -313,6 +274,57 @@ static shared bool interrupted = false;
 	}
 }
 
+string switchBuilder(int level, string switchVar, Args...)(string statement)
+{
+	alias list = AliasSeq!Args;
+
+	string fillPlaceHolder(int level)(in string statement, string arg)
+	{
+		auto strSlice = statement;
+		ptrdiff_t searchIdx = 0;
+		string newStatement = statement;
+		while(searchIdx < statement.length)
+		{
+			auto idxStart = newStatement.indexOf('{', searchIdx);
+			if(idxStart == -1)
+			{
+				break;
+			}
+			
+			auto idxEnd = newStatement.indexOf('}', idxStart);
+			assert(idxEnd > idxStart);
+			
+			auto sliceLen = idxEnd - (idxStart + 1);
+			if(newStatement[idxStart+1..idxStart+1 + sliceLen].isNumeric)
+			{
+				auto strLevel = newStatement[idxStart+1..idxStart+1 + sliceLen].to!int;
+				if(strLevel == level)
+				{
+					newStatement = newStatement[0..idxStart] ~ arg ~ newStatement[idxEnd + 1..$];
+				}
+			}
+
+			searchIdx = idxStart + 1;
+		}
+		
+		return newStatement;
+	}
+
+	string switchStatement = `final switch(`~switchVar~`)
+{`;
+	foreach(arg; list)
+	{
+		auto thisStatement = fillPlaceHolder!level(statement, arg.stringof);
+		switchStatement ~= `
+case `~arg.stringof~`:
+	`~thisStatement~`
+	break;`;
+	}
+	switchStatement ~= `
+}`;
+	return switchStatement;
+}
+
 void startComputation(Config config, string saveFile, uint p, uint id)
 {
 	try
@@ -357,41 +369,15 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 		umesh.comm.barrier;
 		saveMatlabMesh(tMesh, config.meshFile.split('.')[0]~"_"~id.to!string~".mmsh");
 		umesh.comm.barrier;
-		final switch(config.limiter)
-		{
-			foreach(lim; limiterList)
-			{
-				case lim:
-				{
-					final switch(config.flux)
-					{
-						foreach(fl; fluxList)
-						{
-							case fl:
-							{
-								final switch(config.integrator)
-								{
-									foreach(inte; integratorList)
-									{
-										case inte:
-											writeln("Running 2D finite volume solver");
-											writeln("-limited: ", config.limited);
-											writeln("-order: ", config.order);
-											writeln("-limiter: "~lim);
-											writeln("-flux: "~fl);
-											writeln("-integrator: "~inte);
-											runIntegrator!(ufvmSetup, ufvmSolver!(mixin(lim), mixin(fl), 4), mixin(inte))(umesh, config, saveFile, triMap);
-											break;
-									}
-								}
-								break;
-							}
-						}
-					}
-					break;
-				}
-			}
-		}
+
+		mixin(`writeln("Running 2D finite volume solver");
+				writeln("-limited: ", config.limited);
+				writeln("-order: ", config.order);
+				writeln("-flux: "~{1});
+				writeln("-integrator: "~{0});
+				runIntegrator!(ufvmSetup, ufvmSolver!(mixin({1}), 4), mixin({0}))(umesh, config, saveFile, triMap);`.
+				switchBuilder!(1, "config.flux", fluxList).
+				switchBuilder!(0, "config.integrator", integratorList));
 	}
 	catch(CellException ce)
 	{

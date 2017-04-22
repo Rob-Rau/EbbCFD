@@ -1,9 +1,6 @@
 module ebb.integrators;
 
 import core.stdc.stdio : printf;
- 
-import std.meta : aliasSeqOf;
-import std.math;
 
 import ebb.config;
 import ebb.exception;
@@ -11,8 +8,11 @@ import ebb.math;
 import ebb.mesh;
 import ebb.mpid;
 
-import numd.utility;
 import numd.linearalgebra.matrix;
+import numd.utility;
+
+import std.math;
+import std.meta : aliasSeqOf;
 
 alias integratorList = aliasSeqOf!(["Euler", "RK2", "RK2_TVD", "RK4"]);
 
