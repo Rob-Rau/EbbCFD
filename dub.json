@@ -73,7 +73,7 @@
 		},
 		"ccc-release": {
 			"buildOptions": ["releaseMode", "inline"],
-			"dflags": ["-O5", "-I/export/home/rrau/numd", "march=native"],
+			"dflags": ["-O5", "-I/export/home/rrau/numd"],
 			"lflags": ["-L/usr/lib64", "-L$HOME/ldc2-1.2.0-linux-x86_64/lib", "-L/usr/local/lib", "-L$MPIHOME/lib"]
 		},
 		"prof-release": {
