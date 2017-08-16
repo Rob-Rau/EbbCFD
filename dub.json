@@ -64,7 +64,7 @@
 		},
 		"ldc-release": {
 			"buildOptions": ["releaseMode", "inline"],
-			"dflags": ["-O5"]
+			"dflags": ["-O3", "-enable-cross-module-inlining"]
 		},
 		"flux-release": {
 			"buildOptions": ["releaseMode", "inline"],

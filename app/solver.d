@@ -35,7 +35,7 @@ static shared bool interrupted = false;
 	atomicStore(interrupted, true);
 }
 
-@nogc void runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, uint[] triMap)
+@nogc uint runIntegrator(alias setup, alias solver, alias integrator)(ref UMesh2 mesh, Config config, string saveFile, uint[] triMap)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -272,6 +272,8 @@ static shared bool interrupted = false;
 		printf("lift force = %f\t drag force = %f\t t = %f\n", ld[1], ld[0], t);
 		printf("rho_RMS = %.10e\tu_RMS = %.10e\tv_RMS = %.10e\tE_RMS = %.10e\tFlux_R = %.10e\t dt = %10.10f\n", residRho, residU, residV, residE, lastRmax, dt);
 	}
+
+	return iterations;
 }
 
 string switchBuilder(int level, string switchVar, Args...)(string statement)
@@ -375,7 +377,18 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 				writeln("-order: ", config.order);
 				writeln("-flux: "~{1});
 				writeln("-integrator: "~{0});
-				runIntegrator!(ufvmSetup, ufvmSolver!(mixin({1}), 4), mixin({0}))(umesh, config, saveFile, triMap);`.
+				double startTime = wtime;
+				auto iterations = runIntegrator!(ufvmSetup, ufvmSolver!(mixin({1}), 4), mixin({0}))(umesh, config, saveFile, triMap);
+				MPI_COMM_WORLD.barrier;
+				double elapsed = wtime - startTime;
+				if(id == 0)
+				{
+					writeln("total solver time: ", elapsed, " s");
+					auto timePerIteration = elapsed/cast(double)iterations;
+					writeln("average time per iteration: ", timePerIteration, " s");
+					auto timePerCell = timePerIteration/cast(double)umesh.q.length;
+					writeln("average time per cell: ", timePerCell*1_000_000.0, " us");
+				}`.
 				switchBuilder!(1, "config.flux", fluxList).
 				switchBuilder!(0, "config.integrator", integratorList));
 	}
@@ -449,8 +462,8 @@ int main(string[] args)
 	double elapsed = wtime - startTime;
 	if(id == 0)
 	{
-		writeln("total time: ", elapsed);
+		writeln("total run time: ", elapsed);
 	}
-	
+
 	return shutdown;
 }
