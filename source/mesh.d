@@ -18,6 +18,8 @@ import ebb.mpid;
 
 import parmetis;
 
+import mir.sparse;
+
 alias Vec = Vector!4;
 alias Mat = Matrix!(4, 4);
 
@@ -172,27 +174,26 @@ struct UMesh2
 		this.mpiRank = rank;
 	}
 
-	private bool isBoundaryEdge(ref Edge edge, ref uint bGroup, ref uint bNodeIdx)
+	private bool isBoundaryEdge(H)(H boundaryHash, ref Edge edge, ref uint bGroup, ref uint bNodeIdx)
 	{
-		for(uint i = 0; i < bNodes.length; i++)
+		immutable auto n1 = edge.nodeIdx[0] > edge.nodeIdx[1] ? edge.nodeIdx[1] : edge.nodeIdx[0];
+		immutable auto n2 = edge.nodeIdx[0] > edge.nodeIdx[1] ? edge.nodeIdx[0] : edge.nodeIdx[1];
+
+		if(boundaryHash[n1, n2] != 0)
 		{
-			if(((bNodes[i][0] == edge.nodeIdx[0]) && (bNodes[i][1] == edge.nodeIdx[1])) ||
-			   ((bNodes[i][1] == edge.nodeIdx[0]) && (bNodes[i][0] == edge.nodeIdx[1])))
+			for(uint j = 0; j < bGroupStart.length-1; j++)
 			{
-				for(uint j = 0; j < bGroupStart.length-1; j++)
+				if(((boundaryHash[n1, n2] - 1) >= bGroupStart[j]) && ((boundaryHash[n1, n2] - 1) < bGroupStart[j+1]))
 				{
-					if((i >= bGroupStart[j]) && (i < bGroupStart[j+1]))
-					{
-						bGroup = j;
-					}
+					bGroup = j;
 				}
-				if(i >= bGroupStart[$-1])
-				{
-					bGroup = bGroupStart.length.to!uint - 1;
-				}
-				bNodeIdx = i;
-				return true;
 			}
+			if((boundaryHash[n1, n2] - 1) >= bGroupStart[$-1])
+			{
+				bGroup = bGroupStart.length.to!uint - 1;
+			}
+			bNodeIdx = boundaryHash[n1, n2] - 1;
+			return true;
 		}
 		return false;
 	}
@@ -210,26 +211,21 @@ struct UMesh2
 		return false;
 	}
 
-	private bool isExistingEdge(ref Edge edge, ref UMesh2 mesh, ref uint idx)
-	{
-		for(uint k = 0; k < mesh.edges.length; k++)
-		{
-			if(((mesh.edges[k].nodeIdx[0] == edge.nodeIdx[0]) && (mesh.edges[k].nodeIdx[1] == edge.nodeIdx[1])) ||
-			   ((mesh.edges[k].nodeIdx[1] == edge.nodeIdx[0]) && (mesh.edges[k].nodeIdx[0] == edge.nodeIdx[1])))
-			{
-				idx = k;
-				return true;
-			}
-		}
-		return false;
-	}
-
 	/++
 		Compute cell and edge interconnections
 	+/
 	void buildMesh()
 	{
 		bGroups = new uint[][](bTags.length);
+		auto edgeHash = sparse!uint(nodes.length, nodes.length);
+		auto boundaryHash = sparse!uint(nodes.length, nodes.length);
+
+		foreach(uint i, bNode; bNodes)
+		{
+			immutable auto n1 = bNode[0] > bNode[1] ? bNode[1] : bNode[0];
+			immutable auto n2 = bNode[0] > bNode[1] ? bNode[0] : bNode[1];
+			boundaryHash[n1, n2] = i + 1;
+		}
 
 		for(uint i = 0; i < elements.length; i++)
 		{
@@ -252,14 +248,17 @@ struct UMesh2
 
 				uint bGroup;
 				uint bNodeIdx;
-				edge.isBoundary = isBoundaryEdge(edge, bGroup, bNodeIdx);
+				edge.isBoundary = isBoundaryEdge(boundaryHash, edge, bGroup, bNodeIdx);
 				if(!edge.isBoundary)
 				{
-					uint k = 0;
-					if(isExistingEdge(edge, this, k))
+					immutable auto n1 = ni[0] > ni[1] ? ni[1] : ni[0];
+					immutable auto n2 = ni[0] > ni[1] ? ni[0] : ni[1];
+
+					if(edgeHash[n1, n2] != 0)
 					{
-						edges[k].cellIdx[1] = i;
-						edgeidx = k;
+						auto idx = edgeHash[n1, n2].to!size_t - 1;
+						edges[idx].cellIdx[1] = i;
+						edgeidx = edgeHash[n1, n2] - 1;
 						cells[i].fluxMultiplier[j] = -1.0;
 					}
 					else
@@ -273,12 +272,13 @@ struct UMesh2
 						edge.normal = normal;
 						edge.tangent = tangent;
 						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
-						double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
-						double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
+						immutable double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
+						immutable double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
 						edge.mid = Vector!2(x, y);
 						cells[i].fluxMultiplier[j] = 1.0;
 						edges ~= edge;
 						edgeidx = edges.length.to!uint - 1;
+						edgeHash[n1, n2] = edgeidx + 1;
 						if(!isCommEdge(edge))
 						{
 							interiorEdges ~= edgeidx;
@@ -635,7 +635,7 @@ struct UMesh2
 			auto c = b.Inverse;
 			//cells[i].gradMat = b.Inverse*tmpMat.transpose;
 			cells[i].gradMat = c*a;
-		}		
+		}
 	}
 
 	@nogc Vector!2 computeBoundaryForces(string[] tags)

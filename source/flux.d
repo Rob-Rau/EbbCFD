@@ -10,13 +10,6 @@ import numd.linearalgebra.matrix;
 import ebb.euler;
 
 alias fluxList = aliasSeqOf!(["rusanovFlux", "roeFlux"]);
-//alias fluxList = aliasSeqOf!(["roeFlux"]);
-
-enum fluxDir
-{
-	xDir,
-	yDir
-}
 
 /++
 	Examples:
