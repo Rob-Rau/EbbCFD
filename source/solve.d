@@ -913,14 +913,14 @@ Datatype vec4dataType;
 					auto cellIdx = mesh.edges[i].cellIdx[0];
 					auto gradp = mesh.cells[cellIdx].gradient;
 					auto nOuter = edge.normal*edge.normal.transpose;
-					auto A = Matrix!(dims,dims).Identity;
-					auto V = Matrix!(dims-2,dims-2).Identity - nOuter;
+					auto A = Matrix!(dims,dims).identity;
+					auto V = Matrix!(dims-2,dims-2).identity - nOuter;
 					A[1,1] = V[0,0];
 					A[1,2] = V[0,1];
 					A[2,1] = V[1,0];
 					A[2,2] = V[1,1];
 					auto tmp1 = A*gradp;
-					auto tmp2 = Matrix!(dims-2,dims-2).Identity - 2*nOuter;
+					auto tmp2 = Matrix!(dims-2,dims-2).identity - 2*nOuter;
 					auto tmp3 = tmp1*tmp2;
 					auto bGrad = gradp*nOuter + tmp3;
 

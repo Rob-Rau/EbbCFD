@@ -271,7 +271,9 @@ struct UMesh2
 						tangent = tangent.normalize();
 						edge.normal = normal;
 						edge.tangent = tangent;
-						edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
+						auto rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).inverse;
+						enforce(!rotMat.isNull, "Failed to build rotation matrix for edge "~j.to!string);
+						edge.rotMat = rotMat.get;
 						immutable double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
 						immutable double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
 						edge.mid = Vector!2(x, y);
@@ -293,7 +295,9 @@ struct UMesh2
 					Vector!2 tangent = Vector!2(-normal[1], normal[0]);
 					edge.normal = normal;
 					edge.tangent = tangent;
-					edge.rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).Inverse;
+					auto rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).inverse;
+					enforce(!rotMat.isNull, "Failed to build rotation matrix for edge "~j.to!string);
+					edge.rotMat = rotMat.get;
 					edge.boundaryTag = bTags[bGroup];
 					edge.bNormal = (1.0/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
 					double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
@@ -632,8 +636,8 @@ struct UMesh2
 			
 			auto a = tmpMat.transpose;
 			auto b = a*tmpMat;
-			auto c = b.Inverse;
-			//cells[i].gradMat = b.Inverse*tmpMat.transpose;
+			auto c = b.inverse;
+			//cells[i].gradMat = b.inverse*tmpMat.transpose;
 			cells[i].gradMat = c*a;
 		}
 	}

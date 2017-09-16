@@ -1,0 +1,3 @@
+[submodule "OpenMPI"]
+	path = OpenMPI
+	url = https://github.com/Rob-Rau/OpenMPI
