@@ -24,18 +24,6 @@ import ebb.mesh;
 import ebb.io;
 import ebb.mpid;
 
-struct Solution(size_t dims)
-{
-	Vector!dims[] q;
-	uint[] globalElementMap;
-	double t;
-}
-
-struct SolverState
-{
-
-}
-
 @nogc void invert(ref Matrix!(2, 2) inv, ref Matrix!(2, 2) mat)
 {
 	inv[0] = mat[3];
