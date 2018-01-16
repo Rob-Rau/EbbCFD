@@ -1,3 +1,0 @@
-[submodule "OpenMPI"]
-	path = OpenMPI
-	url = git@github.com:Rob-Rau/OpenMPI.git

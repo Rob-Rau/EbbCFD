@@ -7,6 +7,7 @@ import std.conv;
 import std.file : dirEntries, DirEntry, mkdir, readText, SpanMode;
 import std.getopt;
 import std.math;
+import std.meta;
 import std.stdio;
 import std.string;
 
@@ -23,6 +24,57 @@ import ebb.manufacturedsolution;
 import ebb.io;
 import ebb.mpid;
 import ebb.solve;
+
+string switchBuilder(int level, string switchVar, Args...)(string statement)
+{
+	alias list = AliasSeq!Args;
+
+	string fillPlaceHolder(int level)(in string statement, string arg)
+	{
+		auto strSlice = statement;
+		ptrdiff_t searchIdx = 0;
+		string newStatement = statement;
+		while(searchIdx < statement.length)
+		{
+			auto idxStart = newStatement.indexOf('{', searchIdx);
+			if(idxStart == -1)
+			{
+				break;
+			}
+			
+			auto idxEnd = newStatement.indexOf('}', idxStart);
+			assert(idxEnd > idxStart);
+			
+			auto sliceLen = idxEnd - (idxStart + 1);
+			if(newStatement[idxStart+1..idxStart+1 + sliceLen].isNumeric)
+			{
+				auto strLevel = newStatement[idxStart+1..idxStart+1 + sliceLen].to!int;
+				if(strLevel == level)
+				{
+					newStatement = newStatement[0..idxStart] ~ arg ~ newStatement[idxEnd + 1..$];
+				}
+			}
+
+			searchIdx = idxStart + 1;
+		}
+		
+		return newStatement;
+	}
+
+	string switchStatement = `final switch(`~switchVar~`)
+{`;
+	foreach(arg; list)
+	{
+		auto thisStatement = fillPlaceHolder!level(statement, arg.stringof);
+		switchStatement ~= `
+case `~arg.stringof~`:
+	`~thisStatement~`
+	break;`;
+	}
+	switchStatement ~= `
+}`;
+	return switchStatement;
+}
 
 void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 {
@@ -105,42 +157,16 @@ void stepMesh(ref UMesh2 mesh, Config config, double t, double dt)
 		}
 
 		auto R = new Vector!4[mesh.interiorCells.length];
-		final switch(config.limiter)
-		{
-			foreach(lim; limiterList)
-			{
-				case lim:
-				{
-					final switch(config.flux)
-					{
-						foreach(fl; fluxList)
-						{
-							case fl:
-							{
-								final switch(config.integrator)
-								{
-									foreach(inte; integratorList)
-									{
-										case inte:
-											writeln("Running 2D finite volume solver");
-											writeln("-limited: ", config.limited);
-											writeln("-order: ", config.order);
-											writeln("-limiter: "~lim);
-											writeln("-flux: "~fl);
-											writeln("-integrator: "~inte);
-											double Rmax;
-											ufvmSolver!(mixin(lim), mixin(fl), 4)(R, mesh.q, mesh, config, t, Rmax, config.limited, false);
-											break;
-									}
-								}
-								break;
-							}
-						}
-					}
-					break;
-				}
-			}
-		}
+		mixin(`writeln("Running 2D finite volume solver");
+			writeln("-limited: ", config.limited);
+			writeln("-order: ", config.order);
+			writeln("-flux: "~{1});
+			writeln("-integrator: "~{0});
+			double Rmax;
+			ufvmSolver!(mixin({1}), 4)(R, mesh.q, mesh, config, t, Rmax, config.limited, false);`.
+			switchBuilder!(1, "config.flux", fluxList).
+			switchBuilder!(0, "config.integrator", integratorList));
+
 	}
 	catch(CellException ce)
 	{
