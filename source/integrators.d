@@ -21,12 +21,12 @@ alias integratorList = aliasSeqOf!(["Euler", "RK2", "RK2_TVD", "RK4"]);
 +/
 struct Euler
 {
-	@nogc static void init(ref UMesh2 mesh)
+	@nogc static void init(ref Mesh mesh)
 	{
 
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref Mesh mesh, Config config, ref double dt, ref double Rmax)
 	{
 		double newDt = double.infinity;
 
@@ -60,7 +60,7 @@ struct RK4
 	private static Vector!4[] k3;
 	private static Vector!4[] k4;
 
-	@nogc static void init(ref UMesh2 mesh)
+	@nogc static void init(ref Mesh mesh)
 	{
 		import std.experimental.allocator.mallocator : Mallocator;
 		if(!initialized)
@@ -88,7 +88,7 @@ struct RK4
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref Mesh mesh, Config config, ref double dt, ref double Rmax)
 	{
 		import core.stdc.stdio : printf;
 
@@ -143,7 +143,7 @@ struct RK2_TVD
 	private static Vector!4[] qFE;
 	private static Vector!4[] k2;
 
-	@nogc static void init(ref UMesh2 mesh)
+	@nogc static void init(ref Mesh mesh)
 	{
 		import std.experimental.allocator.mallocator : Mallocator;
 		if(!initialized)
@@ -167,7 +167,7 @@ struct RK2_TVD
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref Mesh mesh, Config config, ref double dt, ref double Rmax)
 	{
 		import core.stdc.stdio : printf;
 
@@ -215,7 +215,7 @@ struct RK2
 	private static Vector!4[] k1;
 	private static Vector!4[] k2;
 
-	@nogc static void init(ref UMesh2 mesh)
+	@nogc static void init(ref Mesh mesh)
 	{
 		import std.experimental.allocator.mallocator : Mallocator;
 		if(!initialized)
@@ -239,7 +239,7 @@ struct RK2
 		}
 	}
 
-	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref UMesh2 mesh, Config config, ref double dt, ref double Rmax)
+	@nogc static void step(alias solver)(Vector!4[] R, ref Vector!4[] q, ref Mesh mesh, Config config, ref double dt, ref double Rmax)
 	{
 		import core.stdc.stdio : printf;
 

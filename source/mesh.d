@@ -70,7 +70,7 @@ struct CommEdgeNodes
 	uint n2;
 }
 
-struct UCell2
+struct Cell
 {
 	uint[MAX_EDGES] edges;
 	double[MAX_EDGES] fluxMultiplier;
@@ -98,7 +98,7 @@ struct UCell2
 	return mat[0]*mat[3] - mat[1]*mat[2];
 }
 
-struct UMesh2
+struct Mesh
 {
 	Comm comm;
 	uint mpiRank;
@@ -134,7 +134,7 @@ struct UMesh2
 	uint[] nonCommCells; // interior cells that DON'T have a comm ghost neighbor
 	uint[] needCommCells; // interior cells that DO have a comm ghost neighbor
 	uint[] ghostCells;
-	UCell2[] cells;
+	Cell[] cells;
 	Vector!4[] q;
 
 	uint[] interiorEdges;
@@ -154,14 +154,14 @@ struct UMesh2
 	{
 		vec2Type = toMPIType!(Vector!2);
 		vec4Type = toMPIType!(Vector!4);
-		cells = new UCell2[nCells];
+		cells = new Cell[nCells];
 	}
 
 	this(uint nCells, Comm comm, uint rank)
 	{
 		vec2Type = toMPIType!(Vector!2);
 		vec4Type = toMPIType!(Vector!4);
-		cells = new UCell2[nCells];
+		cells = new Cell[nCells];
 		this.comm = comm;
 		this.mpiRank = rank;
 	}
@@ -328,7 +328,7 @@ struct UMesh2
 
 		foreach(bEdge; boundaryEdges)
 		{
-			UCell2 cell;
+			Cell cell;
 			cell.edges[] = 0;
 			cell.fluxMultiplier[] = -1.0;
 			cell.area = 0.0;
@@ -403,7 +403,7 @@ struct UMesh2
 						((edge.nodeIdx[0] == commEdge.n2) && (edge.nodeIdx[1] == commEdge.n1)))
 					{
 						commEdgeIdx[$-1] ~= edgeIdx;
-						UCell2 cell;
+						Cell cell;
 						cell.edges[] = 0;
 						cell.fluxMultiplier[] = -1.0;
 						cell.area = 0.0;
@@ -675,9 +675,9 @@ struct UMesh2
 	Takes a mesh of arbitrary cell types and converts all
 	cells to triangles. Purely for display purposes only
 +/
-Tuple!(UMesh2, uint[]) triangulate(ref UMesh2 inMesh)
+Tuple!(Mesh, uint[]) triangulate(ref Mesh inMesh)
 {
-	UMesh2 tMesh;
+	Mesh tMesh;
 
 	tMesh.nodes = inMesh.nodes;
 	uint[] triMap;
@@ -699,7 +699,7 @@ Tuple!(UMesh2, uint[]) triangulate(ref UMesh2 inMesh)
 		}
 	}
 
-	tMesh.cells = new UCell2[tMesh.elements.length];
+	tMesh.cells = new Cell[tMesh.elements.length];
 	for(uint i = 0; i < tMesh.elements.length; i++)
 	{
 		tMesh.cells[i].nEdges = 3;
@@ -716,7 +716,7 @@ Tuple!(UMesh2, uint[]) triangulate(ref UMesh2 inMesh)
 
 version(Have_mpi)
 {
-	idxtype[] buildPartitionMap(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
+	idxtype[] buildPartitionMap(ref Mesh bigMesh, uint p, uint id, Comm comm)
 	{
 		idxtype[2] elmdist = [0, bigMesh.elements.length.to!idxtype];
 		idxtype[] eptr;
@@ -777,12 +777,12 @@ version(Have_mpi)
 	}
 }
 
-UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
+Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 {
 	version(Have_mpi)
 	{
 		int partTag = 2001;
-		auto smallMesh = UMesh2(comm, id);
+		auto smallMesh = Mesh(comm, id);
 
 		if(id == 0)
 		{
@@ -947,7 +947,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 				}
 				else
 				{
-					smallMesh = UMesh2(cast(uint)localElements.length);
+					smallMesh = Mesh(cast(uint)localElements.length);
 					smallMesh.elements = localElements;
 					foreach(uint j, el; smallMesh.elements)
 					{
@@ -1022,7 +1022,7 @@ UMesh2 partitionMesh(ref UMesh2 bigMesh, uint p, uint id, Comm comm)
 				{
 					element ~= flatLocalElements[i + j];
 				}
-				UCell2 cell;
+				Cell cell;
 				cell.nEdges = nodesPerElement[npeIdx];
 				smallMesh.cells ~= cell;
 

@@ -39,7 +39,7 @@ struct MeshHeader
 }
 
 /+
-@nogc void saveMesh(ref UMesh2 mesh, char* filename)
+@nogc void saveMesh(ref Mesh mesh, char* filename)
 {
 	MeshHeader header = {meshVersion: 1, dims: 2, nNodes: cast(uint)mesh.nodes.length, nElems: cast(uint)mesh.elements.length, nBGroups: cast(uint)mesh.bTags.length};
 
@@ -65,7 +65,7 @@ struct SlnHeader
 
 const uint EbbCFDSolutionVersion = 2;
 
-@nogc void saveSolution(Vector!4[] sln, UMesh2 mesh, char* filename, double t, double dt, uint order)
+@nogc void saveSolution(Vector!4[] sln, Mesh mesh, char* filename, double t, double dt, uint order)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -160,7 +160,7 @@ const uint EbbCFDSolutionVersion = 2;
 	fclose(file);
 }
 
-@nogc void saveLimits(ref UMesh2 mesh, char* filename, double t, double dt)
+@nogc void saveLimits(ref Mesh mesh, char* filename, double t, double dt)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -215,7 +215,7 @@ const uint EbbCFDSolutionVersion = 2;
 	fclose(file);
 }
 
-@nogc bool loadSolution(ref UMesh2 mesh, ref double t, ref double dt, string filename, bool globalMesh = false)
+@nogc bool loadSolution(ref Mesh mesh, ref double t, ref double dt, string filename, bool globalMesh = false)
 {
 	import std.algorithm : canFind;
 	import std.bitmanip : peek;
@@ -365,9 +365,9 @@ const uint EbbCFDSolutionVersion = 2;
 	return crcGood;
 }
 
-void loadMatlabSolution(ref UMesh2 mesh, string filename)
+void loadMatlabSolution(ref Mesh mesh, string filename)
 {
-	//UMesh2 mesh;
+	//Mesh mesh;
 	import std.algorithm : canFind;
 	import std.bitmanip : read;
 	import std.conv : to;
@@ -445,9 +445,9 @@ void loadMatlabSolution(ref UMesh2 mesh, string filename)
 
 }
 
-UMesh2 loadMatlabMesh(string filename)
+Mesh loadMatlabMesh(string filename)
 {
-	UMesh2 mesh;
+	Mesh mesh;
 	import std.algorithm : canFind;
 	import std.bitmanip : read;
 	import std.conv : to;
@@ -531,7 +531,7 @@ UMesh2 loadMatlabMesh(string filename)
 	+/
 	return mesh;
 }
-@nogc void saveMatlabMesh(ref UMesh2 mesh, immutable (string) filename)
+@nogc void saveMatlabMesh(ref Mesh mesh, immutable (string) filename)
 {
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
@@ -666,9 +666,9 @@ struct MeshFile
 	}	
 }
 
-UMesh2 importMesh(string meshFile, bool chatty = true)
+Mesh importMesh(string meshFile, bool chatty = true)
 {
-	UMesh2 mesh;
+	Mesh mesh;
 
 	if(meshFile.canFind(".gri"))
 	{
@@ -686,7 +686,7 @@ UMesh2 importMesh(string meshFile, bool chatty = true)
 	return mesh;
 }
 
-UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
+Mesh parseGmshMesh(string meshFile, bool chatty = true)
 {
 	// Only officially support mesh format 2.2
 	// Only support ASCII version
@@ -694,7 +694,7 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 	immutable int supportedMinor = 2;
 	immutable int supportedFormat = 0;
 
-	UMesh2 mesh;
+	Mesh mesh;
 	auto file = MeshFile(meshFile);
 
 	enum GmshSection
@@ -989,9 +989,9 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 	return mesh;
 }
 
-UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
+Mesh parseXflowMesh(string meshFile, bool chatty = true)
 {
-	UMesh2 mesh;
+	Mesh mesh;
 	auto file = MeshFile(meshFile);
 
 	auto headerLine = file.readCleanLine;
@@ -1120,9 +1120,9 @@ UMesh2 parseXflowMesh(string meshFile, bool chatty = true)
 	return mesh;
 }
 
-UMesh2 parseSu2Mesh(string meshFile, bool chatty = true)
+Mesh parseSu2Mesh(string meshFile, bool chatty = true)
 {
-	UMesh2 mesh;
+	Mesh mesh;
 	auto file = File(meshFile);
 	bool readingCells = false;
 	bool readingNodes = false;

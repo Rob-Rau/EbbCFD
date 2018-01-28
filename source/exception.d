@@ -20,7 +20,7 @@ class CellException : Exception
 		super(msg);
 	}
 
-	UCell2 cell;	
+	Cell cell;	
 }
 
 class EdgeException : Exception
@@ -87,7 +87,7 @@ static this()
 	}
 }
 
-@nogc void enforce(T = Exception)(bool cond, string msg, UCell2 cell, string file = __FILE__, int line = __LINE__)
+@nogc void enforce(T = Exception)(bool cond, string msg, Cell cell, string file = __FILE__, int line = __LINE__)
 	if(is(T : CellException))
 {
 	if(!cond)
