@@ -1,4 +1,4 @@
-/+ Copyright (c) 2016 Robert F. Rau II +/
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.limiters;
 
 import std.math : abs, fmax, fmin, sgn, sqrt;

@@ -1,3 +1,4 @@
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.config;
 
 import std.conv;
@@ -6,56 +7,72 @@ import std.stdio;
 
 import numd.linearalgebra.matrix;
 
+import ebb.gas.config;
 import ebb.mesh;
+
 /+
 {
-	"mesh": "../box.mesh",
-	"dt": 0.01,
-	"tEnd": 750.0,
-	"limiter": "minmodS",
-	"flux": "rusanovFlux",
-	"plotIter": 50,
-	"saveIter": 50,
-	"initialConditions": [0.85, 0, 1, 1.4], (M, aoa, p, rho)
+	"mesh": "mesh.gmsh",
+	"plotIter": -1,
+	"saveIter": -1,
+	"integrator": "Euler",
+	"integratorConfig": {
+		"timestep": 0.001,
+		"localTimestep": false,
+		"dynamicDt": false,
+		"steadyConvergenceConfig": {
+			"residuals": []
+		}
+	},
+	"spacialSolver": "finiteVolume",
+	"finiteVolumeConfig": {
+		"order": 2,
+		"limit": true,
+		"lpThresh": -1,
+		"forceBoundaries": ["Wall1", "Wall2"],
+		"CFL": 0.3,
+		"adjustCFL": false,
+		"flux": ["roeFlux", "averagedDiffusiveFlux"],
+		"gasPhysicalConfig": {
+			"Pr": 0.7,
+			"gamma": 1.4,
+			"mu": 0.0001
+		}
+	},
+	"initialConditions": [
+		{
+			"tag": "tag1",
+			"state": [0.1, 0, 1.1, 1] //[rho, rhoU, rhoV, E]
+		},
+		{
+			"tag": "tag2",
+			"state": [0.1, 0, 1.1, 1] //[rho, rhoU, rhoV, E]
+		}
+	],
 	"boudaryConditions": [
 		{
-			"tag": "Bottom",
-			"type": "const",
-			"q": [0.85, 0, 1, 1.4]
+			"tag": "Freestream",
+			"type": "fullState",
+			"state": [0.1, 0, 1.1, 1] // [rho, rhoU, rhoV, E]
 		},
 		{
-			"tag": "Top",
-			"type": "const",
-			"q": [0.85, 0, 1, 1.4]
+			"tag": "Wall",
+			"type": "viscidWall",
+			"state": [0.1, 0, 1.1, 1] // [rho, rhoU, rhoV, E]
 		},
 		{
-			"tag": "Left",
-			"type": "const",
-			"q": [0.85, 0, 1, 1.4]
+			"tag": "Outflow",
+			"type": "constP",
+			"state": [71.429] // p
 		},
 		{
-			"tag": "Right",
-			"type": "const",
-			"q": [0.85, 0, 1, 1.4]
-		},
-		{
-			"tag": "Airfoil",
-			"type": "wall",
-			"q": [0.85, 0, 1, 1.4]
+			"tag": "Symmetric",
+			"type": "symmetry",
+			"state": [71.429] // p
 		}
 	]
 }
 +/
-
-struct PhysicalConfig
-{
-	double Pr;
-	double R;
-	double gamma;
-	double mu;
-	double Re;
-	double L;
-}
 
 alias @nogc Vector!4 function(double x, double y) DirichletFunc;
 alias @nogc Matrix!(4, 2) function(double x, double y) DirichletFuncDerivative;
@@ -63,11 +80,12 @@ alias @nogc Matrix!(4, 2) function(double x, double y) DirichletFuncDerivative;
 struct BoundaryData
 {
 	double[] boundaryData;
-	string bTag;
+	string tag;
 	BoundaryType type;
 	DirichletFunc dFunc;
 	DirichletFuncDerivative dFuncDerivative;
 }
+
 
 struct Config
 {
@@ -90,9 +108,9 @@ struct Config
 	bool multistageLimiting = false;
 	bool cflAdjust = false;
 	bool viscosity;
-	PhysicalConfig physicalConfig;
+	//PhysicalConfig physicalConfig;
 }
-
+/+
 static double getDouble(T)(T val)
 {
 	if(val.type == JSON_TYPE.INTEGER)
@@ -311,3 +329,4 @@ Config loadConfig(string conf)
 
 	return config;
 }
++/

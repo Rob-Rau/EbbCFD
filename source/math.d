@@ -1,3 +1,4 @@
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.math;
 
 import std.math;
@@ -9,6 +10,15 @@ import ebb.mpid;
 
 import numd.utility;
 import numd.linearalgebra.matrix;
+
+class Solution(size_t size)
+{
+	double[] dts;
+	double dt;
+	Vector!size[] dQdt;
+	Vector!size[] Q;
+	ulong iteration;
+}
 
 @nogc Vector!4 abs(Vector!4 data)
 {

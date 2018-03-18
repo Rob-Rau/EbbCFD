@@ -19,6 +19,17 @@
 		},
 		{
 			"sourceFiles": [
+				"app/solver.d"
+			],
+			"name": "solver_warnings",
+			"targetName": "ebb-solve",
+			"targetType": "executable",
+			"buildRequirements": [
+				"allowWarnings"
+			]
+		},
+		{
+			"sourceFiles": [
 				"app/mesher.d"
 			],
 			"name": "mesher",

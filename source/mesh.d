@@ -1,10 +1,11 @@
-/+ Copyright (c) 2016 Robert F. Rau II +/
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.mesh;
 
 import std.algorithm;
 import std.array;
 import std.conv;
 import std.math;
+import std.range;
 import std.stdio;
 import std.string;
 import std.typecons : Tuple, tuple;
@@ -20,9 +21,6 @@ import parmetis;
 
 import mir.sparse;
 
-alias Vec = Vector!4;
-alias Mat = Matrix!(4, 4);
-
 immutable uint MAX_EDGES = 6;
 enum BoundaryType
 {
@@ -37,27 +35,22 @@ enum BoundaryType
 
 struct Edge
 {
-	uint[2] nodeIdx;
+	size_t[2] nodeIdx;
 	double len;
-	double sMax;
 	Vector!2 normal;
 	Vector!2 tangent;
 	Vector!2 mid;
 
 	Matrix!(2, 2) rotMat;
 	// neighboring cells index
-	uint[2] cellIdx;
-
-	// Edge values for 2nd order
-	Vector!4[2] q;
-	
-	// Flux on this edge
-	Vector!4 flux;
+	size_t cellIdxL;
+	size_t cellIdxR;
 
 	// This is a boundary edg1e
 	bool isBoundary;
 	string boundaryTag;
-	uint bIdx;
+	uint bTag;
+	size_t bIdx;
 	BoundaryType boundaryType;
 	Vector!2 bNormal;
 	// data that may be needed for this boundary
@@ -66,23 +59,16 @@ struct Edge
 
 struct CommEdgeNodes
 {
-	uint n1;
-	uint n2;
+	size_t n1;
+	size_t n2;
 }
 
 struct Cell
 {
-	uint[MAX_EDGES] edges;
+	size_t[MAX_EDGES] edges;
 	double[MAX_EDGES] fluxMultiplier;
-	uint[MAX_EDGES] neighborCells;
+	size_t[MAX_EDGES] neighborCells;
 	Matrix!(2,MAX_EDGES) gradMat;
-	//Vector!2[4] gradient;
-	Matrix!(4,2) gradient;
-	Vector!2[4] lim;
-	double[4] gradErr;
-	bool[4] useLP;
-	Vector!4 minQ;
-	Vector!4 maxQ;
 
 	uint nNeighborCells;
 	uint nEdges;
@@ -90,7 +76,6 @@ struct Cell
 	double d = 0;
 	double perim = 0;
 	Vector!2 centroid;
-	double dt;
 }
 
 @nogc double determinant(Matrix!(2, 2) mat)
@@ -107,15 +92,15 @@ struct Mesh
 	double[][] nodes;
 
 	// elements are 1 indexed
-	uint[][] elements;
+	size_t[][] elements;
 
 	/// bNodes are 0 indexed
-	uint[][] bNodes;
+	size_t[][] bNodes;
 	string[] bTags;
 	size_t[] bGroupStart;
-	uint[][] bGroups;
+	size_t[][] bGroups;
 
-	uint[] commProc;
+	size_t[] commProc;
 	Request[] sendRequests;
 	Request[] sendGradRequests;
 	Request[] recvRequests;
@@ -123,44 +108,31 @@ struct Mesh
 	Status[] statuses;
 	CommEdgeNodes[][] commEdgeLists;
 
-	uint[] localToGlobalElementMap;
+	size_t[] localToGlobalElementMap;
 
-	uint[][] commEdgeIdx;
-	uint[][] commCellSendIdx;
-	uint[][] commCellRecvIdx;
+	size_t[][] commEdgeIdx;
+	size_t[][] commCellSendIdx;
+	size_t[][] commCellRecvIdx;
 
 	// Computed mesh data
-	uint[] interiorCells;
-	uint[] nonCommCells; // interior cells that DON'T have a comm ghost neighbor
-	uint[] needCommCells; // interior cells that DO have a comm ghost neighbor
-	uint[] ghostCells;
+	size_t[] interiorCells;
+	size_t[] nonCommCells; // interior cells that DON'T have a comm ghost neighbor
+	size_t[] needCommCells; // interior cells that DO have a comm ghost neighbor
+	size_t[] ghostCells;
 	Cell[] cells;
-	Vector!4[] q;
 
-	uint[] interiorEdges;
-	uint[] boundaryEdges;
+	size_t[] interiorEdges;
+	size_t[] boundaryEdges;
 	Edge[] edges;
-
-	Datatype vec2Type;
-	Datatype vec4Type;
-
-	Vector!4[][] sendStateBuffers;
-	Vector!4[][] recvStateBuffers;
-
-	Matrix!(4,2)[][] sendGradBuffers;
-	Matrix!(4,2)[][] recvGradBuffers;
+	Vector!2[] normals;
 
 	this(uint nCells)
 	{
-		vec2Type = toMPIType!(Vector!2);
-		vec4Type = toMPIType!(Vector!4);
 		cells = new Cell[nCells];
 	}
 
 	this(uint nCells, Comm comm, uint rank)
 	{
-		vec2Type = toMPIType!(Vector!2);
-		vec4Type = toMPIType!(Vector!4);
 		cells = new Cell[nCells];
 		this.comm = comm;
 		this.mpiRank = rank;
@@ -168,19 +140,21 @@ struct Mesh
 
 	this(Comm, uint rank)
 	{
-		vec2Type = toMPIType!(Vector!2);
-		vec4Type = toMPIType!(Vector!4);
 		this.comm = comm;
 		this.mpiRank = rank;
 	}
 
-	private bool isBoundaryEdge(H)(H boundaryHash, ref Edge edge, ref uint bGroup, ref uint bNodeIdx)
+	alias BoundaryResult = Tuple!(bool, "isBoundary", size_t, "bGroup", size_t, "bNodeIdx");
+	alias boundaryResult = tuple!("isBoundary", "bGroup", "bNodeIdx");
+	private BoundaryResult isBoundaryEdge(H)(H boundaryHash, ref Edge edge)//, ref uint bGroup, ref uint bNodeIdx)
 	{
 		immutable auto n1 = edge.nodeIdx[0] > edge.nodeIdx[1] ? edge.nodeIdx[1] : edge.nodeIdx[0];
 		immutable auto n2 = edge.nodeIdx[0] > edge.nodeIdx[1] ? edge.nodeIdx[0] : edge.nodeIdx[1];
 
 		if(boundaryHash[n1, n2] != 0)
 		{
+			size_t bGroup;
+			size_t bNodeIdx;
 			for(uint j = 0; j < bGroupStart.length-1; j++)
 			{
 				if(((boundaryHash[n1, n2] - 1) >= bGroupStart[j]) && ((boundaryHash[n1, n2] - 1) < bGroupStart[j+1]))
@@ -190,12 +164,14 @@ struct Mesh
 			}
 			if((boundaryHash[n1, n2] - 1) >= bGroupStart[$-1])
 			{
-				bGroup = bGroupStart.length.to!uint - 1;
+				bGroup = bGroupStart.length - 1;
 			}
 			bNodeIdx = boundaryHash[n1, n2] - 1;
-			return true;
+			//return true;
+			return boundaryResult(true, bGroup, bNodeIdx);
 		}
-		return false;
+		//return false;
+		return boundaryResult(false, 0UL, 0UL);
 	}
 
 	private bool isCommEdge(ref Edge edge)
@@ -216,8 +192,11 @@ struct Mesh
 	+/
 	void buildMesh()
 	{
-		bGroups = new uint[][](bTags.length);
-		auto edgeHash = sparse!uint(nodes.length, nodes.length);
+		bGroups = new size_t[][](bTags.length);
+		// Hash tables are 1 indexed so that 0 can identify an
+		// edge that has not been computed yet.
+		auto edgeHash = sparse!size_t(nodes.length, nodes.length);
+		auto commHash = sparse!size_t(nodes.length, nodes.length);
 		auto boundaryHash = sparse!uint(nodes.length, nodes.length);
 
 		foreach(uint i, bNode; bNodes)
@@ -227,9 +206,12 @@ struct Mesh
 			boundaryHash[n1, n2] = i + 1;
 		}
 
-		for(uint i = 0; i < elements.length; i++)
+		Edge[] iEdges;
+		Edge[] bEdges;
+		Edge[] cEdges;
+
+		foreach(i, element; elements)
 		{
-			q[i] = Vector!4(0);
 			cells[i].edges[] = 0;
 			cells[i].fluxMultiplier[] = 1.0;
 			cells[i].area = 0.0;
@@ -237,93 +219,154 @@ struct Mesh
 			cells[i].perim = 0;
 			cells[i].centroid = Vector!2(0);
 			cells[i].nNeighborCells = 0;
-			cells[i].lim[] = Vector!2(1.0);
+			cells[i].nEdges = 0;
 
-			for(uint j = 0; j < cells[i].nEdges; j++)
+			foreach(j, nodeIdx; element)
 			{
 				Edge edge;
-				uint edgeidx;
-				edge.nodeIdx = [elements[i][j]-1, elements[i][(j + 1)%cells[i].nEdges]-1];
-				uint[] ni = edge.nodeIdx;
+				edge.nodeIdx = [elements[i][j]-1, elements[i][(j + 1)%element.length]-1];
+				size_t[] ni = edge.nodeIdx;
 
-				uint bGroup;
-				uint bNodeIdx;
-				edge.isBoundary = isBoundaryEdge(boundaryHash, edge, bGroup, bNodeIdx);
+				edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
+				Vector!2 normal = (1.0/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
+				Vector!2 tangent = Vector!2(-normal[1], normal[0]);
+				edge.normal = normal;
+				edge.tangent = tangent;
+				auto rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).inverse;
+				enforce(!rotMat.isNull, "Failed to build rotation matrix for edge "~j.to!string);
+				edge.rotMat = rotMat.get;
+
+				auto boundaryRes = isBoundaryEdge(boundaryHash, edge);
+				edge.isBoundary = boundaryRes.isBoundary;
 				if(!edge.isBoundary)
 				{
 					immutable auto n1 = ni[0] > ni[1] ? ni[1] : ni[0];
 					immutable auto n2 = ni[0] > ni[1] ? ni[0] : ni[1];
 
-					if(edgeHash[n1, n2] != 0)
+					enforce(
+						(edgeHash[n1, n2] == 0) || (commHash[n1, n2] == 0),
+						"Edge should not be in both comm list end interior list"
+					);
+
+					if((edgeHash[n1, n2] == 0) && (commHash[n1, n2] == 0))
 					{
-						auto idx = edgeHash[n1, n2].to!size_t - 1;
-						edges[idx].cellIdx[1] = i;
-						edgeidx = edgeHash[n1, n2] - 1;
-						cells[i].fluxMultiplier[j] = -1.0;
-					}
-					else
-					{
-						edge.cellIdx[0] = i;
-						edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2.0 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2.0);
-						Vector!2 normal = Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
-						normal = normal.normalize();
-						Vector!2 tangent = Vector!2(-normal[1], normal[0]);
-						tangent = tangent.normalize();
-						edge.normal = normal;
-						edge.tangent = tangent;
-						auto rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).inverse;
-						enforce(!rotMat.isNull, "Failed to build rotation matrix for edge "~j.to!string);
-						edge.rotMat = rotMat.get;
-						immutable double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
-						immutable double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
-						edge.mid = Vector!2(x, y);
-						cells[i].fluxMultiplier[j] = 1.0;
-						edges ~= edge;
-						edgeidx = edges.length.to!uint - 1;
-						edgeHash[n1, n2] = edgeidx + 1;
-						if(!isCommEdge(edge))
+						edge.cellIdxL = i;
+						if(isCommEdge(edge))
 						{
-							interiorEdges ~= edgeidx;
+							cEdges ~= edge;
+							commHash[n1, n2] = cEdges.length;
 						}
+						else
+						{
+							iEdges ~= edge;
+							edgeHash[n1, n2] = iEdges.length;
+						}
+					}
+					else if((edgeHash[n1, n2] == 0) && (commHash[n1, n2] != 0))
+					{
+						enforce(false, "We hit an already hashed comm edge. This should not happen");
+					}
+					else if((edgeHash[n1, n2] != 0) && (commHash[n1, n2] == 0))
+					{
+						iEdges[edgeHash[n1, n2]-1].cellIdxR = i;
 					}
 				}
 				else
 				{
-					edge.cellIdx[0] = i;
-					edge.len = sqrt((nodes[ni[0]][0] - nodes[ni[1]][0])^^2 + (nodes[ni[0]][1] - nodes[ni[1]][1])^^2);
-					Vector!2 normal = (1.0/edge.len)*Vector!2(nodes[ni[1]][1] - nodes[ni[0]][1], nodes[ni[0]][0] - nodes[ni[1]][0]);
-					Vector!2 tangent = Vector!2(-normal[1], normal[0]);
-					edge.normal = normal;
-					edge.tangent = tangent;
-					auto rotMat = Matrix!(2, 2)(normal[0], tangent[0], normal[1], tangent[1]).inverse;
-					enforce(!rotMat.isNull, "Failed to build rotation matrix for edge "~j.to!string);
-					edge.rotMat = rotMat.get;
-					edge.boundaryTag = bTags[bGroup];
-					edge.bNormal = (1.0/edge.len)*Vector!2(nodes[bNodes[bNodeIdx][1]][1] - nodes[bNodes[bNodeIdx][0]][1], nodes[bNodes[bNodeIdx][0]][0] - nodes[bNodes[bNodeIdx][1]][0]);
-					double x = 0.5*(nodes[ni[0]][0] + nodes[ni[1]][0]);
-					double y = 0.5*(nodes[ni[0]][1] + nodes[ni[1]][1]);
-					edge.mid = Vector!2(x, y);
-					bGroups[bGroup] ~= edges.length.to!uint;
-					cells[i].fluxMultiplier[j] = 1.0;
-					edges ~= edge;
-					edgeidx = edges.length.to!uint - 1;
-					boundaryEdges ~= edgeidx;
+					edge.cellIdxL = i;
+					edge.boundaryTag = bTags[boundaryRes.bGroup];
+					auto bNorm1 = nodes[bNodes[boundaryRes.bNodeIdx][1]][1] - nodes[bNodes[boundaryRes.bNodeIdx][0]][1];
+					auto bNorm2 = nodes[bNodes[boundaryRes.bNodeIdx][0]][0] - nodes[bNodes[boundaryRes.bNodeIdx][1]][0];
+					edge.bNormal = (1.0/edge.len)*Vector!2(bNorm1, bNorm2);
+					bEdges ~= edge;
 				}
 
-				cells[i].edges[j] = edgeidx;
-				cells[i].perim += edges[edgeidx].len;
+				cells[i].perim += edge.len;
 				auto mat = Matrix!(2, 2)(nodes[ni[0]][0], nodes[ni[1]][0], nodes[ni[0]][1], nodes[ni[1]][1]);
 				cells[i].area += mat.determinant;
 				cells[i].centroid[0] += (nodes[ni[0]][0] + nodes[ni[1]][0])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 				cells[i].centroid[1] += (nodes[ni[0]][1] + nodes[ni[1]][1])*(nodes[ni[0]][0]*nodes[ni[1]][1] - nodes[ni[1]][0]*nodes[ni[0]][1]);
 			}
 
-			interiorCells ~= i;
 			cells[i].area *= 0.5;
 			enforce(cells[i].area > 0, "Computed cell "~i.to!string~" area negative");
 			cells[i].d = (2*cells[i].area)/cells[i].perim;
 			cells[i].centroid[0] *= 1/(6*cells[i].area);
 			cells[i].centroid[1] *= 1/(6*cells[i].area);
+		}
+
+		edges = iEdges ~ cEdges ~ bEdges;
+		interiorEdges = iota(0, iEdges.length).array;
+		auto commEdges = iota(iEdges.length, iEdges.length + cEdges.length).array;
+		boundaryEdges = iota(cEdges.length, cEdges.length + bEdges.length).array;
+
+		foreach(i; interiorEdges)
+		{
+			auto edge = edges[i];
+			auto lIdx = edge.cellIdxL;
+			auto rIdx = edge.cellIdxR;
+			cells[lIdx].edges[cells[lIdx].nEdges] = i;
+			cells[rIdx].edges[cells[rIdx].nEdges] = i;
+			// Cells on the right of the edge have flux 
+			// multipliers of -1.0. Left cells have 1.0
+			cells[lIdx].fluxMultiplier[cells[lIdx].nEdges] = 1.0;
+			cells[rIdx].fluxMultiplier[cells[rIdx].nEdges] = -1.0;
+			cells[lIdx].nEdges++;
+			cells[rIdx].nEdges++;
+		}
+
+		foreach(i; commEdges)
+		{
+			auto edge = edges[i];
+			auto lIdx = edge.cellIdxL;
+			cells[lIdx].edges[cells[lIdx].nEdges] = i;
+			cells[lIdx].fluxMultiplier[cells[lIdx].nEdges] = 1.0;
+			cells[lIdx].nEdges++;
+		}
+
+		foreach(i; boundaryEdges)
+		{
+			auto edge = edges[i];
+			auto lIdx = edge.cellIdxL;
+			cells[lIdx].edges[cells[lIdx].nEdges] = i;
+			cells[lIdx].fluxMultiplier[cells[lIdx].nEdges] = 1.0;
+			cells[lIdx].nEdges++;
+		}
+
+		foreach(commEdgeList; commEdgeLists)
+		{
+			commEdgeIdx.length++;
+			commCellRecvIdx.length++;
+			commCellSendIdx.length++;
+
+			foreach(commEdge; commEdgeList)
+			{
+				foreach(edgeIdx; commEdges)
+				{
+					auto edge = edges[edgeIdx];
+					// is edge a communication edge
+					if(((edge.nodeIdx[0] == commEdge.n1) && (edge.nodeIdx[1] == commEdge.n2)) ||
+						((edge.nodeIdx[0] == commEdge.n2) && (edge.nodeIdx[1] == commEdge.n1)))
+					{
+						commEdgeIdx[$-1] ~= edgeIdx;
+						Cell cell;
+						cell.edges[] = 0;
+						cell.fluxMultiplier[] = -1.0;
+						cell.area = 0.0;
+						cell.d = 0.0;
+						cell.perim = 0;
+						cell.neighborCells[0] = edge.cellIdxL;
+						cell.centroid = Vector!2(0.0);
+						cell.nNeighborCells = 1;
+						cell.edges[0] = edgeIdx;
+
+						commCellSendIdx[$-1] ~= cell.neighborCells[0];
+						commCellRecvIdx[$-1] ~= cells.length;
+						cells ~= cell;
+						edges[edgeIdx].cellIdxR = commCellRecvIdx[$-1][$-1];
+					}
+				}
+			}
 		}
 
 		foreach(bEdge; boundaryEdges)
@@ -337,7 +380,7 @@ struct Mesh
 			
 			// reflect centroid across edge
 			auto edge = edges[bEdge];
-			auto otherCell = cells[edge.cellIdx[0]];
+			auto otherCell = cells[edge.cellIdxL];
 			double xr = 0;
 			double yr = 0;
 			if(nodes[edge.nodeIdx[0]][0] != nodes[edge.nodeIdx[1]][0])
@@ -364,75 +407,17 @@ struct Mesh
 				yr = otherCell.centroid[1];
 			}
 			cell.centroid = Vector!2(xr, yr);
-			//cell.gradient[] = Vector!2(0);
-			cell.gradient = Matrix!(4, 2)(0);
 			cell.nNeighborCells = 1;
-			cell.lim[] = Vector!2(1.0);
-			cell.neighborCells[0] = edges[bEdge].cellIdx[0];
+			cell.neighborCells[0] = edges[bEdge].cellIdxL;
 			cell.edges[0] = bEdge;
 
-			auto newq = Vector!4(0);
-			q ~= newq;
-
+			edges[bEdge].cellIdxR = cells.length;
 			cells ~= cell; 
-			edges[bEdge].cellIdx[1] = cast(uint)(cells.length - 1);
 
-			ghostCells ~= edges[bEdge].cellIdx[1];
+			ghostCells ~= edges[bEdge].cellIdxR;
 		}
-
-		foreach(commEdgeList; commEdgeLists)
-		{
-			commEdgeIdx.length++;
-			commCellRecvIdx.length++;
-			commCellSendIdx.length++;
-			sendStateBuffers.length++;
-			recvStateBuffers.length++;
-			sendGradBuffers.length++;
-			recvGradBuffers.length++;
-			sendRequests.length++;
-			recvRequests.length++;
-			sendGradRequests.length++;
-			recvGradRequests.length++;
-			statuses.length++;
-			foreach(commEdge; commEdgeList)
-			{
-				foreach(uint edgeIdx, edge; edges)
-				{
-					// is edge a communication edge
-					if(((edge.nodeIdx[0] == commEdge.n1) && (edge.nodeIdx[1] == commEdge.n2)) ||
-						((edge.nodeIdx[0] == commEdge.n2) && (edge.nodeIdx[1] == commEdge.n1)))
-					{
-						commEdgeIdx[$-1] ~= edgeIdx;
-						Cell cell;
-						cell.edges[] = 0;
-						cell.fluxMultiplier[] = -1.0;
-						cell.area = 0.0;
-						cell.d = 0.0;
-						cell.perim = 0;
-						cell.neighborCells[0] = edge.cellIdx[0];
-						cell.centroid = Vector!2(0.0);
-						cell.nNeighborCells = 1;
-						cell.lim[] = Vector!2(1.0);
-						cell.edges[0] = edgeIdx;
-
-						auto newq = Vector!4(0);
-						q ~= newq;
-						cells ~= cell;
-
-						commCellSendIdx[$-1] ~= cell.neighborCells[0];
-						commCellRecvIdx[$-1] ~= cast(uint)(cells.length - 1);
-						edges[edgeIdx].cellIdx[1] = commCellRecvIdx[$-1][$-1];
-					}
-				}
-
-				sendStateBuffers[$-1] = new Vector!4[commCellRecvIdx[$-1].length];
-				recvStateBuffers[$-1] = new Vector!4[commCellRecvIdx[$-1].length];
-
-				sendGradBuffers[$-1] = new Matrix!(4, 2)[commCellRecvIdx[$-1].length];
-				recvGradBuffers[$-1] = new Matrix!(4, 2)[commCellRecvIdx[$-1].length];
-			}
-		}
-
+		assert(false);
+		/+
 		for(uint commIdx = 0; commIdx < sendRequests.length; commIdx++)
 		{
 			comm.sendInit(sendStateBuffers[commIdx], commProc[commIdx], meshTag, sendRequests[commIdx]);
@@ -639,7 +624,7 @@ struct Mesh
 			auto c = b.inverse;
 			//cells[i].gradMat = b.inverse*tmpMat.transpose;
 			cells[i].gradMat = c*a;
-		}
+		}+/
 	}
 
 	@nogc Vector!2 computeBoundaryForces(string[] tags)
@@ -657,15 +642,16 @@ struct Mesh
 					//double p = getPressure(q[edges[bGroups[bgIdx][i]].cellIdx[0]]);
 					//auto len = edges[bGroups[bgIdx][i]].len;
 					//f += p*len*edges[bGroups[bgIdx][i]].bNormal;
-					auto pn = Vector!2(edges[bGroups[bgIdx][i]].flux[1], edges[bGroups[bgIdx][i]].flux[2]);
-					f += pn*edges[bGroups[bgIdx][i]].len;
+					assert(false);
+					//auto pn = Vector!2(edges[bGroups[bgIdx][i]].flux[1], edges[bGroups[bgIdx][i]].flux[2]);
+					//f += pn*edges[bGroups[bgIdx][i]].len;
 				}
 			}
 		}
 
 		auto globalF = Vector!2(0);
 
-		comm.reduce(f[], globalF[], MPI_SUM, 0);
+		//comm.reduce(f[], globalF[], MPI_SUM, 0);
 
 		return globalF;
 	}
@@ -704,7 +690,8 @@ Tuple!(Mesh, uint[]) triangulate(ref Mesh inMesh)
 	{
 		tMesh.cells[i].nEdges = 3;
 	}
-	tMesh.q = new Vector!4[tMesh.elements.length];
+	//tMesh.q = new Vector!4[tMesh.elements.length];
+	assert(false);
 	tMesh.bNodes = inMesh.bNodes;
 	tMesh.bGroupStart = inMesh.bGroupStart;
 	tMesh.bTags = inMesh.bTags;
@@ -736,13 +723,13 @@ version(Have_mpi)
 		ubvec[] = 1.05; // recommended value from the manual
 		options[] = 0; // default options
 
-		uint currIdx = 0;
+		idxtype currIdx = 0;
 		foreach(el; bigMesh.elements)
 		{
 			eptr~= currIdx;
 			foreach(ind; el)
 			{
-				eind ~= (ind - 1);
+				eind ~= (ind - 1).to!idxtype;
 			}
 			currIdx += el.length;
 		}
@@ -763,7 +750,7 @@ version(Have_mpi)
 		return part;
 	}
 
-	uint localElementMap(uint elNode, ref double[][] localNodes, double[][] globalNodes)
+	size_t localElementMap(size_t elNode, ref double[][] localNodes, double[][] globalNodes)
 	{
 		auto idx = localNodes.countUntil(globalNodes[elNode]);
 
@@ -777,7 +764,7 @@ version(Have_mpi)
 	}
 }
 
-Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
+Mesh partitionMesh(Communication)(ref Mesh bigMesh, uint p, uint id, Communication comm)
 {
 	version(Have_mpi)
 	{
@@ -790,39 +777,39 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 			
 			auto part = bigMesh.buildPartitionMap(p, id, comm);
 
-			for(uint i = 0; i < p; i++)
+			for(size_t i = 0; i < p; i++)
 			{
-				uint nElems = 0;
-				uint[][] localElements;
-				uint[] localToGlobalElementMap;
-				uint[] nodesPerElement;
+				size_t nElems = 0;
+				size_t[][] localElements;
+				size_t[] localToGlobalElementMap;
+				size_t[] nodesPerElement;
 				double[][] localNodes;
-				uint[][] localbNodes;
-				uint[][] localbNodesUnsorted;
-				uint[] localbGroupStart;
+				size_t[][] localbNodes;
+				size_t[][] localbNodesUnsorted;
+				size_t[] localbGroupStart;
 				string[] localbTag;
-				uint[] commP;
+				size_t[] commP;
 
 				// holds the locally mapped edge nodes for comm boundaries.
 				// first dim matches up with commP, aka the proc to send edge data to
 				CommEdgeNodes[][] commEdgeList;
-				Tuple!(size_t, uint)[] bNodeMap;
+				Tuple!(size_t, size_t)[] bNodeMap;
 
-				foreach(uint j, pa; part)
+				foreach(size_t j, pa; part)
 				{
 					if(pa == i)
 					{
-						uint[] localEl;
-						nodesPerElement ~= bigMesh.elements[j].length.to!uint;
-						foreach(uint k, el; bigMesh.elements[j])
+						size_t[] localEl;
+						nodesPerElement ~= bigMesh.elements[j].length.to!size_t;
+						foreach(size_t k, el; bigMesh.elements[j])
 						{
 							// map global node index to new proc local node index
 							localEl ~= (el - 1).localElementMap(localNodes, bigMesh.nodes);
 
 							// Is this edge a boundary edge
 							size_t bIdx = 0;
-							uint b1 = 0;
-							uint b2 = 0;
+							size_t b1 = 0;
+							size_t b2 = 0;
 							auto bIdx1 = bigMesh.bNodes.countUntil([el - 1, bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1]);
 							auto bIdx2 = bigMesh.bNodes.countUntil([bigMesh.elements[j][(k + 1)%bigMesh.elements[j].length] - 1, el - 1]);
 
@@ -845,7 +832,7 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 								// If boundary edge compute local boundary group
 								localbNodesUnsorted ~= [b1, b2];
 
-								bNodeMap ~= tuple(bIdx, cast(uint)localbNodesUnsorted.length - 1);
+								bNodeMap ~= tuple(bIdx, localbNodesUnsorted.length - 1);
 							}
 							nElems++;
 						}
@@ -869,29 +856,29 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 					if(!localbTag.canFind(bigMesh.bTags[bGroup]))
 					{
 						localbTag ~= bigMesh.bTags[bGroup];
-						localbGroupStart ~= cast(uint)localbNodes.length - 1;
+						localbGroupStart ~= cast(size_t)localbNodes.length - 1;
 					}
 				}
 
 				// compute communication edges
-				foreach(uint j, edge; bigMesh.interiorEdges.map!(a => bigMesh.edges[a]).array)
+				foreach(size_t j, edge; bigMesh.interiorEdges.map!(a => bigMesh.edges[a]).array)
 				{
 					// Is edge comm boundary
-					if(((part[edge.cellIdx[0]] == i) && (part[edge.cellIdx[1]] != i)) ||
-						((part[edge.cellIdx[1]] == i) && (part[edge.cellIdx[0]] != i)))
+					if(((part[edge.cellIdxL] == i) && (part[edge.cellIdxR] != i)) ||
+						((part[edge.cellIdxR] == i) && (part[edge.cellIdxL] != i)))
 					{
 						// map edge nodes
-						uint n1 = edge.nodeIdx[0].localElementMap(localNodes, bigMesh.nodes) - 1;
-						uint n2 = edge.nodeIdx[1].localElementMap(localNodes, bigMesh.nodes) - 1;
+						size_t n1 = edge.nodeIdx[0].localElementMap(localNodes, bigMesh.nodes) - 1;
+						size_t n2 = edge.nodeIdx[1].localElementMap(localNodes, bigMesh.nodes) - 1;
 
-						uint partIdx = 0;
-						if(part[edge.cellIdx[0]] != i)
+						size_t partIdx = 0;
+						if(part[edge.cellIdxL] != i)
 						{
-							partIdx = edge.cellIdx[0];
+							partIdx = edge.cellIdxL;
 						}
-						else if(part[edge.cellIdx[1]] != i)
+						else if(part[edge.cellIdxR] != i)
 						{
-							partIdx = edge.cellIdx[1];
+							partIdx = edge.cellIdxR;
 						}
 
 						// add comm proc to commP if not already in there.
@@ -915,21 +902,21 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 
 				logln("Proc ", i, " comm: ", commP);
 
-				uint[] flatElementMap = localElements.joiner.array;
+				size_t[] flatElementMap = localElements.joiner.array;
 				double[] flatNodes = localNodes.joiner.array;
 
 				if(i != 0)
 				{
-					comm.send!uint(2, i, partTag);
+					comm.send!size_t(2, i, partTag);
 					comm.sendArray(flatElementMap, i, partTag);
 					comm.sendArray(nodesPerElement, i, partTag);
 					comm.sendArray(flatNodes, i, partTag);
-					comm.sendArray(localbGroupStart.to!(uint[]), i, partTag);
+					comm.sendArray(localbGroupStart.to!(size_t[]), i, partTag);
 
-					uint[] flatBnodes = localbNodes.joiner.array;
+					size_t[] flatBnodes = localbNodes.joiner.array;
 					comm.sendArray(flatBnodes, i, partTag);
 
-					comm.send!uint(cast(uint)localbTag.length, i, partTag);
+					comm.send!size_t(localbTag.length, i, partTag);
 					foreach(tag; localbTag)
 					{
 						comm.sendArray!char(tag.to!(char[]), i, partTag);
@@ -937,7 +924,7 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 
 					comm.sendArray(commP, i, partTag);
 
-					comm.send!uint(cast(uint)commEdgeList.length, i, partTag);
+					comm.send!size_t(commEdgeList.length, i, partTag);
 					foreach(commEdge; commEdgeList)
 					{
 						comm.sendArray(commEdge, i, partTag);
@@ -947,13 +934,14 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 				}
 				else
 				{
-					smallMesh = Mesh(cast(uint)localElements.length);
+					smallMesh = Mesh(localElements.length.to!uint);
 					smallMesh.elements = localElements;
 					foreach(uint j, el; smallMesh.elements)
 					{
-						smallMesh.cells[j].nEdges = cast(uint)el.length;
+						smallMesh.cells[j].nEdges = el.length.to!uint;
 					}
-					smallMesh.q = new Vector!4[smallMesh.cells.length];
+					//smallMesh.q = new Vector!4[smallMesh.cells.length];
+					assert(false);
 
 					smallMesh.nodes = localNodes[];
 					smallMesh.bGroupStart = localbGroupStart.to!(size_t[]);
@@ -970,32 +958,32 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 		}
 		else
 		{
-			immutable auto dims = comm.recv!uint(0, partTag);
-			auto flatLocalElements = comm.recvArray!uint(0, partTag);
-			auto nodesPerElement = comm.recvArray!uint(0, partTag);
+			immutable auto dims = comm.recv!size_t(0, partTag);
+			auto flatLocalElements = comm.recvArray!size_t(0, partTag);
+			auto nodesPerElement = comm.recvArray!size_t(0, partTag);
 			auto flatLocalNodes = comm.recvArray!double(0, partTag);
-			auto bGroupStart = comm.recvArray!uint(0, partTag);
+			auto bGroupStart = comm.recvArray!size_t(0, partTag);
 
 			smallMesh.bGroupStart = bGroupStart.to!(size_t[]);
 
-			auto flatBnodes = comm.recvArray!uint(0, partTag);
+			auto flatBnodes = comm.recvArray!size_t(0, partTag);
 
-			auto nBTags = comm.recv!uint(0, partTag);
+			auto nBTags = comm.recv!size_t(0, partTag);
 			for(uint i = 0; i < nBTags; i++)
 			{
 				smallMesh.bTags ~= comm.recvArray!(char)(0, partTag).to!string;
 			}
 
-			auto commP = comm.recvArray!uint(0, partTag);
+			auto commP = comm.recvArray!size_t(0, partTag);
 
-			auto nCommEdges = comm.recv!uint(0, partTag);
+			auto nCommEdges = comm.recv!size_t(0, partTag);
 			CommEdgeNodes[][] commEdgeList;
 			for(uint i = 0; i < nCommEdges; i++)
 			{
 				commEdgeList ~= comm.recvArray!CommEdgeNodes(0, partTag);
 			}
 
-			smallMesh.localToGlobalElementMap ~= comm.recvArray!uint(0, partTag);
+			smallMesh.localToGlobalElementMap ~= comm.recvArray!size_t(0, partTag);
 
 			smallMesh.commProc = commP;
 			smallMesh.commEdgeLists = commEdgeList;
@@ -1017,13 +1005,13 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 			uint npeIdx = 0;
 			for(uint i = 0; i < flatLocalElements.length; i += nodesPerElement[npeIdx-1])
 			{
-				uint[] element;
+				size_t[] element;
 				for(uint j = 0; j < nodesPerElement[npeIdx]; j++)
 				{
 					element ~= flatLocalElements[i + j];
 				}
 				Cell cell;
-				cell.nEdges = nodesPerElement[npeIdx];
+				cell.nEdges = nodesPerElement[npeIdx].to!uint;
 				smallMesh.cells ~= cell;
 
 				smallMesh.elements ~= element;
@@ -1032,11 +1020,12 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 		
 			logln("Local elements: ", smallMesh.elements.length);
 
-			smallMesh.q = new Vector!4[smallMesh.cells.length];
+			//smallMesh.q = new Vector!4[smallMesh.cells.length];
+			assert(false);
 
 			for(uint i = 0; i < flatBnodes.length; i += dims)
 			{
-				uint[] node;
+				size_t[] node;
 				for(uint j = 0; j < dims; j++)
 				{
 					node ~= flatBnodes[i + j];
@@ -1055,8 +1044,9 @@ Mesh partitionMesh(ref Mesh bigMesh, uint p, uint id, Comm comm)
 		return bigMesh;
 	}
 }
-
+/+
 @nogc Vec buildQ(double rho, double u, double v, double p)
 {
 	return Vec([rho, rho*u, rho*v, p/(gamma - 1) + 0.5*rho*(u^^2.0 + v^^2.0)]);
 }
++/

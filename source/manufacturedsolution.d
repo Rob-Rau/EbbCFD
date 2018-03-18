@@ -1,4 +1,4 @@
-/+ Copyright (c) 2016 Robert F. Rau II +/
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.manufacturedsolution;
 
 import core.atomic;
@@ -14,11 +14,11 @@ import std.stdio;
 import numd.utility;
 import numd.linearalgebra.matrix;
 
-import ebb.config;
+import ebb.gas.config;
 import ebb.euler;
 import ebb.exception;
 import ebb.flux;
-import ebb.integrators;
+import ebb.integrate;
 import ebb.limiters;
 import ebb.mesh;
 import ebb.io;
@@ -155,10 +155,10 @@ immutable double dp = -1;
 	return -bp*dp^^2.0*sin(cp*x + dp*y);
 }
 
-Vector!4 sourceTerm(double x, double y, Config config)
+Vector!4 sourceTerm(double x, double y, GasPhysicalConfig config)
 {
-	auto q = solution(x, y);
-	auto dq = solutionGradient(x, y);
+	auto q = solution(x, y, config.gamma);
+	auto dq = solutionGradient(x, y, config.gamma);
 
 	auto dFxdx = Vector!4(0);
 	auto dFydy = Vector!4(0);
@@ -173,7 +173,7 @@ Vector!4 sourceTerm(double x, double y, Config config)
 	immutable auto drudx = dq[1,0];
 	immutable auto drvdy = dq[2,1];
 	
-	immutable auto p = getPressure(q);
+	immutable auto p = getPressure(q, config.gamma);
 	immutable auto dudx = dudx(x, y);
 	immutable auto dudy = dudy(x, y);
 	immutable auto dvdy = dvdy(x, y);
@@ -197,14 +197,14 @@ Vector!4 sourceTerm(double x, double y, Config config)
 
 	auto S = dFxdx + dFydy;
 	
-	if(config.viscosity)
+	if(false)
 	{
 		auto dGxdx = Vector!4(0);
 		auto dGydy = Vector!4(0);
-		immutable double R = config.physicalConfig.R;
-		immutable double mu = config.physicalConfig.mu;
-		immutable double Pr = config.physicalConfig.Pr;
-		immutable double k = (gamma*R*mu)/((gamma - 1)*Pr);
+		immutable double R = config.R;
+		immutable double mu = config.mu;
+		immutable double Pr = config.Pr;
+		immutable double k = (config.gamma*R*mu)/((config.gamma - 1)*Pr);
 
 		immutable auto d2udx2 = d2udx2(x, y);
 		immutable auto d2udy2 = d2udy2(x, y);
@@ -241,7 +241,7 @@ Vector!4 sourceTerm(double x, double y, Config config)
 	return S;
 }
 
-@nogc Vector!4 solution(double x, double y)
+@nogc Vector!4 solution(double x, double y, double gamma)
 {
 	auto q = Vector!4(0);
 
@@ -253,7 +253,7 @@ Vector!4 sourceTerm(double x, double y, Config config)
 	return q;
 }
 
-@nogc Matrix!(4,2) solutionGradient(double x, double y)
+@nogc Matrix!(4,2) solutionGradient(double x, double y, double gamma)
 {
 	auto grad = Matrix!(4,2)(0);
 

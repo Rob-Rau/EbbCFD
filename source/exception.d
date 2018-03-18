@@ -1,3 +1,4 @@
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.exception;
 
 import std.algorithm;

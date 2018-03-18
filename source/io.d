@@ -1,3 +1,4 @@
+/+ Copyright (c) 2018 Robert F. Rau II +/
 module ebb.io;
 
 import core.stdc.stdio;
@@ -56,21 +57,29 @@ struct SlnHeader
 {
 	static const uint slnMagic = 0xEA98E1F5;
 	uint slnVersion;
-	uint dataPoints;
+	ulong dataPoints;
 	double t;
 	double dt;
 	uint M; // state vector size
 	uint slnOrder;
 }
 
-const uint EbbCFDSolutionVersion = 2;
+immutable uint EbbCFDSolutionVersion = 3;
 
 @nogc void saveSolution(Vector!4[] sln, Mesh mesh, char* filename, double t, double dt, uint order)
 {
+	assert(false);
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: EbbCFDSolutionVersion, dataPoints: cast(uint)mesh.interiorCells.length, t: t, dt: dt, M: 4, slnOrder: order};
+	SlnHeader header = {
+		slnVersion: EbbCFDSolutionVersion,
+		dataPoints: cast(ulong)mesh.interiorCells.length,
+		t: t,
+		dt: dt,
+		M: 4,
+		slnOrder: order
+	};
 
 	ulong dataSize = 0;
 	foreach(i; mesh.interiorCells)
@@ -91,7 +100,7 @@ const uint EbbCFDSolutionVersion = 2;
 	size_t offset = 0;
 	buffer.write!uint(header.slnMagic, &offset);
 	buffer.write!uint(header.slnVersion, &offset);
-	buffer.write!uint(header.dataPoints, &offset);
+	buffer.write!ulong(header.dataPoints, &offset);
 	buffer.write!double(header.t, &offset);
 	buffer.write!double(header.dt, &offset);
 	buffer.write!uint(header.M, &offset);
@@ -100,7 +109,7 @@ const uint EbbCFDSolutionVersion = 2;
 	foreach(i; mesh.interiorCells)
 	{
 		// save global cell num and number of edges of this cell
-		buffer.write!uint(mesh.localToGlobalElementMap[i], &offset);
+		buffer.write!long(mesh.localToGlobalElementMap[i], &offset);
 		buffer.write!ubyte(cast(ubyte)mesh.cells[i].nEdges, &offset);
 
 		// Save cell average value
@@ -113,13 +122,13 @@ const uint EbbCFDSolutionVersion = 2;
 		{
 			auto edge = mesh.edges[mesh.cells[i].edges[j]];
 			Vector!4 q;
-			if(edge.cellIdx[0] == i)
+			if(edge.cellIdxL == i)
 			{
-				q = edge.q[0];
+				//q = edge.q[0];
 			}
-			else if(edge.cellIdx[1] == i)
+			else if(edge.cellIdxR == i)
 			{
-				q = edge.q[1];
+				//q = edge.q[1];
 			}
 			else
 			{
@@ -165,7 +174,12 @@ const uint EbbCFDSolutionVersion = 2;
 	import std.experimental.allocator.mallocator : Mallocator;
 	import std.bitmanip : write;
 
-	SlnHeader header = {slnVersion: 1, dataPoints: cast(uint)mesh.interiorCells.length, t: t, dt: dt};
+	SlnHeader header = {
+		slnVersion: 1,
+		dataPoints: cast(ulong)mesh.interiorCells.length,
+		t: t,
+		dt: dt
+	};
 
 	ulong totSize = SlnHeader.sizeof + header.dataPoints*4*double.sizeof + uint.sizeof + uint.sizeof;
 
@@ -175,17 +189,18 @@ const uint EbbCFDSolutionVersion = 2;
 	size_t offset = 0;
 	buffer.write!uint(header.slnMagic, &offset);
 	buffer.write!uint(header.slnVersion, &offset);
-	buffer.write!uint(header.dataPoints, &offset);
+	buffer.write!ulong(header.dataPoints, &offset);
 	buffer.write!double(header.t, &offset);
 	buffer.write!double(header.dt, &offset);
 
 	//for(uint i = 0; i < mesh.cells.length; i++)
 	foreach(i; mesh.interiorCells)
 	{
-		buffer.write!double(mesh.cells[i].gradErr[0], &offset);
-		buffer.write!double(mesh.cells[i].gradErr[1], &offset);
-		buffer.write!double(mesh.cells[i].gradErr[2], &offset);
-		buffer.write!double(mesh.cells[i].gradErr[3], &offset);
+		assert(false);
+		//buffer.write!double(mesh.cells[i].gradErr[0], &offset);
+		//buffer.write!double(mesh.cells[i].gradErr[1], &offset);
+		//buffer.write!double(mesh.cells[i].gradErr[2], &offset);
+		//buffer.write!double(mesh.cells[i].gradErr[3], &offset);
 	}
 
 	import std.digest.crc : CRC32;
@@ -266,18 +281,19 @@ const uint EbbCFDSolutionVersion = 2;
 	{
 		foreach(i; mesh.interiorCells)
 		{
+			assert(false);
 			fread(buffer.ptr, 1, 8, file);
 			crc.put(buffer[]);
-			mesh.q[i][0] = buffer.peek!double;
+			//mesh.q[i][0] = buffer.peek!double;
 			fread(buffer.ptr, 1, 8, file);
 			crc.put(buffer[]);
-			mesh.q[i][1] = buffer.peek!double;
+			//mesh.q[i][1] = buffer.peek!double;
 			fread(buffer.ptr, 1, 8, file);
 			crc.put(buffer[]);
-			mesh.q[i][2] = buffer.peek!double;
+			//mesh.q[i][2] = buffer.peek!double;
 			fread(buffer.ptr, 1, 8, file);
 			crc.put(buffer[]);
-			mesh.q[i][3] = buffer.peek!double;
+			//mesh.q[i][3] = buffer.peek!double;
 		}
 	}
 	else if(slnVersion == 2)
@@ -325,19 +341,21 @@ const uint EbbCFDSolutionVersion = 2;
 				mshIdx = i;
 			}
 
-			mesh.q[mshIdx] = readVector;
+			//mesh.q[mshIdx] = readVector;
+			assert(false);
 			
 			foreach(j; 0..N)
 			{
 				auto edge = mesh.edges[mesh.cells[mshIdx].edges[j]];
 				Vector!4 q;
-				if(edge.cellIdx[0] == mshIdx)
+				assert(false);
+				if(edge.cellIdxL == mshIdx)
 				{
-					mesh.edges[mesh.cells[mshIdx].edges[j]].q[0] = readVector;
+					//mesh.edges[mesh.cells[mshIdx].edges[j]].q[0] = readVector;
 				}
-				else if(edge.cellIdx[1] == mshIdx)
+				else if(edge.cellIdxR == mshIdx)
 				{
-					mesh.edges[mesh.cells[mshIdx].edges[j]].q[1] = readVector;
+					//mesh.edges[mesh.cells[mshIdx].edges[j]].q[1] = readVector;
 				}
 				else
 				{
@@ -437,10 +455,11 @@ void loadMatlabSolution(ref Mesh mesh, string filename)
 
 	for(uint i = 0; i < nCells; i++)
 	{
-		mesh.q[i][0] = buffer.read!(double);
-		mesh.q[i][1] = buffer.read!(double);
-		mesh.q[i][2] = buffer.read!(double);
-		mesh.q[i][3] = buffer.read!(double);
+		assert(false);
+		//mesh.q[i][0] = buffer.read!(double);
+		//mesh.q[i][1] = buffer.read!(double);
+		//mesh.q[i][2] = buffer.read!(double);
+		//mesh.q[i][3] = buffer.read!(double);
 	}
 
 }
@@ -596,8 +615,8 @@ Mesh loadMatlabMesh(string filename)
 		{
 			buffer.write!(double)(mesh.edges[i].nodeIdx[0] + 1, &offset);
 			buffer.write!(double)(mesh.edges[i].nodeIdx[1] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].cellIdx[0] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].cellIdx[1] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].cellIdxL + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].cellIdxR + 1, &offset);
 		}
 	}
 
@@ -608,7 +627,7 @@ Mesh loadMatlabMesh(string filename)
 		{
 			buffer.write!(double)(mesh.edges[i].nodeIdx[0] + 1, &offset);
 			buffer.write!(double)(mesh.edges[i].nodeIdx[1] + 1, &offset);
-			buffer.write!(double)(mesh.edges[i].cellIdx[0] + 1, &offset);
+			buffer.write!(double)(mesh.edges[i].cellIdxL + 1, &offset);
 			auto bgIdx = mesh.bTags.countUntil(mesh.edges[i].boundaryTag) + 1;
 			buffer.write!(double)(bgIdx, &offset);
 		}
@@ -823,7 +842,7 @@ Mesh parseGmshMesh(string meshFile, bool chatty = true)
 		endSection;
 	}
 
-	void readElements(ref uint[][] bNodes, ref uint[][] bGroups)
+	void readElements(ref size_t[][] bNodes, ref size_t[][] bGroups)
 	{
 		auto numElementsStr = file.readCleanLine;
 		enforce(numElementsStr.length == 1, "Unexpected number of entries on line "~file.currentLine.to!string);
@@ -847,7 +866,7 @@ Mesh parseGmshMesh(string meshFile, bool chatty = true)
 			if(elementType == 1)
 			{
 				auto bGroup = elementLine[3];
-				auto bNode = elementLine[(3+numTags)..$].to!(uint[]);
+				auto bNode = elementLine[(3+numTags)..$].to!(size_t[]);
 				bNode[] -= 1;
 				if(bGroup != currentGroup)
 				{
@@ -859,7 +878,7 @@ Mesh parseGmshMesh(string meshFile, bool chatty = true)
 			}
 			else if((elementType == 2) || (elementType == 3))
 			{
-				mesh.elements ~= elementLine[(3+numTags)..$].to!(uint[]);
+				mesh.elements ~= elementLine[(3+numTags)..$].to!(size_t[]);
 			}
 			else
 			{
@@ -870,8 +889,8 @@ Mesh parseGmshMesh(string meshFile, bool chatty = true)
 		endSection;
 	}
 
-	uint[][] bNodes;
-	uint[][] bGroups;
+	size_t[][] bNodes;
+	size_t[][] bGroups;
 	while(!file.eof)
 	{
 		immutable section = readSectionHeader;
@@ -904,13 +923,13 @@ Mesh parseGmshMesh(string meshFile, bool chatty = true)
 		}
 	}
 
-	import ebb.integrators : sum;
+	import ebb.math : sum;
 	// Check if boundary groups got split apart in the mesh.
 	// aparently this will happen.
 	if(bGroups.length != mesh.bTags.length)
 	{
-		uint[][] newbNodes;
-		uint[][] newbGroups;
+		size_t[][] newbNodes;
+		size_t[][] newbGroups;
 		foreach(i, bGroup; bGroups)
 		{
 			auto currGroup = bGroup[0];
@@ -959,8 +978,9 @@ Mesh parseGmshMesh(string meshFile, bool chatty = true)
 		mesh.bNodes ~= bNodes[nodeStart..nodeEnd];
 	}
 
-	mesh.cells = new UCell2[mesh.elements.length];
-	mesh.q = new Vector!4[mesh.elements.length];
+	mesh.cells = new Cell[mesh.elements.length];
+	//mesh.q = new Vector!4[mesh.elements.length];
+	assert(false);
 	foreach(i; 0..mesh.elements.length)
 	{
 		mesh.cells[i].nEdges = mesh.elements[i].length.to!uint;
@@ -995,8 +1015,8 @@ Mesh parseXflowMesh(string meshFile, bool chatty = true)
 	auto file = MeshFile(meshFile);
 
 	auto headerLine = file.readCleanLine;
-	immutable uint nNodes = headerLine[0].to!uint;
-	immutable uint nElems = headerLine[1].to!uint;
+	immutable size_t nNodes = headerLine[0].to!size_t;
+	immutable size_t nElems = headerLine[1].to!size_t;
 	immutable uint nDims = headerLine[2].to!uint;
 
 	enforce(nDims == 2, nDims.to!string~" dimensional meshes not supported");
@@ -1014,17 +1034,17 @@ Mesh parseXflowMesh(string meshFile, bool chatty = true)
 		mesh.nodes ~= file.readCleanLine.to!(double[]);
 	}
 
-	immutable uint nBoundaryGroups = file.readCleanLine[0].to!uint;
+	immutable size_t nBoundaryGroups = file.readCleanLine[0].to!size_t;
 	if(chatty) writeln("    nBoundaryGroups = ", nBoundaryGroups);
 
-	uint[][] bNodes;
+	size_t[][] bNodes;
 	size_t[] bGroupStart;
 	string[] bTags;
 	for(uint i = 0; i < nBoundaryGroups; i++)
 	{
 		auto boundaryHeader = file.readCleanLine;
-		immutable uint bFaces = boundaryHeader[0].to!uint;
-		immutable uint nodesPerFace = boundaryHeader[1].to!uint;
+		immutable size_t bFaces = boundaryHeader[0].to!size_t;
+		immutable size_t nodesPerFace = boundaryHeader[1].to!size_t;
 		string faceTag;
 		if(boundaryHeader.length == 3)
 		{
@@ -1042,15 +1062,15 @@ Mesh parseXflowMesh(string meshFile, bool chatty = true)
 		}
 	}
 
-	uint[][] elements;
-	uint foundElements;
+	size_t[][] elements;
+	size_t foundElements;
 	uint faces;
-	uint eGroup;
+	size_t eGroup;
 	while(foundElements < nElems)
 	{
 		char[][] elementLine = file.readCleanLine;
 		uint q = elementLine[1].to!uint;
-		uint subElements = elementLine[0].to!uint;
+		size_t subElements = elementLine[0].to!size_t;
 
 		enforce((q < 4) && (q != 0), "Unsuported q");
 
@@ -1071,7 +1091,7 @@ Mesh parseXflowMesh(string meshFile, bool chatty = true)
 
 		for(uint i = 0; i < subElements; i++)
 		{
-			auto els = file.readCleanLine.to!(uint[]);
+			auto els = file.readCleanLine.to!(size_t[]);
 
 			if(q == 1)
 			{
@@ -1105,8 +1125,9 @@ Mesh parseXflowMesh(string meshFile, bool chatty = true)
 		eGroup++;
 	}
 	
-	mesh.cells = new UCell2[nElems];
-	mesh.q = new Vector!4[nElems];
+	mesh.cells = new Cell[nElems];
+	assert(false);
+	//mesh.q = new Vector!4[nElems];
 
 	for(uint i = 0; i < nElems; i++)
 	{
