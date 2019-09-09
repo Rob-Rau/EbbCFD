@@ -429,7 +429,7 @@ void startComputation(Config config, string saveFile, uint p, uint id)
 
 int main(string[] args)
 {
-	import std.getopt;
+	import std.getopt : getopt;
 
 	string configFile;
 	string saveFile = "";
@@ -447,6 +447,7 @@ int main(string[] args)
 	signal(SIGUSR1, &handle);
 	auto res = getopt(args, "c|config", "config file to read", &configFile, 
 							"s|save", "Save file to start from", &saveFile);
+
 
 	auto configStr = readText(configFile);
 	auto config = loadConfig(configStr);

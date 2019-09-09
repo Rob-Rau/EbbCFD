@@ -904,7 +904,7 @@ UMesh2 parseGmshMesh(string meshFile, bool chatty = true)
 		}
 	}
 
-	import ebb.integrators : sum;
+	import ebb.math : sum;
 	// Check if boundary groups got split apart in the mesh.
 	// aparently this will happen.
 	if(bGroups.length != mesh.bTags.length)

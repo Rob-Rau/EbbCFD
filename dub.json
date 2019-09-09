@@ -6,7 +6,7 @@
 	"dependencies": {
 		"numd": "~>0.1.0",
 		"mpi": {"path": "./OpenMPI/", "optional": true, "default": true},
-		"mir": "~>1.1.1"
+		"mir": "~>3.2.0"
 	},
 	"configurations": [
 		{
